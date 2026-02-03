@@ -16,12 +16,22 @@
         .bottom-ui { position: absolute; bottom: 20px; left: 0; right: 0; z-index: 1000; padding: 0 10px; }
         .action-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-radius: 24px; padding: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
         .addr-label { font-size: 12px; color: #000; font-weight: 600; margin-bottom: 10px; display: block; text-align: center; }
-        .type-selector { display: flex; justify-content: space-between; margin-bottom: 12px; gap: 4px; }
-        .type-btn { border: none; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 19%; padding: 0; }
-        .icon-circle { width: 44px; height: 44px; background: #f0f0f5; border-radius: 12px; display: flex; align-items: center; justify-content: center; border: 2px solid transparent; transition: 0.2s; font-size: 20px; }
-        .type-btn span { font-size: 9px; font-weight: 700; color: var(--gray); text-transform: uppercase; }
-        .type-btn.active { color: var(--blue); }
-        .type-btn.active .icon-circle { background: #fff; border-color: var(--blue); }
+        .type-selector { display: flex; justify-content: space-between; margin-bottom: 12px; gap: 6px; flex-wrap: wrap; }
+        .type-btn { 
+            border: none; background: none; cursor: pointer; display: flex; flex-direction: column; 
+            align-items: center; gap: 6px; width: 31%; padding: 8px; border-radius: 14px; 
+            transition: all 0.25s ease; position: relative;
+        }
+        .type-btn:active { transform: scale(0.95); }
+        .icon-circle { 
+            width: 54px; height: 54px; background: #f0f0f5; border-radius: 16px; display: flex; 
+            align-items: center; justify-content: center; border: 3px solid transparent; 
+            transition: all 0.25s ease; font-size: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .type-btn span { font-size: 11px; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: 0.3px; }
+        .type-btn:hover .icon-circle { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .type-btn.active { color: var(--blue); background: rgba(0, 122, 255, 0.08); }
+        .type-btn.active .icon-circle { background: #fff; border-color: var(--blue); box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3); }
         .main-btn { width: 100%; background: var(--blue); color: white; border: none; border-radius: 16px; padding: 14px; font-size: 15px; font-weight: 800; cursor: pointer; }
         .b-cont { font-size: 14px; line-height: 1.4; min-width: 170px; }
         .b-poll { display: flex; gap: 8px; margin-top: 10px; }
@@ -31,6 +41,9 @@
         /* Стили для профиля и личного кабинета */
         .profile-btn { position: absolute; top: 15px; right: 15px; z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: white; border: 2px solid var(--blue); cursor: pointer; font-size: 22px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .profile-btn:hover { transform: scale(1.05); }
+        /* Кнопка "Где я" */
+        .loc-btn { position: absolute; top: 15px; right: 70px; z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: white; border: 2px solid var(--blue); cursor: pointer; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
+        .loc-btn:hover { transform: scale(1.05); }
         
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2500; overflow-y: auto; }
         .modal.active { display: block; }
@@ -87,6 +100,7 @@
         .profile-header { text-align: center; margin-bottom: 20px; }
         .profile-avatar { width: 80px; height: 80px; background: var(--blue); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 40px; margin: 0 auto 15px; }
         .profile-name { font-size: 20px; font-weight: 800; color: #000; margin-bottom: 5px; }
+        .profile-name.trusted { color: #b8860b; text-shadow: 0 1px 0 rgba(0,0,0,0.15); }
         .profile-id { font-size: 12px; color: var(--gray); }
         
         /* Рейтинг */
@@ -132,6 +146,8 @@
     
     <!-- Кнопка админа -->
     <button class="admin-btn" id="adminBtn" onclick="openAdminModal()">⚙️</button>
+    <!-- Кнопка 'Где я' -->
+    <button class="loc-btn" id="locBtn" onclick="centerOnMyLocation()" title="Где я">📍</button>
     
     <!-- Модальное окно админ-панели -->
     <div id="adminModal" class="modal">
@@ -291,10 +307,16 @@
     let gpsWatchId = null;
     // Маркер текущего местоположения на карте
     let userLocationMarker = null;
+    // Флаг автоследования: если true — карта центрируется на пользователе при обновлении GPS
+    let autoFollow = true;
     // Данные профиля текущего пользователя
     let currentDriver = null;
     // ID администратора (измените на свой ID Telegram)
     const ADMIN_ID = "5118431735";
+    // Порог лайков для статуса "Проверенный водитель"
+    const TRUST_LIKES_THRESHOLD = 20; // можно менять по необходимости
+    // Порог подтверждений "уехали" для автоудаления метки
+    const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
     let isAdmin = false;
     // Переменная для хранения выбранной фотографии
@@ -333,7 +355,10 @@
                 
                 // Обновляем маркер на карте
                 updateUserLocationMarker();
-                
+                // Если автоследование включено — центрируем карту на пользователе
+                if (autoFollow && myMap && userLocation) {
+                    try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
+                }
                 console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м)`);
             },
             (error) => {
@@ -386,6 +411,16 @@
             myMap.setCenter(userLocation, 17);
             myMap.lastUserLocationUpdate = true;
         }
+    }
+    
+    // Центрирует карту на текущем местоположении и включает автоследование
+    function centerOnMyLocation() {
+        if (!userLocation) {
+            alert('Позиция недоступна. Включите GPS.');
+            return;
+        }
+        autoFollow = true;
+        try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
     }
     
     // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
@@ -578,7 +613,11 @@
 
         // Подготовка отображаемых данных
         const displayName = currentDriver.name || ((window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name) || '');
-        document.getElementById('profile-name-text').textContent = displayName;
+        // Определяем, является ли пользователь "Проверенным водителем" по сумме лайков
+        const isTrusted = (likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20));
+        const profileNameEl = document.getElementById('profile-name-text');
+        profileNameEl.textContent = (isTrusted ? '⭐ ' : '') + displayName;
+        if (isTrusted) profileNameEl.classList.add('trusted'); else profileNameEl.classList.remove('trusted');
         document.getElementById('profile-car-text').textContent = currentDriver.car_model || '';
         document.getElementById('profile-plate-text').textContent = currentDriver.car_plate || '';
         const rating = marks_count ? ((likes - dislikes) / marks_count) : 0;
@@ -587,6 +626,16 @@
         document.getElementById('profile-votes-sum').textContent = (likes + dislikes);
         document.getElementById('profile-likes').textContent = likes;
         document.getElementById('profile-dislikes').textContent = dislikes;
+
+        // Попытка сохранить вычисленные значения рейтинга в таблице drivers (если колонки есть)
+        try {
+            await _sb.from('drivers').upsert([
+                { user_id: uid, likes_sum: likes, is_trusted: isTrusted }
+            ], { onConflict: 'user_id' });
+        } catch (e) {
+            // Если таблица или колонки отсутствуют — просто логируем, приложение продолжит работать
+            console.warn('Не удалось обновить рейтинг в drivers (возможно, колонки likes_sum/is_trusted отсутствуют):', e?.message || e);
+        }
 
         document.getElementById('profileModal').classList.add('active');
     }
@@ -629,12 +678,30 @@
                     console.warn('Ошибка при загрузке списка банов (возможно, таблица не существует):', e?.message);
                 }
                 
+                // Соберем список ID водителей и подсчитаем лайки за один запрос
+                const driverIds = drivers.map(d => d.user_id.toString());
+                let likesMap = {};
+                try {
+                    const { data: likesRows } = await _sb.from('markers').select('author_id,votes_up').in('author_id', driverIds);
+                    if (likesRows) {
+                        likesRows.forEach(r => {
+                            const id = r.author_id.toString();
+                            likesMap[id] = (likesMap[id] || 0) + (r.votes_up || 0);
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Не удалось загрузить лайки для водителей:', e?.message || e);
+                }
+
                 drivers.forEach(d => {
                     const isBanned = bannedIds.has(d.user_id.toString());
                     const statusBadge = isBanned ? '🚫 ЗАБАН' : '✅';
                     const statusStyle = isBanned ? 'background: #ff3b30; color: white;' : '';
+                    const likes = likesMap[d.user_id.toString()] || 0;
+                    const isTrustedDriver = likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20);
+                    const nameCell = `${isTrustedDriver ? '⭐ ' : ''}${d.name || 'N/A'}`;
                     const row = `<tr style="${statusStyle}">
-                        <td>${d.name || 'N/A'}</td>
+                        <td>${nameCell}</td>
                         <td>${d.car_model || 'N/A'}</td>
                         <td>${d.car_plate || 'N/A'}</td>
                         <td>${statusBadge}</td>
@@ -937,12 +1004,100 @@
             // Увеличиваем счетчик лайков или дизлайков
             const upd = isUp ? { votes_up: (current.votes_up || 0) + 1 } : { votes_down: (current.votes_down || 0) + 1 };
             await _sb.from('markers').update(upd).eq('id', id);
+
+            // После успешного голосования пересчитаем суммарные лайки автора и сохраним в drivers
+            try {
+                const authorId = current.author_id;
+                const { data: authorMarkers } = await _sb.from('markers').select('votes_up').eq('author_id', authorId);
+                let likesSum = 0;
+                if (authorMarkers && authorMarkers.length) likesSum = authorMarkers.reduce((s, r) => s + (r.votes_up || 0), 0);
+                const isTrusted = likesSum >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20);
+                // Пытаемся обновить/вставить в drivers (грейсфул — если колонок нет, просто логируем)
+                try {
+                    await _sb.from('drivers').upsert([{ user_id: authorId, likes_sum: likesSum, is_trusted: isTrusted }], { onConflict: 'user_id' });
+                } catch (err) {
+                    console.warn('Не удалось обновить drivers.likes_sum/is_trusted:', err?.message || err);
+                }
+            } catch (e) {
+                console.warn('Ошибка при пересчёте лайков автора:', e?.message || e);
+            }
         } catch (e) {
             console.warn('Ошибка при обновлении маркера:', e?.message || e);
         }
 
         // Пересчёт рейтинга будет выполняться динамически при открытии профиля (из таблицы markers)
         loadMarkers();
+    };
+
+    // Функция подтверждения актуальности метки (голосование "Стоят" или "Уехали")
+    window.confirmMarker = async (markerId, status) => {
+        // status: 'stay' или 'leave'
+        if (!uid || uid === 'guest') {
+            alert('Пожалуйста, авторизуйтесь через Telegram');
+            return;
+        }
+
+        try {
+            // Проверяем, не голосовал ли уже этот пользователь за эту метку
+            const { data: existing } = await _sb.from('marker_confirmations')
+                .select('id').eq('marker_id', markerId).eq('user_id', uid).maybeSingle();
+            
+            if (existing) {
+                alert(`Вы уже голосовали за эту метку. Один голос на метку.`);
+                return;
+            }
+
+            // Добавляем голос в таблицу marker_confirmations
+            const { error: insertError } = await _sb.from('marker_confirmations').insert([{
+                marker_id: markerId,
+                user_id: uid,
+                status: status,
+                created_at: new Date().toISOString()
+            }]);
+
+            if (insertError && insertError.code === 'PGRST116') {
+                // Таблица marker_confirmations не существует, пытаемся использовать счётчик в markers
+                console.warn('Таблица marker_confirmations не существует, используем простой счётчик');
+                const { data: marker } = await _sb.from('markers').select('leave_confirmations').eq('id', markerId).single();
+                if (marker) {
+                    const newCount = (status === 'leave') ? ((marker.leave_confirmations || 0) + 1) : (marker.leave_confirmations || 0);
+                    await _sb.from('markers').update({ leave_confirmations: newCount }).eq('id', markerId);
+                    
+                    // Если достаточно подтверждений - удаляем метку
+                    if (newCount >= (typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3)) {
+                        await _sb.from('markers').delete().eq('id', markerId);
+                        alert(`✅ Метка удалена - ${newCount} человека подтвердили что объект уехал.`);
+                        myMap.balloon.close();
+                        loadMarkers();
+                        return;
+                    }
+                }
+            } else if (!insertError) {
+                // Успешно добавили запись, считаем количество "leave" подтверждений
+                const { data: confirmations } = await _sb.from('marker_confirmations')
+                    .select('id').eq('marker_id', markerId).eq('status', 'leave');
+                
+                const leaveCount = (confirmations ? confirmations.length : 0);
+                
+                // Если достаточно подтверждений - удаляем метку
+                if (leaveCount >= (typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3)) {
+                    await _sb.from('markers').delete().eq('id', markerId);
+                    alert(`✅ Метка удалена - ${leaveCount} человека подтвердили что объект уехал.`);
+                    myMap.balloon.close();
+                    loadMarkers();
+                    return;
+                }
+                
+                // Иначе показываем обновлённый счётчик
+                alert(`✅ Ваш голос учтён (${leaveCount}/${typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3} для удаления)`);
+                loadMarkers(); // обновляем карту с новым счётчиком
+            } else if (insertError) {
+                alert('Ошибка при голосовании: ' + (insertError.message || 'неизвестная ошибка'));
+            }
+        } catch (e) {
+            console.warn('Ошибка при подтверждении метки:', e?.message || e);
+            alert('Ошибка при голосовании: ' + (e?.message || e));
+        }
     };
 
     // Функция удаления маркера (только для автора)
@@ -988,6 +1143,10 @@
                 }
             });
         });
+        // Если пользователь начал вручную передвигать карту — отключаем автоследование
+        myMap.events.add('actionstart', () => {
+            autoFollow = false;
+        });
         // Инициализируем приложение (проверяем регистрацию)
         initApp();
         // Инициализируем GPS отслеживание
@@ -1018,12 +1177,13 @@
             return;
         }
 
-        // Используем GPS координаты если доступны, иначе центр карты
-        const coords = userLocation || myMap.getCenter();
+        // Берём координаты из центра карты — так можно ставить метки в любом месте
+        // Если нужно поставить метку именно по GPS, сначала центрируйте карту на своём местоположении
+        const coords = myMap.getCenter();
         
         // Проверяем, находится ли местоположение в Донецкой области ДНР
         if (!isInDonetskRegion(coords)) {
-            alert('⛔ Метки можно добавлять только в Донецкой области ДНР.\n\nТекущее местоположение: ' + coords[0].toFixed(2) + '°N, ' + coords[1].toFixed(2) + '°E');
+            alert('⛔ Метки можно добавлять только в ДНР.\n\nТекущее местоположение: ' + coords[0].toFixed(2) + '°N, ' + coords[1].toFixed(2) + '°E');
             return;
         }
 
@@ -1068,10 +1228,58 @@
         myMap.geoObjects.removeAll();
         // Получаем текущее местоположение карты (центр)
         const userCoords = myMap.getCenter();
+
+        // Подготовим карту доверия для авторов маркеров (чтобы не делать запрос на каждого автора отдельно)
+        const authorIds = Array.from(new Set(markers.map(m => String(m.author_id))));
+        let trustMap = {};
+        try {
+            // Сначала попробуем получить данные о пользователях из таблицы drivers (если есть колонки likes_sum/is_trusted)
+            const { data: driversInfo } = await _sb.from('drivers').select('user_id,likes_sum,is_trusted').in('user_id', authorIds);
+            if (driversInfo) {
+                driversInfo.forEach(d => {
+                    const id = String(d.user_id);
+                    if (typeof d.is_trusted !== 'undefined' && d.is_trusted !== null) {
+                        trustMap[id] = !!d.is_trusted;
+                    } else if (typeof d.likes_sum !== 'undefined' && d.likes_sum !== null) {
+                        trustMap[id] = (d.likes_sum >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20));
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn('Не удалось получить данные drivers для авторов (возможно, таблица/колонки отсутствуют):', e?.message || e);
+        }
+
+        // Для авторов без информации посчитаем суммарные лайки по всем меткам
+        const missingAuthors = authorIds.filter(id => typeof trustMap[id] === 'undefined');
+        if (missingAuthors.length > 0) {
+            try {
+                const { data: allMarkers } = await _sb.from('markers').select('author_id,votes_up').in('author_id', missingAuthors);
+                const sumMap = {};
+                if (allMarkers) {
+                    allMarkers.forEach(r => {
+                        const id = String(r.author_id);
+                        sumMap[id] = (sumMap[id] || 0) + (r.votes_up || 0);
+                    });
+                }
+                missingAuthors.forEach(id => {
+                    const likes = sumMap[id] || 0;
+                    trustMap[id] = likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20);
+                });
+            } catch (e) {
+                console.warn('Не удалось подсчитать суммарные лайки для авторов:', e?.message || e);
+            }
+        }
+
         // Для каждого маркера создаем объект на карте
         markers.forEach(m => {
             // Проверяем, является ли текущий пользователь автором маркера
             const isOwner = String(m.author_id) === String(uid);
+            
+            // Считаем количество подтверждений "уехали" (грейсфул - если таблица не существует, берём из счётчика в markers)
+            let leaveCount = m.leave_confirmations || 0;
+            const confirmThreshold = typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3;
+            const confirmationBar = leaveCount > 0 ? `<div style="margin-top: 8px; font-size: 11px; color: #666;">🚗 Уехали: ${leaveCount}/${confirmThreshold}</div>` : '';
+            
             // HTML контент для всплывающего окна маркера
             const bHtml = `<div class="b-cont">
                 <strong>${m.comment || 'Метка'}</strong>
@@ -1079,10 +1287,19 @@
                     <button class="b-poll-btn" onclick="window.vote(${m.id}, true)">👍 ${m.votes_up || 0}</button>
                     <button class="b-poll-btn" onclick="window.vote(${m.id}, false)">👎 ${m.votes_down || 0}</button>
                 </div>
+                <div style="margin-top: 8px; display: flex; gap: 5px;">
+                    <button class="b-poll-btn" onclick="window.confirmMarker(${m.id}, 'stay')" style="flex: 1; background: #34c759; color: white; font-weight: bold;">✅ Стоят</button>
+                    <button class="b-poll-btn" onclick="window.confirmMarker(${m.id}, 'leave')" style="flex: 1; background: #ff3b30; color: white; font-weight: bold;">🚗 Уехали</button>
+                </div>
+                ${confirmationBar}
                 ${isOwner ? `<button class="b-del" onclick="window.delMarker(${m.id})">Удалить</button>` : ''}
             </div>`;
+            // Определяем доверие автора и добавляем звездочку к иконке, если он проверен
+            const authorId = String(m.author_id);
+            const isTrustedAuthor = !!trustMap[authorId];
+            const iconInner = `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`;
             // Создаем маркер с иконкой и балуном
-            const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid var(--blue); font-size:18px;">${MAP_ICONS[m.type]}</div>` }, 
+            const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: iconInner }, 
             { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [30, 30], iconImageOffset: [-15, -15] });
             // Добавляем маркер на карту
             myMap.geoObjects.add(p);
