@@ -14,7 +14,10 @@
         .target { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); z-index: 2000; pointer-events: none; color: var(--blue); }
         .target svg { width: 45px; height: 45px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
         .bottom-ui { position: absolute; bottom: 20px; left: 0; right: 0; z-index: 1000; padding: 0 10px; }
-        .action-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-radius: 24px; padding: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
+        .action-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-radius: 24px; padding: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); position: relative; }
+        .action-card.hidden { display: none; }
+        .action-card-close { position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--gray); padding: 4px 8px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: all 0.2s; }
+        .action-card-close:hover { background: #f0f0f5; color: #000; }
         .addr-label { font-size: 12px; color: #000; font-weight: 600; margin-bottom: 10px; display: block; text-align: center; }
         .type-selector { display: flex; justify-content: space-between; margin-bottom: 12px; gap: 6px; flex-wrap: wrap; }
         .type-btn { 
@@ -32,6 +35,11 @@
         .type-btn:hover .icon-circle { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
         .type-btn.active { color: var(--blue); background: rgba(0, 122, 255, 0.08); }
         .type-btn.active .icon-circle { background: #fff; border-color: var(--blue); box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3); }
+        
+        /* Счётчик активных меток */
+        .markers-counter { font-size: 11px; color: var(--gray); margin-bottom: 10px; text-align: center; padding: 8px; background: #f9f9f9; border-radius: 10px; }
+        .counter-item { display: inline-block; margin: 0 6px; }
+        .counter-item span:first-child { font-weight: 700; color: var(--blue); }
         .main-btn { width: 100%; background: var(--blue); color: white; border: none; border-radius: 16px; padding: 14px; font-size: 15px; font-weight: 800; cursor: pointer; }
         .b-cont { font-size: 14px; line-height: 1.4; min-width: 170px; }
         .b-poll { display: flex; gap: 8px; margin-top: 10px; }
@@ -270,13 +278,41 @@
                 </div>
             </div>
             
+            <div style="background: #f9f9f9; border-radius: 12px; padding: 12px; margin-bottom: 15px; text-align: center;">
+                <div style="font-size: 12px; color: var(--gray); margin-bottom: 5px;">Статус</div>
+                <div id="profile-trust-status" style="font-size: 16px; font-weight: 800; color: var(--blue);">🎯 Обычный водитель</div>
+            </div>
+            
+            <button class="main-btn" onclick="openRatingsModal()" style="margin-bottom: 10px; background: #34c759;">ГЛОБАЛЬНЫЙ РЕЙТИНГ</button>
             <button class="main-btn" onclick="logout()">ВЫЙТИ</button>
         </div>
     </div>
     
+    <!-- Модальное окно глобального рейтинга -->
+    <div id="ratingsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="margin: 0;">🏆 Рейтинг водителей</h2>
+                <button class="modal-close" onclick="closeRatingsModal()">✕</button>
+            </div>
+            
+            <div style="font-size: 12px; color: var(--gray); margin-bottom: 15px; text-align: center;">
+                Водители сортированы по сумме лайков. ⭐ = проверенный водитель (20+ лайков)
+            </div>
+            
+            <div style="max-height: 500px; overflow-y: auto;">
+                <div id="ratingsList" style="text-align: center; color: var(--gray);">Загрузка рейтинга...</div>
+            </div>
+            
+            <button class="main-btn" onclick="closeRatingsModal()" style="margin-top: 15px;">Закрыть</button>
+        </div>
+    </div>
+    
     <div class="bottom-ui">
-        <div class="action-card">
+        <div class="action-card" id="actionCard">
+            <button class="action-card-close" onclick="toggleActionCard()">✕</button>
             <span class="addr-label" id="addr-text">Определение адреса...</span>
+            <div class="markers-counter" id="markersCounter">Загрузка...</div>
             <div class="type-selector">
                 <button onclick="setType('dps', this)" class="type-btn active"><div class="icon-circle">👮</div><span>ДПС</span></button>
                 <button onclick="setType('patrol', this)" class="type-btn"><div class="icon-circle">🚔</div><span>Рейд</span></button>
@@ -323,6 +359,19 @@
     let selectedChatPhoto = null;
     // Множество для отслеживания уже воспроизведенных уведомлений (чтобы не спамить звук)
     let notifiedMarkers = new Set();
+    // Флаг видимости нижнего виджета
+    let actionCardVisible = true;
+
+    // Функция для переключения видимости нижнего виджета
+    function toggleActionCard() {
+        actionCardVisible = !actionCardVisible;
+        const card = document.getElementById('actionCard');
+        if (actionCardVisible) {
+            card.classList.remove('hidden');
+        } else {
+            card.classList.add('hidden');
+        }
+    }
 
     // Границы Донецкой области ДНР (примерные координаты)
     const DONETSK_REGION = {
@@ -626,6 +675,16 @@
         document.getElementById('profile-votes-sum').textContent = (likes + dislikes);
         document.getElementById('profile-likes').textContent = likes;
         document.getElementById('profile-dislikes').textContent = dislikes;
+        
+        // Отображаем статус доверия
+        const trustStatusEl = document.getElementById('profile-trust-status');
+        if (isTrusted) {
+            trustStatusEl.innerHTML = '⭐ Проверенный водитель';
+            trustStatusEl.style.color = '#b8860b';
+        } else {
+            trustStatusEl.innerHTML = `🎯 Обычный водитель (${likes}/${typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20} лайков)`;
+            trustStatusEl.style.color = 'var(--blue)';
+        }
 
         // Попытка сохранить вычисленные значения рейтинга в таблице drivers (если колонки есть)
         try {
@@ -643,6 +702,81 @@
     // Функция закрытия профиля
     function closeProfileModal() {
         document.getElementById('profileModal').classList.remove('active');
+    }
+
+    // Функция открытия модала с глобальным рейтингом водителей
+    async function openRatingsModal() {
+        const ratingsList = document.getElementById('ratingsList');
+        ratingsList.innerHTML = '<div style="color: var(--gray);">⏳ Загрузка рейтинга...</div>';
+        
+        try {
+            // Загружаем всех водителей
+            const { data: drivers } = await _sb.from('drivers').select('user_id,name,car_model,car_plate,likes_sum,is_trusted');
+            
+            if (!drivers || drivers.length === 0) {
+                ratingsList.innerHTML = '<div style="color: var(--gray); padding: 20px;">Водители не найдены</div>';
+                document.getElementById('ratingsModal').classList.add('active');
+                return;
+            }
+            
+            // Считаем лайки для каждого водителя (если likes_sum отсутствует)
+            let driverStats = [];
+            for (const d of drivers) {
+                let likesSum = d.likes_sum || 0;
+                let isTrusted = d.is_trusted || false;
+                
+                // Если likes_sum не заполнен, считаем из markers
+                if (!d.likes_sum) {
+                    const { data: markers } = await _sb.from('markers').select('votes_up').eq('author_id', d.user_id);
+                    if (markers) {
+                        likesSum = markers.reduce((sum, m) => sum + (m.votes_up || 0), 0);
+                    }
+                    isTrusted = likesSum >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20);
+                }
+                
+                driverStats.push({
+                    user_id: d.user_id,
+                    name: d.name || 'Аноним',
+                    car_model: d.car_model || 'N/A',
+                    likes: likesSum,
+                    is_trusted: isTrusted
+                });
+            }
+            
+            // Сортируем по лайкам (по убыванию)
+            driverStats.sort((a, b) => b.likes - a.likes);
+            
+            // Генерируем HTML
+            let html = '';
+            driverStats.forEach((driver, idx) => {
+                const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
+                const trustBadge = driver.is_trusted ? ' ⭐' : '';
+                html += `
+                    <div style="padding: 12px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; color: #000; font-size: 14px;">${medal} ${driver.name}${trustBadge}</div>
+                            <div style="font-size: 11px; color: var(--gray);">${driver.car_model}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-weight: 800; color: var(--blue); font-size: 16px;">${driver.likes}</div>
+                            <div style="font-size: 11px; color: var(--gray);">лайков</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            ratingsList.innerHTML = html;
+        } catch (e) {
+            console.warn('Ошибка при загрузке рейтинга:', e?.message || e);
+            ratingsList.innerHTML = '<div style="color: red; padding: 20px;">Ошибка загрузки рейтинга</div>';
+        }
+        
+        document.getElementById('ratingsModal').classList.add('active');
+    }
+
+    // Функция закрытия рейтинга
+    function closeRatingsModal() {
+        document.getElementById('ratingsModal').classList.remove('active');
     }
 
     // Функция выхода из аккаунта
@@ -1224,6 +1358,31 @@
         // Загружаем маркеры, которые еще не истекли (exp > текущее время)
         const { data: markers } = await _sb.from('markers').select('*').gt('exp', Date.now());
         if(!markers || !myMap) return;
+        
+        // Подсчитываем метки по типам
+        const typeCounts = {};
+        markers.forEach(m => {
+            typeCounts[m.type] = (typeCounts[m.type] || 0) + 1;
+        });
+        
+        // Обновляем счётчик в UI
+        const counterEl = document.getElementById('markersCounter');
+        if (counterEl) {
+            const typeNames = { dps: 'ДПС', patrol: 'Рейд', camera: 'Камера', dtp: 'ДТП', works: 'Работы', sos: 'SOS' };
+            let counterHTML = 'Активные: ';
+            let hasCounters = false;
+            for (const [type, count] of Object.entries(typeCounts)) {
+                if (count > 0) {
+                    counterHTML += `<span class="counter-item"><span>${count}</span> ${typeNames[type] || type}</span>`;
+                    hasCounters = true;
+                }
+            }
+            if (!hasCounters) {
+                counterHTML = '✅ Опасностей не найдено';
+            }
+            counterEl.innerHTML = counterHTML;
+        }
+        
         // Удаляем старые маркеры с карты
         myMap.geoObjects.removeAll();
         // Получаем текущее местоположение карты (центр)
