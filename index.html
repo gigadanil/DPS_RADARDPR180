@@ -285,6 +285,12 @@
     const uid = window.Telegram?.WebApp?.initDataUnsafe?.user?.id?.toString() || "guest";
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
     let myMap, selectedType = 'dps';
+    // Текущее GPS местоположение пользователя
+    let userLocation = null;
+    // ID отслеживания GPS (для остановки отслеживания)
+    let gpsWatchId = null;
+    // Маркер текущего местоположения на карте
+    let userLocationMarker = null;
     // Данные профиля текущего пользователя
     let currentDriver = null;
     // ID администратора (измените на свой ID Telegram)
@@ -304,6 +310,84 @@
         east: 40.4      // Восточная граница
     };
 
+    // Функция инициализации GPS отслеживания
+    function initGPS() {
+        if (!navigator.geolocation) {
+            console.warn('Geolocation не поддерживается браузером');
+            return;
+        }
+        
+        // Опции для geolocation
+        const options = {
+            enableHighAccuracy: true, // Используем высокую точность
+            timeout: 10000,
+            maximumAge: 0
+        };
+        
+        // Начинаем отслеживание местоположения
+        gpsWatchId = navigator.geolocation.watchPosition(
+            (position) => {
+                // Успешное получение координат
+                const { latitude, longitude, accuracy } = position.coords;
+                userLocation = [latitude, longitude];
+                
+                // Обновляем маркер на карте
+                updateUserLocationMarker();
+                
+                console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м)`);
+            },
+            (error) => {
+                // Ошибка получения координат
+                console.warn('Ошибка GPS:', error.message);
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        console.warn('Разрешение на доступ к GPS отклонено');
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        console.warn('Информация о местоположении недоступна');
+                        break;
+                    case error.TIMEOUT:
+                        console.warn('Истекло время ожидания GPS');
+                        break;
+                }
+            },
+            options
+        );
+    }
+    
+    // Функция обновления маркера текущего местоположения на карте
+    function updateUserLocationMarker() {
+        if (!userLocation || !myMap) return;
+        
+        // Удаляем старый маркер если он есть
+        if (userLocationMarker) {
+            myMap.geoObjects.remove(userLocationMarker);
+        }
+        
+        // Создаем новый маркер (синий круг с пульсацией)
+        userLocationMarker = new ymaps.Placemark(userLocation, 
+            { 
+                hintContent: 'Вы здесь',
+                balloonContent: '📍 Ваше текущее местоположение'
+            },
+            {
+                iconLayout: 'default#image',
+                iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSI4IiBmaWxsPSIjMDA3YWZmIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=',
+                iconImageSize: [32, 32],
+                iconImageOffset: [-16, -16],
+                zIndex: 1000
+            }
+        );
+        
+        myMap.geoObjects.add(userLocationMarker);
+        
+        // Центрируем карту на текущем местоположении (если это первый раз)
+        if (!myMap.lastUserLocationUpdate) {
+            myMap.setCenter(userLocation, 17);
+            myMap.lastUserLocationUpdate = true;
+        }
+    }
+    
     // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
     // coords1 и coords2 - массивы [широта, долгота]
     // Возвращает расстояние в метрах
@@ -906,6 +990,8 @@
         });
         // Инициализируем приложение (проверяем регистрацию)
         initApp();
+        // Инициализируем GPS отслеживание
+        initGPS();
         // Загружаем маркеры с сервера
         loadMarkers();
         // Обновляем маркеры каждые 10 секунд
@@ -932,8 +1018,8 @@
             return;
         }
 
-        // Получаем центр карты (текущее местоположение)
-        const coords = myMap.getCenter();
+        // Используем GPS координаты если доступны, иначе центр карты
+        const coords = userLocation || myMap.getCenter();
         
         // Проверяем, находится ли местоположение в Донецкой области ДНР
         if (!isInDonetskRegion(coords)) {
