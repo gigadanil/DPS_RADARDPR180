@@ -56,6 +56,28 @@
         .admin-stat-card .value { font-size: 28px; font-weight: 800; color: var(--blue); }
         .admin-stat-card .label { font-size: 12px; color: var(--gray); margin-top: 5px; }
         
+        /* Чат */
+        .chat-btn { position: absolute; bottom: 100px; right: 15px; z-index: 1500; width: 50px; height: 50px; border-radius: 50%; background: var(--blue); border: 2px solid white; cursor: pointer; font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .chat-btn:hover { transform: scale(1.05); }
+        
+        .chat-messages { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; max-height: 400px; overflow-y: auto; padding: 10px; background: #f9f9f9; border-radius: 12px; }
+        .chat-message { padding: 10px 12px; border-radius: 10px; font-size: 13px; max-width: 80%; word-wrap: break-word; }
+        .chat-message.own { background: var(--blue); color: white; margin-left: auto; }
+        .chat-message.other { background: white; border: 1px solid #ddd; }
+        .chat-message-author { font-size: 11px; font-weight: 600; margin-bottom: 3px; opacity: 0.8; }
+        .chat-message-photo { max-width: 200px; border-radius: 8px; margin-top: 5px; cursor: pointer; }
+        .chat-message-time { font-size: 10px; opacity: 0.7; margin-top: 3px; }
+        
+        .chat-input-group { display: flex; gap: 8px; }
+        .chat-input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
+        .chat-send-btn { background: var(--blue); color: white; border: none; padding: 10px 15px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 14px; }
+        .chat-send-btn:hover { background: #0051d5; }
+        
+        .chat-photo-upload { position: relative; }
+        .chat-photo-input { display: none; }
+        .chat-photo-btn { background: #f0f0f5; color: var(--blue); border: none; padding: 10px; border-radius: 10px; cursor: pointer; font-size: 16px; }
+        .chat-photo-btn:hover { background: #e0e0e5; }
+        
         /* Форма регистрации */
         .registration-form input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
         .registration-form label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px; color: #000; }
@@ -82,8 +104,31 @@
     <div class="target"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg></div>
     <div id="map"></div>
     
-    <!-- Кнопка профиля -->
-    <button class="profile-btn" onclick="openProfileModal()">👤</button>
+    <!-- Кнопка чата -->
+    <button class="chat-btn" onclick="openChatModal()">💬</button>
+    
+    <!-- Модальное окно чата -->
+    <div id="chatModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="margin: 0;">Общий чат</h2>
+                <button class="modal-close" onclick="closeChatModal()">✕</button>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div style="text-align: center; color: var(--gray); padding: 20px;">Загрузка сообщений...</div>
+            </div>
+            
+            <div class="chat-input-group">
+                <input type="text" id="chatInput" class="chat-input" placeholder="Напишите сообщение..." maxlength="500">
+                <div class="chat-photo-upload">
+                    <input type="file" id="chatPhotoInput" class="chat-photo-input" accept="image/*">
+                    <button class="chat-photo-btn" onclick="document.getElementById('chatPhotoInput').click()">📷</button>
+                </div>
+                <button class="chat-send-btn" onclick="sendChatMessage()">Отправить</button>
+            </div>
+        </div>
+    </div>
     
     <!-- Кнопка админа -->
     <button class="admin-btn" id="adminBtn" onclick="openAdminModal()">⚙️</button>
@@ -115,11 +160,12 @@
                             <th>Имя</th>
                             <th>Авто</th>
                             <th>Номер</th>
+                            <th>Статус</th>
                             <th>Действие</th>
                         </tr>
                     </thead>
                     <tbody id="admin-drivers-body">
-                        <tr><td colspan="4" style="text-align: center; color: var(--gray);">Загрузка...</td></tr>
+                        <tr><td colspan="5" style="text-align: center; color: var(--gray);">Загрузка...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -221,6 +267,7 @@
                 <button onclick="setType('camera', this)" class="type-btn"><div class="icon-circle">📸</div><span>Камера</span></button>
                 <button onclick="setType('dtp', this)" class="type-btn"><div class="icon-circle">💥</div><span>ДТП</span></button>
                 <button onclick="setType('works', this)" class="type-btn"><div class="icon-circle">🚧</div><span>Работы</span></button>
+                <button onclick="setType('sos', this)" class="type-btn"><div class="icon-circle">🆘</div><span>SOS</span></button>
             </div>
             <input type="text" id="m-comm" style="width:100%; margin-bottom:10px; border-radius:10px; border:1px solid #ddd; padding:8px; box-sizing: border-box;" placeholder="Комментарий...">
             <button class="main-btn" onclick="addPoint()">ОТПРАВИТЬ</button>
@@ -232,8 +279,8 @@
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
     // Клиент Supabase для работы с БД
     const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    // Иконки для разных типов маркеров (ДПС, Рейд, Камера, ДТП, Работы)
-    const MAP_ICONS = { dps: '👮', patrol: '🚔', camera: '📸', dtp: '💥', works: '🚧' };
+    // Иконки для разных типов маркеров (ДПС, Рейд, Камера, ДТП, Работы, SOS)
+    const MAP_ICONS = { dps: '👮', patrol: '🚔', camera: '📸', dtp: '💥', works: '🚧', sos: '🆘' };
     // ID текущего пользователя из Telegram или "guest" если не авторизован
     const uid = window.Telegram?.WebApp?.initDataUnsafe?.user?.id?.toString() || "guest";
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
@@ -244,6 +291,74 @@
     const ADMIN_ID = "5118431735";
     // Флаг для проверки, является ли пользователь админом
     let isAdmin = false;
+    // Переменная для хранения выбранной фотографии
+    let selectedChatPhoto = null;
+    // Множество для отслеживания уже воспроизведенных уведомлений (чтобы не спамить звук)
+    let notifiedMarkers = new Set();
+
+    // Границы Донецкой области ДНР (примерные координаты)
+    const DONETSK_REGION = {
+        north: 49.2,    // Северная граница
+        south: 47.3,    // Южная граница
+        west: 36.4,     // Западная граница
+        east: 40.4      // Восточная граница
+    };
+
+    // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
+    // coords1 и coords2 - массивы [широта, долгота]
+    // Возвращает расстояние в метрах
+    function calculateDistance(coords1, coords2) {
+        const R = 6371000; // Радиус Земли в метрах
+        const lat1 = coords1[0] * Math.PI / 180;
+        const lat2 = coords2[0] * Math.PI / 180;
+        const deltaLat = (coords2[0] - coords1[0]) * Math.PI / 180;
+        const deltaLon = (coords2[1] - coords1[1]) * Math.PI / 180;
+        
+        const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                  Math.cos(lat1) * Math.cos(lat2) * Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    // Функция для воспроизведения звукового уведомления
+    function playAlertSound() {
+        try {
+            // Используем Web Audio API для создания простого звука "бип"
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 800; // Частота звука в Hz
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+        } catch (e) {
+            console.warn('Ошибка при воспроизведении звука:', e?.message);
+        }
+    }
+
+    // Функция проверки, забанен ли пользователь
+    async function isUserBanned(userId) {
+        try {
+            // Проверяем наличие пользователя в таблице bans
+            const { data: banned, error } = await _sb.from('bans').select('user_id').eq('user_id', userId).maybeSingle();
+            if (error && error.code !== 'PGRST116') { // PGRST116 - таблица не существует
+                console.warn('Ошибка при проверке баня:', error?.message);
+                return false;
+            }
+            return banned ? true : false;
+        } catch (e) {
+            console.warn('Ошибка при проверке баня:', e?.message || e);
+            return false;
+        }
+    }
 
     // Функция инициализации приложения
     async function initApp() {
@@ -251,6 +366,13 @@
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
         if (!tgUser) {
             alert('Приложение должно открываться через Telegram бота');
+            return;
+        }
+
+        // Проверяем, не забанен ли пользователь
+        const isBanned = await isUserBanned(uid);
+        if (isBanned) {
+            alert('❌ Вы заблокированы администратором и не можете использовать приложение.');
             return;
         }
 
@@ -412,22 +534,40 @@
             const tbody = document.getElementById('admin-drivers-body');
             tbody.innerHTML = '';
             if (drivers && drivers.length > 0) {
+                // Загружаем список забанненых пользователей
+                let bannedIds = new Set();
+                try {
+                    const { data: bans } = await _sb.from('bans').select('user_id');
+                    if (bans) {
+                        bans.forEach(b => bannedIds.add(b.user_id.toString()));
+                    }
+                } catch (e) {
+                    console.warn('Ошибка при загрузке списка банов (возможно, таблица не существует):', e?.message);
+                }
+                
                 drivers.forEach(d => {
-                    const row = `<tr>
+                    const isBanned = bannedIds.has(d.user_id.toString());
+                    const statusBadge = isBanned ? '🚫 ЗАБАН' : '✅';
+                    const statusStyle = isBanned ? 'background: #ff3b30; color: white;' : '';
+                    const row = `<tr style="${statusStyle}">
                         <td>${d.name || 'N/A'}</td>
                         <td>${d.car_model || 'N/A'}</td>
                         <td>${d.car_plate || 'N/A'}</td>
-                        <td><button class="delete-btn" onclick="deleteDriver('${d.user_id}')">Удалить</button></td>
+                        <td>${statusBadge}</td>
+                        <td style="display: flex; gap: 5px;">
+                            <button class="delete-btn" onclick="${isBanned ? `unbanDriver('${d.user_id}', '${d.name || 'N/A'}')` : `banDriver('${d.user_id}', '${d.name || 'N/A'}')`}" style="background: ${isBanned ? '#34c759' : '#ff9500'};">${isBanned ? '✅ Разбан' : '🚫 Забан'}</button>
+                            <button class="delete-btn" onclick="deleteDriver('${d.user_id}')">Удалить</button>
+                        </td>
                     </tr>`;
                     tbody.innerHTML += row;
                 });
                 document.getElementById('admin-drivers-count').textContent = drivers.length;
             } else {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--gray);">Водители не найдены</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--gray);">Водители не найдены</td></tr>';
             }
         } catch (e) {
             console.warn('Ошибка при загрузке водителей:', e?.message || e);
-            document.getElementById('admin-drivers-body').innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Ошибка загрузки</td></tr>';
+            document.getElementById('admin-drivers-body').innerHTML = '<tr><td colspan="5" style="text-align: center; color: red;">Ошибка загрузки</td></tr>';
         }
 
         // Загружаем список активных маркеров
@@ -463,6 +603,71 @@
         document.getElementById('adminModal').classList.remove('active');
     }
 
+    // Функция блокировки (бана) пользователя
+    async function banDriver(driverId, driverName) {
+        if (!isAdmin) {
+            alert('У вас нет доступа к этой операции');
+            return;
+        }
+
+        if (confirm(`Забанить пользователя "${driverName}"? Он больше не сможет использовать приложение.`)) {
+            try {
+                // Пытаемся добавить пользователя в таблицу bans
+                const { error } = await _sb.from('bans').insert([{ user_id: driverId }]);
+                
+                if (error && error.code === 'PGRST116') {
+                    // Таблица bans не существует, пытаемся обновить is_banned в drivers
+                    const { error: updateError } = await _sb.from('drivers').update({ is_banned: true }).eq('user_id', driverId);
+                    if (updateError) {
+                        alert('Ошибка при блокировке: ' + (updateError?.message || 'таблица bans не создана'));
+                        console.log('Инструкция: Создайте таблицу bans в Supabase с колонкой user_id (BIGINT PRIMARY KEY)');
+                        return;
+                    }
+                } else if (error) {
+                    alert('Ошибка при блокировке: ' + (error?.message || 'неизвестная ошибка'));
+                    return;
+                }
+                
+                alert('✅ Пользователь ' + driverName + ' успешно заблокирован!');
+                openAdminModal(); // Обновляем список
+            } catch (e) {
+                alert('Ошибка при блокировке: ' + (e?.message || e));
+            }
+        }
+    }
+
+    // Функция разблокировки пользователя
+    async function unbanDriver(driverId, driverName) {
+        if (!isAdmin) {
+            alert('У вас нет доступа к этой операции');
+            return;
+        }
+
+        if (confirm(`Разблокировать пользователя "${driverName}"?`)) {
+            try {
+                // Пытаемся удалить из таблицы bans
+                const { error } = await _sb.from('bans').delete().eq('user_id', driverId);
+                
+                if (error && error.code === 'PGRST116') {
+                    // Таблица bans не существует, пытаемся обновить is_banned в drivers
+                    const { error: updateError } = await _sb.from('drivers').update({ is_banned: false }).eq('user_id', driverId);
+                    if (updateError) {
+                        alert('Ошибка при разблокировке: ' + (updateError?.message || 'неизвестная ошибка'));
+                        return;
+                    }
+                } else if (error) {
+                    alert('Ошибка при разблокировке: ' + (error?.message || 'неизвестная ошибка'));
+                    return;
+                }
+                
+                alert('✅ Пользователь ' + driverName + ' успешно разблокирован!');
+                openAdminModal(); // Обновляем список
+            } catch (e) {
+                alert('Ошибка при разблокировке: ' + (e?.message || e));
+            }
+        }
+    }
+
     // Функция удаления водителя (админ)
     async function deleteDriver(driverId) {
         if (!isAdmin) {
@@ -476,6 +681,12 @@
                 await _sb.from('markers').delete().eq('author_id', driverId);
                 // Удаляем водителя
                 await _sb.from('drivers').delete().eq('user_id', driverId);
+                // Пытаемся удалить из бана (если таблица существует)
+                try {
+                    await _sb.from('bans').delete().eq('user_id', driverId);
+                } catch (e) {
+                    console.warn('Ошибка при удалении из bans (возможно, таблица не существует):', e?.message);
+                }
                 alert('Водитель удален');
                 openAdminModal(); // Обновляем список
             } catch (e) {
@@ -502,6 +713,136 @@
             }
         }
     }
+
+    // Функция открытия чата
+    async function openChatModal() {
+        if (!currentDriver) {
+            alert('Пожалуйста, завершите регистрацию');
+            openRegistrationModal();
+            return;
+        }
+
+        document.getElementById('chatModal').classList.add('active');
+        await loadChatMessages();
+        // Автоматически обновляем сообщения каждые 2 секунды
+        chatUpdateInterval = setInterval(loadChatMessages, 2000);
+    }
+
+    // Функция закрытия чата
+    function closeChatModal() {
+        document.getElementById('chatModal').classList.remove('active');
+        if (chatUpdateInterval) clearInterval(chatUpdateInterval);
+    }
+
+    // Переменная для интервала обновления чата
+    let chatUpdateInterval = null;
+
+    // Функция загрузки сообщений чата
+    async function loadChatMessages() {
+        try {
+            const { data: messages } = await _sb.from('messages').select('*').order('created_at', { ascending: true }).limit(100);
+            const container = document.getElementById('chatMessages');
+            
+            if (!messages || messages.length === 0) {
+                container.innerHTML = '<div style="text-align: center; color: var(--gray); padding: 20px;">Нет сообщений. Будьте первым!</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            messages.forEach(msg => {
+                const isOwn = String(msg.author_id) === String(uid);
+                const messageEl = document.createElement('div');
+                messageEl.className = `chat-message ${isOwn ? 'own' : 'other'}`;
+                
+                let photoHTML = '';
+                if (msg.photo_url) {
+                    photoHTML = `<img src="${msg.photo_url}" class="chat-message-photo" onclick="window.open('${msg.photo_url}', '_blank')">`;
+                }
+                
+                const timestamp = new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                
+                messageEl.innerHTML = `
+                    ${!isOwn ? `<div class="chat-message-author">${msg.author_name || 'Аноним'}</div>` : ''}
+                    <div>${msg.text || ''}</div>
+                    ${photoHTML}
+                    <div class="chat-message-time">${timestamp}</div>
+                `;
+                container.appendChild(messageEl);
+            });
+            
+            // Скролим вниз к последнему сообщению
+            container.scrollTop = container.scrollHeight;
+        } catch (e) {
+            console.warn('Ошибка при загрузке сообщений:', e?.message || e);
+            document.getElementById('chatMessages').innerHTML = '<div style="text-align: center; color: red; padding: 20px;">Ошибка загрузки сообщений</div>';
+        }
+    }
+
+    // Функция отправки сообщения в чат
+    async function sendChatMessage() {
+        const messageText = document.getElementById('chatInput').value.trim();
+        
+        if (!messageText && !selectedChatPhoto) {
+            alert('Напишите сообщение или добавьте фото');
+            return;
+        }
+
+        let photoURL = null;
+
+        // Если есть фото, загружаем его в Supabase Storage
+        if (selectedChatPhoto) {
+            try {
+                const fileName = `chat-photos/${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const { error: uploadError } = await _sb.storage.from('chat').upload(fileName, selectedChatPhoto);
+                
+                if (uploadError) throw uploadError;
+                
+                // Получаем публичный URL фото
+                const { data } = _sb.storage.from('chat').getPublicUrl(fileName);
+                photoURL = data.publicUrl;
+            } catch (e) {
+                console.warn('Ошибка при загрузке фото:', e?.message || e);
+                alert('Ошибка при загрузке фото. Сообщение будет отправлено без фото.');
+            }
+        }
+
+        // Вставляем сообщение в БД
+        try {
+            const { error } = await _sb.from('messages').insert([{
+                author_id: uid,
+                author_name: currentDriver.name,
+                text: messageText,
+                photo_url: photoURL,
+                created_at: new Date().toISOString()
+            }]);
+
+            if (!error) {
+                document.getElementById('chatInput').value = '';
+                selectedChatPhoto = null;
+                await loadChatMessages();
+            } else {
+                alert('Ошибка отправки: ' + (error?.message || 'неизвестная ошибка'));
+            }
+        } catch (e) {
+            alert('Ошибка отправки: ' + (e?.message || e));
+        }
+    }
+
+    // Функция выбора фотографии для чата
+    document.addEventListener('change', function(e) {
+        if (e.target.id === 'chatPhotoInput') {
+            const file = e.target.files[0];
+            if (file) {
+                if (file.size > 5 * 1024 * 1024) { // 5MB лимит
+                    alert('Фотография слишком большая (максимум 5MB)');
+                    e.target.value = '';
+                    return;
+                }
+                selectedChatPhoto = file;
+                alert('Фото выбрана. Нажмите "Отправить" чтобы отправить его вместе с сообщением.');
+            }
+        }
+    });
 
     // Функция голосования за маркер (лайк/дизлайк)
     window.vote = async (id, isUp) => {
@@ -535,11 +876,32 @@
     ymaps.ready(() => {
         // Создаем карту с центром и уровнем зума
         myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+        
+        // Рисуем границы Донецкой области ДНР
+        const donetskBoundary = new ymaps.Rectangle([
+            [DONETSK_REGION.south, DONETSK_REGION.west],
+            [DONETSK_REGION.north, DONETSK_REGION.east]
+        ], {}, {
+            fillColor: '#0066ff33',
+            strokeColor: '#007aff',
+            strokeWidth: 2,
+            strokeOpacity: 0.7
+        });
+        myMap.geoObjects.add(donetskBoundary);
+        
         // При изменении центра карты обновляем адрес
         myMap.events.add('actionend', () => {
             ymaps.geocode(myMap.getCenter()).then(res => {
                 const obj = res.geoObjects.get(0);
                 document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
+                
+                // Проверяем, в какой области находимся
+                const coords = myMap.getCenter();
+                if (isInDonetskRegion(coords)) {
+                    document.getElementById('addr-text').style.color = '#34c759';
+                } else {
+                    document.getElementById('addr-text').style.color = '#ff3b30';
+                }
             });
         });
         // Инициализируем приложение (проверяем регистрацию)
@@ -550,6 +912,18 @@
         setInterval(loadMarkers, 10000);
     });
 
+    // Функция проверки, находится ли точка в Донецкой области
+    function isInDonetskRegion(coords) {
+        if (!coords || coords.length < 2) return false;
+        const lat = coords[0];
+        const lon = coords[1];
+        
+        return lat >= DONETSK_REGION.south && 
+               lat <= DONETSK_REGION.north && 
+               lon >= DONETSK_REGION.west && 
+               lon <= DONETSK_REGION.east;
+    }
+
     // Функция добавления новой точки (маркера) на карту
     async function addPoint() {
         if (!currentDriver) {
@@ -558,10 +932,19 @@
             return;
         }
 
+        // Получаем центр карты (текущее местоположение)
+        const coords = myMap.getCenter();
+        
+        // Проверяем, находится ли местоположение в Донецкой области ДНР
+        if (!isInDonetskRegion(coords)) {
+            alert('⛔ Метки можно добавлять только в Донецкой области ДНР.\n\nТекущее местоположение: ' + coords[0].toFixed(2) + '°N, ' + coords[1].toFixed(2) + '°E');
+            return;
+        }
+
         // Вставляем новый маркер в БД
         try {
             const { error } = await _sb.from('markers').insert([{
-                coords: myMap.getCenter(), // Центр текущей карты
+                coords: coords, // Центр текущей карты
                 ts: Date.now(), // Текущее время
                 exp: Date.now() + 7200000, // Время жизни маркера (2 часа)
                 type: selectedType, // Тип маркера (ДПС, Рейд и т.д.)
@@ -581,10 +964,12 @@
 
                 // Если нет ошибки, очищаем поле комментария и обновляем маркеры
                 document.getElementById('m-comm').value = '';
+                alert('✅ Метка успешно добавлена!');
                 loadMarkers();
             }
         } catch (e) {
             console.warn('Ошибка при добавлении метки:', e?.message || e);
+            alert('Ошибка при добавлении метки: ' + (e?.message || e));
         }
     }
 
@@ -595,6 +980,8 @@
         if(!markers || !myMap) return;
         // Удаляем старые маркеры с карты
         myMap.geoObjects.removeAll();
+        // Получаем текущее местоположение карты (центр)
+        const userCoords = myMap.getCenter();
         // Для каждого маркера создаем объект на карте
         markers.forEach(m => {
             // Проверяем, является ли текущий пользователь автором маркера
@@ -613,6 +1000,26 @@
             { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [30, 30], iconImageOffset: [-15, -15] });
             // Добавляем маркер на карту
             myMap.geoObjects.add(p);
+            
+            // Проверяем расстояние до опасных маркеров (камеры и ДПС)
+            if ((m.type === 'camera' || m.type === 'dps') && m.coords && Array.isArray(m.coords)) {
+                const distance = calculateDistance(userCoords, m.coords);
+                
+                // Если расстояние меньше 500 метров и это первый раз, издаем звук
+                if (distance < 500 && !notifiedMarkers.has(m.id)) {
+                    notifiedMarkers.add(m.id);
+                    playAlertSound();
+                    console.log(`⚠️ Внимание! ${m.type === 'camera' ? 'Камера' : 'ДПС'} на расстоянии ${distance.toFixed(0)}м`);
+                }
+            }
+            
+            // Очищаем уведомления для маркеров которые уже далеко (более 1000м)
+            if (notifiedMarkers.has(m.id)) {
+                const distance = calculateDistance(userCoords, m.coords);
+                if (distance > 1000) {
+                    notifiedMarkers.delete(m.id);
+                }
+            }
         });
     }
 </script>
