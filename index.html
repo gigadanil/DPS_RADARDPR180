@@ -36,7 +36,25 @@
         .modal.active { display: block; }
         .modal-content { background: white; border-radius: 20px; margin: 20px; padding: 20px; max-width: 500px; margin-left: auto; margin-right: auto; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .modal-close { background: none; border: none; font-size: 28px; cursor: pointer; color: var(--gray); }eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9dseyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds
+        .modal-close { background: none; border: none; font-size: 28px; cursor: pointer; color: var(--gray); }
+        
+        /* Админ-панель */
+        .admin-btn { position: absolute; top: 15px; left: 15px; z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: #ff9500; border: 2px solid white; cursor: pointer; font-size: 22px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
+        .admin-btn.visible { display: block; }
+        .admin-btn:hover { transform: scale(1.05); }
+        
+        .admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .admin-table th, .admin-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; font-size: 12px; }
+        .admin-table th { background: #f0f0f5; font-weight: 600; }
+        .admin-table tr:hover { background: #f9f9f9; }
+        
+        .delete-btn { background: #ff3b30; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: bold; }
+        .delete-btn:hover { background: #e63027; }
+        
+        .admin-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .admin-stat-card { background: #f0f0f5; border-radius: 12px; padding: 15px; text-align: center; }
+        .admin-stat-card .value { font-size: 28px; font-weight: 800; color: var(--blue); }
+        .admin-stat-card .label { font-size: 12px; color: var(--gray); margin-top: 5px; }
         
         /* Форма регистрации */
         .registration-form input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
@@ -66,6 +84,67 @@
     
     <!-- Кнопка профиля -->
     <button class="profile-btn" onclick="openProfileModal()">👤</button>
+    
+    <!-- Кнопка админа -->
+    <button class="admin-btn" id="adminBtn" onclick="openAdminModal()">⚙️</button>
+    
+    <!-- Модальное окно админ-панели -->
+    <div id="adminModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="margin: 0;">Админ-панель</h2>
+                <button class="modal-close" onclick="closeAdminModal()">✕</button>
+            </div>
+            
+            <div class="admin-stats">
+                <div class="admin-stat-card">
+                    <div class="label">Всего водителей</div>
+                    <div class="value" id="admin-drivers-count">0</div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="label">Активных меток</div>
+                    <div class="value" id="admin-markers-count">0</div>
+                </div>
+            </div>
+            
+            <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px;">Список водителей</h3>
+            <div style="overflow-x: auto; max-height: 300px; overflow-y: auto;">
+                <table class="admin-table" id="admin-drivers-table">
+                    <thead>
+                        <tr>
+                            <th>Имя</th>
+                            <th>Авто</th>
+                            <th>Номер</th>
+                            <th>Действие</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-drivers-body">
+                        <tr><td colspan="4" style="text-align: center; color: var(--gray);">Загрузка...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px;">Активные метки</h3>
+            <div style="overflow-x: auto; max-height: 300px; overflow-y: auto;">
+                <table class="admin-table" id="admin-markers-table">
+                    <thead>
+                        <tr>
+                            <th>Тип</th>
+                            <th>Комментарий</th>
+                            <th>Лайки</th>
+                            <th>Дизлайки</th>
+                            <th>Действие</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-markers-body">
+                        <tr><td colspan="5" style="text-align: center; color: var(--gray);">Загрузка...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <button class="main-btn" onclick="closeAdminModal()" style="margin-top: 20px;">Закрыть</button>
+        </div>
+    </div>
     
     <!-- Модальное окно для регистрации (только данные об авто) -->
     <div id="registrationModal" class="modal">
@@ -161,6 +240,10 @@
     let myMap, selectedType = 'dps';
     // Данные профиля текущего пользователя
     let currentDriver = null;
+    // ID администратора (измените на свой ID Telegram)
+    const ADMIN_ID = "5118431735";
+    // Флаг для проверки, является ли пользователь админом
+    let isAdmin = false;
 
     // Функция инициализации приложения
     async function initApp() {
@@ -169,6 +252,12 @@
         if (!tgUser) {
             alert('Приложение должно открываться через Telegram бота');
             return;
+        }
+
+        // Проверяем, является ли пользователь администратором
+        isAdmin = String(tgUser.id) === String(ADMIN_ID);
+        if (isAdmin) {
+            document.getElementById('adminBtn').classList.add('visible');
         }
 
         // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
@@ -307,6 +396,110 @@
             currentDriver = null;
             closeProfileModal();
             openRegistrationModal();
+        }
+    }
+
+    // Функция открытия админ-панели
+    async function openAdminModal() {
+        if (!isAdmin) {
+            alert('У вас нет доступа к админ-панели');
+            return;
+        }
+
+        // Загружаем список водителей
+        try {
+            const { data: drivers } = await _sb.from('drivers').select('user_id,name,car_model,car_plate');
+            const tbody = document.getElementById('admin-drivers-body');
+            tbody.innerHTML = '';
+            if (drivers && drivers.length > 0) {
+                drivers.forEach(d => {
+                    const row = `<tr>
+                        <td>${d.name || 'N/A'}</td>
+                        <td>${d.car_model || 'N/A'}</td>
+                        <td>${d.car_plate || 'N/A'}</td>
+                        <td><button class="delete-btn" onclick="deleteDriver('${d.user_id}')">Удалить</button></td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+                document.getElementById('admin-drivers-count').textContent = drivers.length;
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--gray);">Водители не найдены</td></tr>';
+            }
+        } catch (e) {
+            console.warn('Ошибка при загрузке водителей:', e?.message || e);
+            document.getElementById('admin-drivers-body').innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Ошибка загрузки</td></tr>';
+        }
+
+        // Загружаем список активных маркеров
+        try {
+            const { data: markers } = await _sb.from('markers').select('*').gt('exp', Date.now());
+            const tbody = document.getElementById('admin-markers-body');
+            tbody.innerHTML = '';
+            if (markers && markers.length > 0) {
+                markers.forEach(m => {
+                    const row = `<tr>
+                        <td>${MAP_ICONS[m.type] || '?'}</td>
+                        <td>${m.comment || 'без комментария'}</td>
+                        <td>${m.votes_up || 0}</td>
+                        <td>${m.votes_down || 0}</td>
+                        <td><button class="delete-btn" onclick="deleteMarkerAdmin(${m.id})">Удалить</button></td>
+                    </tr>`;
+                    tbody.innerHTML += row;
+                });
+                document.getElementById('admin-markers-count').textContent = markers.length;
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--gray);">Активных меток нет</td></tr>';
+            }
+        } catch (e) {
+            console.warn('Ошибка при загрузке маркеров:', e?.message || e);
+            document.getElementById('admin-markers-body').innerHTML = '<tr><td colspan="5" style="text-align: center; color: red;">Ошибка загрузки</td></tr>';
+        }
+
+        document.getElementById('adminModal').classList.add('active');
+    }
+
+    // Функция закрытия админ-панели
+    function closeAdminModal() {
+        document.getElementById('adminModal').classList.remove('active');
+    }
+
+    // Функция удаления водителя (админ)
+    async function deleteDriver(driverId) {
+        if (!isAdmin) {
+            alert('У вас нет доступа к этой операции');
+            return;
+        }
+
+        if (confirm('Вы уверены? Это также удалит все метки этого водителя')) {
+            try {
+                // Удаляем все метки водителя
+                await _sb.from('markers').delete().eq('author_id', driverId);
+                // Удаляем водителя
+                await _sb.from('drivers').delete().eq('user_id', driverId);
+                alert('Водитель удален');
+                openAdminModal(); // Обновляем список
+            } catch (e) {
+                alert('Ошибка при удалении: ' + (e?.message || e));
+            }
+        }
+    }
+
+    // Функция удаления маркера (админ)
+    async function deleteMarkerAdmin(markerId) {
+        if (!isAdmin) {
+            alert('У вас нет доступа к этой операции');
+            return;
+        }
+
+        if (confirm('Удалить эту метку?')) {
+            try {
+                await _sb.from('markers').delete().eq('id', markerId);
+                alert('Метка удалена');
+                openAdminModal(); // Обновляем список
+                loadMarkers(); // Обновляем карту
+            } catch (e) {
+                alert('Ошибка при удалении: ' + (e?.message || e));
+            }
         }
     }
 
