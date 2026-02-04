@@ -11,9 +11,10 @@
         :root { --blue: #007aff; --bg: #f2f2f7; --gray: #8e8e93; }
         body, html { width: 100%; height: 100%; margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: var(--bg); overflow: hidden; }
         #map { width: 100%; height: 100%; position: absolute; }
-        .target { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); z-index: 2000; pointer-events: none; color: var(--blue); }
+        .target { position: absolute; top: 50%; left: 50%; transform: translate(-50%, calc(-100% - var(--target-shift, 0px))); z-index: 2000; pointer-events: none; color: var(--blue); }
         .target svg { width: 45px; height: 45px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
-        .target.shift-up { transform: translate(-50%, -160%); }
+        /* .target.shift-up теперь управляет дополнительным сдвигом через JS */
+        .target.shift-up { /* placeholder - JS устанавливает --target-shift */ }
         .bottom-ui { position: absolute; bottom: 20px; left: 0; right: 0; z-index: 1000; padding: 0 10px; }
         .action-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-radius: 24px; padding: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); position: relative; }
         .action-card.hidden { display: none; }
@@ -55,6 +56,9 @@
         /* Кнопка "Где я" */
         .loc-btn { position: absolute; top: 15px; right: 70px; z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: white; border: 2px solid var(--blue); cursor: pointer; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
         .loc-btn:hover { transform: scale(1.05); }
+        .follow-toggle { position: absolute; top: 15px; right: 120px; z-index: 1500; width: 40px; height: 40px; border-radius: 50%; background: white; border: 2px solid #34c759; cursor: pointer; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
+        .follow-toggle.inactive { background: #fff; border-color: #ccc; color: #888; }
+        .follow-toggle.active { background: #34c759; color: white; border-color: #34c759; }
         
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2500; overflow-y: auto; }
         .modal.active { display: block; }
@@ -170,8 +174,12 @@
     
     <!-- Кнопка админа -->
     <button class="admin-btn" id="adminBtn" onclick="openAdminModal()">⚙️</button>
+    <!-- Кнопка профиля -->
+    <button class="profile-btn" id="profileBtn" onclick="openProfileModal()" title="Профиль">👤</button>
     <!-- Кнопка 'Где я' -->
     <button class="loc-btn" id="locBtn" onclick="centerOnMyLocation()" title="Где я">📍</button>
+    <!-- Переключатель автослежения GPS -->
+    <button class="follow-toggle" id="followToggleBtn" onclick="toggleFollow()" title="Автослежение GPS">🔔</button>
     
     <!-- Модальное окно админ-панели -->
     <div id="adminModal" class="modal">
@@ -410,12 +418,31 @@
             card.classList.remove('hidden');
             // сдвигаем центральную метку выше, чтобы она не перекрывалась виджетом
             if (target) target.classList.add('shift-up');
+            // обновляем реальный сдвиг в px
+            updateTargetOffset();
             if (openBtn) openBtn.classList.remove('visible');
         } else {
             card.classList.add('hidden');
             if (target) target.classList.remove('shift-up');
+            // сбрасываем сдвиг
+            updateTargetOffset();
             if (openBtn) openBtn.classList.add('visible');
         }
+    }
+
+    // Динамически вычисляет сдвиг центральной метки, чтобы она не перекрывалась нижним виджетом
+    function updateTargetOffset() {
+        const target = document.querySelector('.target');
+        const bottom = document.querySelector('.bottom-ui');
+        if (!target) return;
+        let shift = 0;
+        if (bottom && !bottom.classList.contains('hidden')) {
+            // берём высоту виджета (включая отступы) и добавляем небольшой запас
+            const rect = bottom.getBoundingClientRect();
+            shift = Math.max(0, rect.height + 20);
+        }
+        // применяем значение в CSS-переменную
+        target.style.setProperty('--target-shift', shift + 'px');
     }
 
     // Границы Донецкой области ДНР (примерные координаты)
@@ -516,7 +543,33 @@
             return;
         }
         autoFollow = true;
+        updateFollowButton();
         try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
+    }
+
+    // Переключатель автослежения GPS
+    function toggleFollow() {
+        autoFollow = !autoFollow;
+        updateFollowButton();
+        if (autoFollow && userLocation && myMap) {
+            try { myMap.setCenter(userLocation, 17); } catch(e) { console.warn(e); }
+        }
+    }
+
+    function updateFollowButton() {
+        const btn = document.getElementById('followToggleBtn');
+        if (!btn) return;
+        if (autoFollow) {
+            btn.classList.remove('inactive');
+            btn.classList.add('active');
+            btn.title = 'Автослежение включено';
+            btn.textContent = '🔔';
+        } else {
+            btn.classList.remove('active');
+            btn.classList.add('inactive');
+            btn.title = 'Автослежение выключено';
+            btn.textContent = '🔕';
+        }
     }
     
     // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
@@ -939,11 +992,20 @@
 
         // Загружаем список активных маркеров
         try {
-            const { data: markers } = await _sb.from('markers').select('*').gt('exp', Date.now());
+            // Загружаем все метки и фильтруем по истечению на клиенте,
+            // потому что в базе `exp` может быть либо числом (ms), либо TIMESTAMPTZ.
+            const { data: markers } = await _sb.from('markers').select('*');
+            const now = Date.now();
+            const activeMarkers = (markers || []).filter(m => {
+                if (m.exp === null || typeof m.exp === 'undefined') return true;
+                if (typeof m.exp === 'number') return m.exp > now;
+                const parsed = Date.parse(m.exp);
+                return !isNaN(parsed) ? parsed > now : true;
+            });
             const tbody = document.getElementById('admin-markers-body');
             tbody.innerHTML = '';
-            if (markers && markers.length > 0) {
-                markers.forEach(m => {
+            if (activeMarkers && activeMarkers.length > 0) {
+                activeMarkers.forEach(m => {
                     const row = `<tr>
                         <td>${MAP_ICONS[m.type] || '?'}</td>
                         <td>${m.comment || 'без комментария'}</td>
@@ -953,7 +1015,7 @@
                     </tr>`;
                     tbody.innerHTML += row;
                 });
-                document.getElementById('admin-markers-count').textContent = markers.length;
+                document.getElementById('admin-markers-count').textContent = activeMarkers.length;
             } else {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--gray);">Активных меток нет</td></tr>';
             }
@@ -1578,6 +1640,8 @@
         initApp();
         // Инициализируем GPS отслеживание
         initGPS();
+        // Обновим состояние кнопки автослежения
+        try { updateFollowButton(); } catch(e) { /* ignore */ }
         // Загружаем маркеры с сервера
         loadMarkers();
         // Обновляем маркеры каждые 10 секунд
@@ -1590,7 +1654,14 @@
         const target = document.querySelector('.target');
         if (target) {
             if (actionCardVisible) target.classList.add('shift-up'); else target.classList.remove('shift-up');
+            // Обновляем сдвиг метки по высоте виджета
+            try { updateTargetOffset(); } catch(e) { console.warn(e); }
         }
+    });
+
+    // Обновляем сдвиг при изменении размера окна
+    window.addEventListener('resize', () => {
+        try { updateTargetOffset(); } catch(e) { /* ignore */ }
     });
 
     // Функция проверки, находится ли точка в Донецкой области
@@ -1660,12 +1731,21 @@
     // Функция загрузки всех активных маркеров с карты
     async function loadMarkers() {
         // Загружаем маркеры, которые еще не истекли (exp > текущее время)
-        const { data: markers } = await _sb.from('markers').select('*').gt('exp', Date.now());
-        if(!markers || !myMap) return;
+        // Загружаем все метки и фильтруем их по exp на клиенте,
+        // чтобы корректно работать с разными типами поля exp (BIGINT или TIMESTAMPTZ)
+        const { data: markers } = await _sb.from('markers').select('*');
+        if (!markers || !myMap) return;
+        const now = Date.now();
+        const activeMarkers = (markers || []).filter(m => {
+            if (m.exp === null || typeof m.exp === 'undefined') return true;
+            if (typeof m.exp === 'number') return m.exp > now;
+            const parsed = Date.parse(m.exp);
+            return !isNaN(parsed) ? parsed > now : true;
+        });
         
         // Подсчитываем метки по типам
         const typeCounts = {};
-        markers.forEach(m => {
+        activeMarkers.forEach(m => {
             typeCounts[m.type] = (typeCounts[m.type] || 0) + 1;
         });
         
