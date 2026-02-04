@@ -1161,12 +1161,34 @@
         try {
             const { data: messages } = await _sb.from('messages').select('*').order('created_at', { ascending: true }).limit(100);
             const container = document.getElementById('chatMessages');
-            
+
             if (!messages || messages.length === 0) {
                 container.innerHTML = '<div style="text-align: center; color: var(--gray); padding: 20px;">Нет сообщений. Будьте первым!</div>';
                 return;
             }
 
+            // Собираем уникальные авторы и получаем их likes_sum/is_trusted за один запрос
+            const authorIds = Array.from(new Set(messages.map(m => String(m.author_id))));
+            let authorsMap = {};
+            try {
+                const { data: authors } = await _sb.from('drivers').select('user_id,likes_sum,is_trusted').in('user_id', authorIds);
+                if (authors) authors.forEach(a => { authorsMap[String(a.user_id)] = a; });
+            } catch (e) {
+                console.warn('Не удалось загрузить данные профилей авторов (drivers):', e?.message || e);
+            }
+
+            // Утилита: переводим likes_sum в 0..5 звёзд
+            function likesToStars(likes) {
+                const n = Number(likes) || 0;
+                if (n <= 0) return 0;
+                if (n >= 100) return 5;
+                if (n >= 60) return 4;
+                if (n >= 30) return 3;
+                if (n >= 10) return 2;
+                return 1;
+            }
+
+            // Рендерим сообщения с бейджами-звёздами рядом с именем
             container.innerHTML = '';
             messages.forEach(msg => {
                 const isOwn = String(msg.author_id) === String(uid);
@@ -1174,29 +1196,38 @@
                 const messageEl = document.createElement('div');
                 messageEl.className = `chat-message ${isOwn ? 'own' : 'other'}`;
                 messageEl.style.position = 'relative';
-                
+
                 let photoHTML = '';
                 if (msg.photo_url) {
                     photoHTML = `<img src="${msg.photo_url}" class="chat-message-photo" onclick="window.open('${msg.photo_url}', '_blank')">`;
                 }
-                
+
                 const timestamp = new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-                
+
                 let deleteButtonHTML = '';
                 if (canDelete) {
                     deleteButtonHTML = `<button style="position: absolute; top: 5px; right: 5px; background: #ff3b30; color: white; border: none; border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer;" onclick="deleteMessage(${msg.id}, ${msg.author_id})">❌</button>`;
                 }
-                
+
+                // Бейдж звёзд
+                const authorInfo = authorsMap[String(msg.author_id)] || {};
+                const likesSum = authorInfo.likes_sum || 0;
+                const isTrusted = !!authorInfo.is_trusted;
+                const starsCount = likesToStars(likesSum);
+                let starsHTML = '';
+                for (let i = 0; i < 5; i++) starsHTML += (i < starsCount) ? '★' : '☆';
+                const starsBadge = `<span style="margin-left:8px; color: ${isTrusted ? '#b8860b' : '#f5c542'}; font-weight:700;">${starsHTML}</span>`;
+
                 messageEl.innerHTML = `
                     ${deleteButtonHTML}
-                    ${!isOwn ? `<div class="chat-message-author">${msg.author_name || 'Аноним'} ${isAdmin ? `<button style="margin-left: 5px; background: #ff9500; color: white; border: none; border-radius: 3px; padding: 1px 4px; font-size: 9px; cursor: pointer;" onclick="deleteAllUserMessages(${msg.author_id}, '${(msg.author_name || 'Пользователь').replace(/'/g, "\\'")}')" title="Удалить все сообщения этого пользователя">🗑️</button>` : ''}</div>` : ''}
+                    ${!isOwn ? `<div class="chat-message-author">${msg.author_name || 'Аноним'} ${starsBadge} ${isAdmin ? `<button style="margin-left: 5px; background: #ff9500; color: white; border: none; border-radius: 3px; padding: 1px 4px; font-size: 9px; cursor: pointer;" onclick="deleteAllUserMessages(${msg.author_id}, '${(msg.author_name || 'Пользователь').replace(/'/g, "\\'")}')" title="Удалить все сообщения этого пользователя">🗑️</button>` : ''}</div>` : ''}
                     <div>${msg.text || ''}</div>
                     ${photoHTML}
                     <div class="chat-message-time">${timestamp}</div>
                 `;
                 container.appendChild(messageEl);
             });
-            
+
             // Скролим вниз к последнему сообщению
             container.scrollTop = container.scrollHeight;
         } catch (e) {
@@ -1396,13 +1427,30 @@
             // Загружаем последние маркеры (события добавления)
             const { data: recentMarkers } = await _sb.from('markers').select('id,type,ts,author_id').order('ts', { ascending: false }).limit(20);
             
-            // Загружаем информацию о водителях
-            const { data: drivers } = await _sb.from('drivers').select('user_id,name');
+            // Загружаем информацию о водителях (имя, рейтинг) для отображения звёзд в ленте
+            const { data: drivers } = await _sb.from('drivers').select('user_id,name,likes_sum,is_trusted');
             const driverMap = {};
+            const driverInfoMap = {};
             if (drivers) {
                 drivers.forEach(d => {
                     driverMap[d.user_id] = d.name || 'Аноним';
+                    driverInfoMap[d.user_id] = {
+                        name: d.name || 'Аноним',
+                        likes_sum: (typeof d.likes_sum !== 'undefined' && d.likes_sum !== null) ? Number(d.likes_sum) : 0,
+                        is_trusted: !!d.is_trusted
+                    };
                 });
+            }
+
+            // Вспомогательная функция: переводим likes_sum в 0..5 звёзд
+            function likesToStars(n) {
+                const v = Number(n) || 0;
+                if (v <= 0) return 0;
+                if (v >= 100) return 5;
+                if (v >= 60) return 4;
+                if (v >= 30) return 3;
+                if (v >= 10) return 2;
+                return 1;
             }
             
             let html = '';
@@ -1412,12 +1460,21 @@
             if (recentMarkers && recentMarkers.length > 0) {
                 recentMarkers.forEach(marker => {
                     const driverName = driverMap[marker.author_id] || 'Водитель';
+                    const authorInfo = driverInfoMap[marker.author_id] || { name: driverName, likes_sum: 0, is_trusted: false };
                     const typeName = typeNames[marker.type] || marker.type;
                     const icon = typeEmoji[marker.type] || '📍';
                     const time = new Date(marker.ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+                    // Рендерим звёзды рядом с именем
+                    const starsCount = likesToStars(authorInfo.likes_sum);
+                    let starsHTML = '';
+                    for (let i = 0; i < 5; i++) starsHTML += (i < starsCount) ? '★' : '☆';
+                    const starsBadge = `<span style="margin-left:8px; color: ${authorInfo.is_trusted ? '#b8860b' : '#f5c542'}; font-weight:700;">${starsHTML}</span>`;
+                    const trustedMark = authorInfo.is_trusted ? '<span style="color:#b8860b; font-weight:800; margin-left:6px;">⭐</span>' : '';
+
                     html += `
                         <div class="activity-item">
-                            <div><span class="activity-icon">${icon}</span><strong>${driverName}</strong> добавил ${typeName}</div>
+                            <div><span class="activity-icon">${icon}</span><strong>${driverName}</strong> ${trustedMark} ${starsBadge} добавил ${typeName}</div>
                             <div class="activity-time">🕐 ${time}</div>
                         </div>
                     `;
@@ -1635,28 +1692,28 @@
         // Получаем текущее местоположение карты (центр)
         const userCoords = myMap.getCenter();
 
-        // Подготовим карту доверия для авторов маркеров (чтобы не делать запрос на каждого автора отдельно)
+        // Подготовим данные об авторах (имя, likes_sum, is_trusted)
         const authorIds = Array.from(new Set(markers.map(m => String(m.author_id))));
-        let trustMap = {};
+        const authorsInfoMap = {}; // user_id -> { name, likes_sum, is_trusted }
         try {
-            // Сначала попробуем получить данные о пользователях из таблицы drivers (если есть колонки likes_sum/is_trusted)
-            const { data: driversInfo } = await _sb.from('drivers').select('user_id,likes_sum,is_trusted').in('user_id', authorIds);
+            // Запрашиваем имя и рейтинг из drivers (если таблица/колонки есть)
+            const { data: driversInfo } = await _sb.from('drivers').select('user_id,name,likes_sum,is_trusted').in('user_id', authorIds);
             if (driversInfo) {
                 driversInfo.forEach(d => {
                     const id = String(d.user_id);
-                    if (typeof d.is_trusted !== 'undefined' && d.is_trusted !== null) {
-                        trustMap[id] = !!d.is_trusted;
-                    } else if (typeof d.likes_sum !== 'undefined' && d.likes_sum !== null) {
-                        trustMap[id] = (d.likes_sum >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20));
-                    }
+                    authorsInfoMap[id] = {
+                        name: d.name || 'Аноним',
+                        likes_sum: (typeof d.likes_sum !== 'undefined' && d.likes_sum !== null) ? Number(d.likes_sum) : 0,
+                        is_trusted: !!d.is_trusted
+                    };
                 });
             }
         } catch (e) {
             console.warn('Не удалось получить данные drivers для авторов (возможно, таблица/колонки отсутствуют):', e?.message || e);
         }
 
-        // Для авторов без информации посчитаем суммарные лайки по всем меткам
-        const missingAuthors = authorIds.filter(id => typeof trustMap[id] === 'undefined');
+        // Для авторов без данных подсчитаем суммарные лайки по уже загруженным меткам
+        const missingAuthors = authorIds.filter(id => !authorsInfoMap[id]);
         if (missingAuthors.length > 0) {
             try {
                 const { data: allMarkers } = await _sb.from('markers').select('author_id,votes_up').in('author_id', missingAuthors);
@@ -1669,7 +1726,7 @@
                 }
                 missingAuthors.forEach(id => {
                     const likes = sumMap[id] || 0;
-                    trustMap[id] = likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20);
+                    authorsInfoMap[id] = { name: 'Аноним', likes_sum: likes, is_trusted: likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20) };
                 });
             } catch (e) {
                 console.warn('Не удалось подсчитать суммарные лайки для авторов:', e?.message || e);
@@ -1687,7 +1744,24 @@
             const confirmationBar = leaveCount > 0 ? `<div style="margin-top: 8px; font-size: 11px; color: #666;">🚗 Уехали: ${leaveCount}/${confirmThreshold}</div>` : '';
             
             // HTML контент для всплывающего окна маркера
+            const authorInfo = authorsInfoMap[authorId] || { name: 'Аноним', likes_sum: 0, is_trusted: false };
+            // Переводим likes_sum в 0..5 звёзд
+            function likesToStarsLocal(likes) {
+                const n = Number(likes) || 0;
+                if (n <= 0) return 0;
+                if (n >= 100) return 5;
+                if (n >= 60) return 4;
+                if (n >= 30) return 3;
+                if (n >= 10) return 2;
+                return 1;
+            }
+            const starsCountLocal = likesToStarsLocal(authorInfo.likes_sum);
+            let starsHTMLLocal = '';
+            for (let i = 0; i < 5; i++) starsHTMLLocal += (i < starsCountLocal) ? '★' : '☆';
+            const starsBadgeLocal = `<span style="margin-left:8px; color: ${authorInfo.is_trusted ? '#b8860b' : '#f5c542'}; font-weight:700;">${starsHTMLLocal}</span>`;
+
             const bHtml = `<div class="b-cont">
+                <div style="font-size:13px; margin-bottom:6px; color:#222;"><strong>${authorInfo.name || 'Аноним'}</strong> ${authorInfo.is_trusted ? '<span style="color:#b8860b; font-weight:800; margin-left:6px;">⭐</span>' : ''} ${starsBadgeLocal}</div>
                 <strong>${m.comment || 'Метка'}</strong>
                 <div class="b-poll">
                     <button class="b-poll-btn" onclick="window.vote(${m.id}, true)">👍 ${m.votes_up || 0}</button>
