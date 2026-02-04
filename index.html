@@ -1814,7 +1814,10 @@
         }
 
         // Для каждого маркера создаем объект на карте
-        markers.forEach(m => {
+        activeMarkers.forEach(m => {
+            // Получаем ID автора в начале цикла
+            const authorId = String(m.author_id);
+            
             // Проверяем, является ли текущий пользователь автором маркера
             const isOwner = String(m.author_id) === String(uid);
             
