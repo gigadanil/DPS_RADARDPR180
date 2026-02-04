@@ -1858,8 +1858,7 @@
                 ${isOwner ? `<button class="b-del" onclick="window.delMarker(${m.id})">Удалить</button>` : ''}
             </div>`;
             // Определяем доверие автора и добавляем звездочку к иконке, если он проверен
-            const authorId = String(m.author_id);
-            const isTrustedAuthor = !!trustMap[authorId];
+            const isTrustedAuthor = authorInfo.is_trusted;
             const iconInner = `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`;
             // Создаем маркер с иконкой и балуном
             const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: iconInner }, 
