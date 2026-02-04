@@ -13,11 +13,14 @@
         #map { width: 100%; height: 100%; position: absolute; }
         .target { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -100%); z-index: 2000; pointer-events: none; color: var(--blue); }
         .target svg { width: 45px; height: 45px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
+        .target.shift-up { transform: translate(-50%, -160%); }
         .bottom-ui { position: absolute; bottom: 20px; left: 0; right: 0; z-index: 1000; padding: 0 10px; }
         .action-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-radius: 24px; padding: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); position: relative; }
         .action-card.hidden { display: none; }
         .action-card-close { position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--gray); padding: 4px 8px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: all 0.2s; }
         .action-card-close:hover { background: #f0f0f5; color: #000; }
+        .open-action-btn { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); width: 48px; height: 48px; border-radius: 50%; background: white; border: 2px solid var(--blue); z-index: 1600; display: none; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); cursor: pointer; }
+        .open-action-btn.visible { display: flex; }
         .addr-label { font-size: 12px; color: #000; font-weight: 600; margin-bottom: 10px; display: block; text-align: center; }
         .type-selector { display: flex; justify-content: space-between; margin-bottom: 12px; gap: 6px; flex-wrap: wrap; }
         .type-btn { 
@@ -366,10 +369,17 @@
     function toggleActionCard() {
         actionCardVisible = !actionCardVisible;
         const card = document.getElementById('actionCard');
+        const target = document.querySelector('.target');
+        const openBtn = document.getElementById('openActionBtn');
         if (actionCardVisible) {
             card.classList.remove('hidden');
+            // сдвигаем центральную метку выше, чтобы она не перекрывалась виджетом
+            if (target) target.classList.add('shift-up');
+            if (openBtn) openBtn.classList.remove('visible');
         } else {
             card.classList.add('hidden');
+            if (target) target.classList.remove('shift-up');
+            if (openBtn) openBtn.classList.add('visible');
         }
     }
 
@@ -1289,6 +1299,15 @@
         loadMarkers();
         // Обновляем маркеры каждые 10 секунд
         setInterval(loadMarkers, 10000);
+
+        // Если actionCard скрыт по умолчанию, показываем кнопку открытия
+        const openBtn = document.getElementById('openActionBtn');
+        if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
+        // Установим начальное положение центральной метки в зависимости от видимости виджета
+        const target = document.querySelector('.target');
+        if (target) {
+            if (actionCardVisible) target.classList.add('shift-up'); else target.classList.remove('shift-up');
+        }
     });
 
     // Функция проверки, находится ли точка в Донецкой области
@@ -1485,5 +1504,7 @@
         });
     }
 </script>
+    <!-- Кнопка открытия нижнего виджета (появляется когда он закрыт) -->
+    <button id="openActionBtn" class="open-action-btn" onclick="toggleActionCard()">▲</button>
 </body>
 </html>
