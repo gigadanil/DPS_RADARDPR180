@@ -230,11 +230,12 @@
                             <th>Комментарий</th>
                             <th>Лайки</th>
                             <th>Дизлайки</th>
+                            <th>Exp</th>
                             <th>Действие</th>
                         </tr>
                     </thead>
                     <tbody id="admin-markers-body">
-                        <tr><td colspan="5" style="text-align: center; color: var(--gray);">Загрузка...</td></tr>
+                        <tr><td colspan="6" style="text-align: center; color: var(--gray);">Загрузка...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -325,6 +326,56 @@
             
             <button class="main-btn" onclick="openRatingsModal()" style="margin-bottom: 10px; background: #34c759;">ГЛОБАЛЬНЫЙ РЕЙТИНГ</button>
             <button class="main-btn" onclick="logout()">ВЫЙТИ</button>
+        </div>
+    </div>
+    
+    <!-- Модальное окно для редактирования аватара -->
+    <div id="avatarEditorModal" class="modal">
+        <div class="modal-content" style="width: 90%; max-width: 400px;">
+            <div class="modal-header">
+                <h2 style="margin: 0;">Редактор аватара</h2>
+                <button class="modal-close" onclick="closeAvatarEditor()">✕</button>
+            </div>
+            <div style="text-align: center; padding: 20px;">
+                <!-- Круглый контейнер для предпросмотра -->
+                <div style="position: relative; width: 200px; height: 200px; margin: 0 auto 20px; border-radius: 50%; overflow: hidden; border: 2px solid var(--blue); background: #f0f0f0;">
+                    <img id="avatarEditorImage" style="position: absolute; width: 100%; height: 100%; object-fit: cover; cursor: grab;" alt="Avatar">
+                </div>
+                
+                <!-- Контролы для редактирования -->
+                <div style="padding: 0 10px;">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; text-align: left; font-size: 12px; color: var(--gray); margin-bottom: 5px;">Масштаб (зум):</label>
+                        <input type="range" id="avatarZoom" min="1" max="3" step="0.1" value="1" style="width: 100%; cursor: pointer;">
+                        <div style="font-size: 11px; color: var(--gray); text-align: right;">
+                            <span id="avatarZoomValue">100</span>%
+                        </div>
+                    </div>
+                    
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; text-align: left; font-size: 12px; color: var(--gray); margin-bottom: 5px;">Смещение по X:</label>
+                        <input type="range" id="avatarOffsetX" min="-50" max="50" value="0" style="width: 100%; cursor: pointer;">
+                    </div>
+                    
+                    <div style="margin-bottom: 20px;">
+                        <label style="display: block; text-align: left; font-size: 12px; color: var(--gray); margin-bottom: 5px;">Смещение по Y:</label>
+                        <input type="range" id="avatarOffsetY" min="-50" max="50" value="0" style="width: 100%; cursor: pointer;">
+                    </div>
+                    
+                    <button class="main-btn" onclick="saveAvatarEdit()" style="width: 100%; margin-bottom: 10px;">✅ СОХРАНИТЬ</button>
+                    <button class="main-btn" onclick="closeAvatarEditor()" style="width: 100%; background: #999;">Отмена</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальное окно для просмотра фото в полный размер -->
+    <div id="photoViewerModal" class="modal" onclick="closePhotoViewer()">
+        <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; padding: 20px;" onclick="event.stopPropagation()">
+            <div style="position: relative; max-width: 90vw; max-height: 90vh;">
+                <button class="modal-close" onclick="closePhotoViewer()" style="position: absolute; top: -50px; right: 0; font-size: 30px;">✕</button>
+                <img id="photoViewerImage" src="" style="max-width: 100%; max-height: 90vh; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);" alt="Photo">
+            </div>
         </div>
     </div>
     
@@ -456,7 +507,7 @@
             // берём высоту виджета (включая отступы) и добавляем больший запас для мобильных
             const rect = bottom.getBoundingClientRect();
             const isMobile = window.innerHeight < 800; // Телефон обычно <800px высотой
-            const margin = isMobile ? 60 : 40; // На мобильных больший запас
+            const margin = isMobile ? 100 : 80; // Увеличиваем запас, чтобы метка не пропадала за виджет
             shift = Math.max(0, rect.height + margin);
         }
         // применяем значение в CSS-переменную
@@ -724,30 +775,57 @@
         const car = document.getElementById('driver-car').value;
         const plate = document.getElementById('driver-plate').value;
 
-        // Вставляем только базовые колонки, чтобы не зависеть от кэша схемы Supabase
+        // Проверяем, существует ли уже пользователь с этим user_id
         try {
-            const { error } = await _sb.from('drivers').insert([{
-                user_id: uid,
-                name: name,
-                car_model: car,
-                car_plate: plate
-            }]);
+            const { data: existingDriver } = await _sb.from('drivers').select('user_id').eq('user_id', uid).maybeSingle();
+            
+            if (existingDriver) {
+                // Если водитель существует, обновляем его данные
+                const { error } = await _sb.from('drivers').update({
+                    name: name,
+                    car_model: car,
+                    car_plate: plate
+                }).eq('user_id', uid);
 
-            if (!error) {
-                // Создаём локальную копию профиля (с дополнительными полями для UI)
-                currentDriver = {
+                if (!error) {
+                    currentDriver = {
+                        user_id: uid,
+                        name: name,
+                        car_model: car,
+                        car_plate: plate,
+                        votes_up: 0,
+                        votes_down: 0,
+                        markers_count: 0
+                    };
+                    closeRegistrationModal();
+                    alert('Профиль обновлен, ' + name + '!');
+                } else {
+                    alert('Ошибка обновления профиля: ' + (error?.message || 'неизвестная ошибка'));
+                }
+            } else {
+                // Если водителя нет, вставляем его
+                const { error } = await _sb.from('drivers').insert([{
                     user_id: uid,
                     name: name,
                     car_model: car,
-                    car_plate: plate,
-                    votes_up: 0,
-                    votes_down: 0,
-                    markers_count: 0
-                };
-                closeRegistrationModal();
-                alert('Спасибо за регистрацию, ' + name + '! Теперь вы можете добавлять метки.');
-            } else {
-                alert('Ошибка регистрации: ' + (error?.message || 'неизвестная ошибка'));
+                    car_plate: plate
+                }]);
+
+                if (!error) {
+                    currentDriver = {
+                        user_id: uid,
+                        name: name,
+                        car_model: car,
+                        car_plate: plate,
+                        votes_up: 0,
+                        votes_down: 0,
+                        markers_count: 0
+                    };
+                    closeRegistrationModal();
+                    alert('Спасибо за регистрацию, ' + name + '! Теперь вы можете добавлять метки.');
+                } else {
+                    alert('Ошибка регистрации: ' + (error?.message || 'неизвестная ошибка'));
+                }
             }
         } catch (e) {
             alert('Ошибка регистрации: ' + (e?.message || e));
@@ -957,6 +1035,17 @@
         document.getElementById('ratingsModal').classList.remove('active');
     }
 
+    // Функция открытия просмотра фото
+    function openPhotoViewer(photoUrl) {
+        document.getElementById('photoViewerImage').src = photoUrl;
+        document.getElementById('photoViewerModal').classList.add('active');
+    }
+
+    // Функция закрытия просмотра фото
+    function closePhotoViewer() {
+        document.getElementById('photoViewerModal').classList.remove('active');
+    }
+
     // Функция выхода из аккаунта
     function logout() {
         if (confirm('Вы уверены, что хотите выйти?')) {
@@ -972,43 +1061,171 @@
         document.getElementById('profile-photo-input').click();
     }
 
+    // Переменные для редактора аватара
+    let avatarEditorState = {
+        fileBlob: null,
+        zoom: 1,
+        offsetX: 0,
+        offsetY: 0
+    };
+
     // Обработка загрузки фото аватара
     document.addEventListener('change', async function(e) {
         if (e.target.id === 'profile-photo-input') {
             const file = e.target.files[0];
             if (file) {
                 try {
-                    // Сжимаем фото аватара (меньше размер, круглое)
-                    const compressedBlob = await compressImage(file, 400, 400, 0.8);
-                    
-                    // Загружаем в Storage
-                    const fileName = `avatars/${uid}-${Date.now()}`;
-                    const { error: uploadError } = await _sb.storage.from('chat').upload(fileName, compressedBlob);
-                    
-                    if (uploadError) throw uploadError;
-                    
-                    // Получаем публичный URL
-                    const { data } = _sb.storage.from('chat').getPublicUrl(fileName);
-                    const avatarUrl = data.publicUrl;
-                    
-                    // Отображаем фото как аватар
-                    const avatarEl = document.getElementById('profile-avatar-display');
-                    avatarEl.style.backgroundImage = `url('${avatarUrl}')`;
-                    avatarEl.style.backgroundSize = 'cover';
-                    avatarEl.style.backgroundPosition = 'center';
-                    avatarEl.textContent = '';
-                    
-                    document.getElementById('profile-avatar-url').value = avatarUrl;
-                    document.getElementById('profile-avatar-value').value = ''; // очищаем emoji
-                    
-                    alert('✅ Фото загружено!');
+                    // Читаем файл как Data URL для предпросмотра
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        // Показываем редактор аватара
+                        const img = document.getElementById('avatarEditorImage');
+                        img.src = event.target.result;
+                        
+                        // Сохраняем blob файла
+                        avatarEditorState.fileBlob = file;
+                        avatarEditorState.zoom = 1;
+                        avatarEditorState.offsetX = 0;
+                        avatarEditorState.offsetY = 0;
+                        
+                        // Обновляем контролы
+                        document.getElementById('avatarZoom').value = 1;
+                        document.getElementById('avatarZoomValue').textContent = '100';
+                        document.getElementById('avatarOffsetX').value = 0;
+                        document.getElementById('avatarOffsetY').value = 0;
+                        
+                        // Открываем модальное окно редактора
+                        document.getElementById('avatarEditorModal').classList.add('active');
+                    };
+                    reader.readAsDataURL(file);
                 } catch (err) {
-                    alert('Ошибка загрузки фото: ' + (err?.message || err));
+                    alert('Ошибка при открытии файла: ' + (err?.message || err));
                 }
                 e.target.value = ''; // очищаем input
             }
         }
     });
+
+    // Обновление превью при изменении zoom
+    document.getElementById('avatarZoom')?.addEventListener('input', function(e) {
+        avatarEditorState.zoom = parseFloat(e.target.value);
+        document.getElementById('avatarZoomValue').textContent = Math.round(avatarEditorState.zoom * 100);
+        updateAvatarEditorPreview();
+    });
+
+    // Обновление превью при изменении offsetX
+    document.getElementById('avatarOffsetX')?.addEventListener('input', function(e) {
+        avatarEditorState.offsetX = parseFloat(e.target.value);
+        updateAvatarEditorPreview();
+    });
+
+    // Обновление превью при изменении offsetY
+    document.getElementById('avatarOffsetY')?.addEventListener('input', function(e) {
+        avatarEditorState.offsetY = parseFloat(e.target.value);
+        updateAvatarEditorPreview();
+    });
+
+    // Функция обновления превью в редакторе
+    function updateAvatarEditorPreview() {
+        const img = document.getElementById('avatarEditorImage');
+        if (img) {
+            // Применяем трансформацию к изображению
+            const scalePercent = avatarEditorState.zoom;
+            const offsetXPercent = avatarEditorState.offsetX;
+            const offsetYPercent = avatarEditorState.offsetY;
+            
+            img.style.transform = `scale(${scalePercent}) translate(${offsetXPercent}px, ${offsetYPercent}px)`;
+        }
+    }
+
+    // Функция закрытия редактора аватара
+    function closeAvatarEditor() {
+        document.getElementById('avatarEditorModal').classList.remove('active');
+        avatarEditorState = {
+            fileBlob: null,
+            zoom: 1,
+            offsetX: 0,
+            offsetY: 0
+        };
+    }
+
+    // Функция сохранения отредактированного аватара
+    async function saveAvatarEdit() {
+        try {
+            if (!avatarEditorState.fileBlob) {
+                alert('Ошибка: файл не загружен');
+                return;
+            }
+
+            // Создаем canvas для вырезания круглого изображения
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 400;
+            canvas.height = 400;
+
+            // Загружаем изображение
+            const img = new Image();
+            img.onload = async function() {
+                // Очищаем canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Рисуем круглую маску
+                ctx.beginPath();
+                ctx.arc(200, 200, 200, 0, Math.PI * 2);
+                ctx.clip();
+
+                // Применяем масштабирование и смещение
+                const scaleFactor = avatarEditorState.zoom;
+                const offsetX = (canvas.width / 2) + (avatarEditorState.offsetX * 2);
+                const offsetY = (canvas.height / 2) + (avatarEditorState.offsetY * 2);
+
+                // Рисуем изображение с трансформацией
+                ctx.drawImage(
+                    img,
+                    offsetX - (img.width / 2) * scaleFactor,
+                    offsetY - (img.height / 2) * scaleFactor,
+                    img.width * scaleFactor,
+                    img.height * scaleFactor
+                );
+
+                // Получаем blob из canvas
+                canvas.toBlob(async (blob) => {
+                    try {
+                        // Загружаем в Storage
+                        const fileName = `avatars/${uid}-${Date.now()}`;
+                        const { error: uploadError } = await _sb.storage.from('chat').upload(fileName, blob);
+
+                        if (uploadError) throw uploadError;
+
+                        // Получаем публичный URL
+                        const { data } = _sb.storage.from('chat').getPublicUrl(fileName);
+                        const avatarUrl = data.publicUrl;
+
+                        // Отображаем фото как аватар
+                        const avatarEl = document.getElementById('profile-avatar-display');
+                        avatarEl.style.backgroundImage = `url('${avatarUrl}')`;
+                        avatarEl.style.backgroundSize = 'cover';
+                        avatarEl.style.backgroundPosition = 'center';
+                        avatarEl.textContent = '';
+
+                        document.getElementById('profile-avatar-url').value = avatarUrl;
+                        document.getElementById('profile-avatar-value').value = '';
+
+                        // Закрываем редактор
+                        closeAvatarEditor();
+                        alert('✅ Аватар сохранен!');
+                    } catch (err) {
+                        alert('Ошибка загрузки: ' + (err?.message || err));
+                    }
+                }, 'image/jpeg', 0.9);
+            };
+
+            // Загружаем исходное изображение
+            img.src = document.getElementById('avatarEditorImage').src;
+        } catch (err) {
+            alert('Ошибка сохранения: ' + (err?.message || err));
+        }
+    }
 
     // Функция сохранения изменений профиля
     async function saveProfileChanges() {
@@ -1027,7 +1244,20 @@
                 updateData.avatar_url = avatarUrl;
             }
 
-            const { error } = await _sb.from('drivers').update(updateData).eq('user_id', uid);
+            // Выполняем update с обработкой ошибок schema cache
+            let result = await _sb.from('drivers').update(updateData).eq('user_id', uid);
+            let error = result.error;
+
+            // Если ошибка связана со schema cache, пытаемся повторить без avatar_url
+            if (error && error.message && error.message.includes('avatar')) {
+                console.warn('Ошибка при сохранении avatar_url, пытаемся сохранить без него:', error.message);
+                const updateDataWithoutAvatar = {
+                    car_model: carModel,
+                    car_plate: carPlate
+                };
+                result = await _sb.from('drivers').update(updateDataWithoutAvatar).eq('user_id', uid);
+                error = result.error;
+            }
 
             if (error) {
                 alert('Ошибка сохранения: ' + (error?.message || 'неизвестная ошибка'));
@@ -1132,22 +1362,57 @@
             tbody.innerHTML = '';
             if (activeMarkers && activeMarkers.length > 0) {
                 activeMarkers.forEach(m => {
+                    // format existing exp to local datetime-local value if possible
+                    let expVal = '';
+                    if (m.exp) {
+                        try {
+                            const parsed = (typeof m.exp === 'number') ? new Date(Number(m.exp)) : new Date(m.exp);
+                            if (!isNaN(parsed)) {
+                                // to YYYY-MM-DDTHH:MM format
+                                const pad = n => n.toString().padStart(2, '0');
+                                const y = parsed.getFullYear();
+                                const mo = pad(parsed.getMonth() + 1);
+                                const d = pad(parsed.getDate());
+                                const hh = pad(parsed.getHours());
+                                const mm = pad(parsed.getMinutes());
+                                expVal = `${y}-${mo}-${d}T${hh}:${mm}`;
+                            }
+                        } catch (e) { expVal = ''; }
+                    }
+
+                    // Читаем человекочитаемую версию exp для отображения
+                    let readableExp = '';
+                    if (m.exp) {
+                        try {
+                            const parsedExp = (typeof m.exp === 'number') ? new Date(Number(m.exp)) : new Date(m.exp);
+                            if (!isNaN(parsedExp)) {
+                                readableExp = parsedExp.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                            }
+                        } catch (e) { readableExp = ''; }
+                    }
+
                     const row = `<tr>
                         <td>${MAP_ICONS[m.type] || '?'}</td>
                         <td>${m.comment || 'без комментария'}</td>
                         <td>${m.votes_up || 0}</td>
                         <td>${m.votes_down || 0}</td>
+                        <td style="width:260px;">
+                            <input type="datetime-local" id="marker-exp-${m.id}" value="${expVal}" style="width:140px; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                            <button class="delete-btn" style="margin-left:6px;" onclick="setMarkerExpiry(${m.id})">Установить</button>
+                            <button class="delete-btn" style="margin-left:6px; background:#999;" onclick="clearMarkerExpiry(${m.id})">Очистить</button>
+                            <div style="font-size:12px; color: var(--gray); margin-top:6px;">${readableExp ? readableExp : ''}</div>
+                        </td>
                         <td><button class="delete-btn" onclick="deleteMarkerAdmin(${m.id})">Удалить</button></td>
                     </tr>`;
                     tbody.innerHTML += row;
                 });
                 document.getElementById('admin-markers-count').textContent = activeMarkers.length;
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--gray);">Активных меток нет</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--gray);">Активных меток нет</td></tr>';
             }
         } catch (e) {
             console.warn('Ошибка при загрузке маркеров:', e?.message || e);
-            document.getElementById('admin-markers-body').innerHTML = '<tr><td colspan="5" style="text-align: center; color: red;">Ошибка загрузки</td></tr>';
+            document.getElementById('admin-markers-body').innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Ошибка загрузки</td></tr>';
         }
 
         document.getElementById('adminModal').classList.add('active');
@@ -1156,6 +1421,60 @@
     // Функция закрытия админ-панели
     function closeAdminModal() {
         document.getElementById('adminModal').classList.remove('active');
+    }
+
+    // Функция для администратора: установить время истечения метки
+    async function setMarkerExpiry(markerId) {
+        if (!isAdmin) {
+            alert('У вас нет доступа к этой операции');
+            return;
+        }
+
+        const input = document.getElementById(`marker-exp-${markerId}`);
+        if (!input) return alert('Поле времени не найдено');
+
+        const val = input.value; // format: YYYY-MM-DDTHH:MM
+        if (!val) return alert('Выберите дату и время истечения');
+
+        try {
+            const ts = new Date(val);
+            if (isNaN(ts)) return alert('Неверный формат даты/времени');
+
+            // Сохраняем ISO-строку (универсальный формат), чтобы хранить читаемую дату
+            const expValue = ts.toISOString();
+
+            const { error } = await _sb.from('markers').update({ exp: expValue }).eq('id', markerId);
+            if (error) {
+                alert('Ошибка при установке времени: ' + (error?.message || error));
+                return;
+            }
+
+            alert('Время истечения обновлено');
+            // Обновляем таблицу
+            await openAdminModal();
+        } catch (e) {
+            alert('Ошибка: ' + (e?.message || e));
+        }
+    }
+
+    // Функция для администратора: очистить время истечения метки
+    async function clearMarkerExpiry(markerId) {
+        if (!isAdmin) {
+            alert('У вас нет доступа к этой операции');
+            return;
+        }
+        if (!confirm('Удалить срок истечения для этой метки?')) return;
+        try {
+            const { error } = await _sb.from('markers').update({ exp: null }).eq('id', markerId);
+            if (error) {
+                alert('Ошибка при очистке: ' + (error?.message || error));
+                return;
+            }
+            alert('Срок истечения удалён');
+            await openAdminModal();
+        } catch (e) {
+            alert('Ошибка: ' + (e?.message || e));
+        }
     }
 
     // Функция блокировки (бана) пользователя
@@ -1391,7 +1710,7 @@
 
                 let photoHTML = '';
                 if (msg.photo_url) {
-                    photoHTML = `<img src="${msg.photo_url}" class="chat-message-photo" onclick="window.open('${msg.photo_url}', '_blank')">`;
+                    photoHTML = `<img src="${msg.photo_url}" class="chat-message-photo" onclick="openPhotoViewer('${msg.photo_url}')" title="Нажмите для увеличения">`;
                 }
 
                 const timestamp = new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -2065,6 +2384,7 @@
             const bHtml = `<div class="b-cont">
                 <div style="font-size:13px; margin-bottom:6px; color:#222;"><strong>${authorInfo.name || 'Аноним'}</strong> ${authorInfo.is_trusted ? '<span style="color:#b8860b; font-weight:800; margin-left:6px;">⭐</span>' : ''} ${starsBadgeLocal}</div>
                 <strong>${m.comment || 'Метка'}</strong>
+                ${m.photo_url ? `<div style="margin-top: 8px; margin-bottom: 8px;"><img src="${m.photo_url}" style="max-width: 100%; border-radius: 8px; cursor: pointer; max-height: 250px;" onclick="openPhotoViewer('${m.photo_url}')" title="Нажмите для увеличения"></div>` : ''}
                 <div class="b-poll">
                     <button class="b-poll-btn" onclick="window.vote(${m.id}, true)">👍 ${m.votes_up || 0}</button>
                     <button class="b-poll-btn" onclick="window.vote(${m.id}, false)">👎 ${m.votes_down || 0}</button>
