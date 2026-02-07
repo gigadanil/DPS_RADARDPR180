@@ -866,7 +866,9 @@
             } else if (e?.message?.includes('Timeout')) {
                 alert('❌ Сервер не отвечает\n\nСервер работает слишком долго. Попробуйте еще раз через минуту.');
             } else {
-                alert('❌ Ошибка регистрации:\n\n' + (e?.message || String(e)));\n            }\n            console.error('Ошибка регистрации:', e);
+                alert('❌ Ошибка регистрации:\n\n' + (e?.message || String(e)));
+            }
+            console.error('Ошибка регистрации:', e);
         }
     }
 
