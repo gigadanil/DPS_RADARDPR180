@@ -512,17 +512,12 @@
     function toggleActionCard() {
         actionCardVisible = !actionCardVisible;
         const card = document.getElementById('actionCard');
-        const target = document.querySelector('.target');
         const openBtn = document.getElementById('openActionBtn');
         if (actionCardVisible) {
             card.classList.remove('hidden');
-            // Скрываем метку когда открывается card
-            if (target) target.style.visibility = 'hidden';
             if (openBtn) openBtn.classList.remove('visible');
         } else {
             card.classList.add('hidden');
-            // Показываем метку когда закрывается card
-            if (target) target.style.visibility = 'visible';
             if (openBtn) openBtn.classList.add('visible');
         }
     }
@@ -1718,6 +1713,35 @@
         }
     }
 
+    // Функция быстрого баня пользователя
+    async function quickBanUser(userId, userName) {
+        if (!isAdmin) {
+            alert('Только администратор может банить пользователей');
+            return;
+        }
+        
+        const reason = prompt(`Забанить пользователя "${userName}"?\n\nУкажите причину (или оставьте пусто):`, 'Нарушение правил');
+        if (reason === null) return; // Отмена
+        
+        try {
+            const { error } = await _sb.from('bans').insert([{ 
+                user_id: String(userId), 
+                reason: reason || '',
+                banned_by: uid
+            }]);
+            
+            if (error) {
+                alert('❌ Ошибка баня: ' + (error?.message || 'неизвестная ошибка'));
+                return;
+            }
+            
+            alert(`✅ Пользователь "${userName}" успешно забанен`);
+            await loadChatMessages();
+        } catch (e) {
+            alert('❌ Ошибка: ' + (e?.message || e));
+        }
+    }
+
     // Переменная для интервала обновления чата
     let chatUpdateInterval = null;
 
@@ -1818,7 +1842,7 @@
 
                 messageEl.innerHTML = `
                     ${deleteButtonHTML}
-                    ${!isOwn ? `<div class="chat-message-author" style="display: flex; align-items: center;">${avatarHTML}<span>${msg.author_name || 'Аноним'}</span> ${starsBadge} ${isAdmin ? `<button style="margin-left: 5px; background: #ff9500; color: white; border: none; border-radius: 3px; padding: 1px 4px; font-size: 9px; cursor: pointer;" onclick="deleteAllUserMessages(${msg.author_id}, '${(msg.author_name || 'Пользователь').replace(/'/g, "\\'")}')" title="Удалить все сообщения этого пользователя">🗑️</button>` : ''}</div>` : ''}
+                    ${!isOwn ? `<div class="chat-message-author" style="display: flex; align-items: center;">${avatarHTML}<span>${msg.author_name || 'Аноним'}</span> ${starsBadge} ${isAdmin ? `<button style="margin-left: 5px; background: #ff9500; color: white; border: none; border-radius: 3px; padding: 1px 4px; font-size: 9px; cursor: pointer;" onclick="deleteAllUserMessages(${msg.author_id}, '${(msg.author_name || 'Пользователь').replace(/'/g, "\\'")}')" title="Удалить все сообщения этого пользователя">🗑️</button><button style="margin-left: 3px; background: #ff3b30; color: white; border: none; border-radius: 3px; padding: 1px 4px; font-size: 9px; cursor: pointer;" onclick="quickBanUser(${msg.author_id}, '${(msg.author_name || 'Пользователь').replace(/'/g, "\\'")}')" title="Забанить пользователя">🚫</button>` : ''}</div>` : ''}
                     <div>${msg.text || ''}</div>
                     ${photoHTML}
                     <div class="chat-message-time">${timestamp}</div>
@@ -2098,6 +2122,36 @@
         }
     };
 
+    // Функция быстрого баня через window (для вызова из balloonContent)
+    window.quickBanUser = async (userId, userName) => {
+        if (!isAdmin) {
+            alert('Только администратор может банить пользователей');
+            return;
+        }
+        
+        const reason = prompt(`Забанить пользователя "${userName}"?\n\nУкажите причину (или оставьте пусто):`, 'Нарушение правил');
+        if (reason === null) return; // Отмена
+        
+        try {
+            const { error } = await _sb.from('bans').insert([{ 
+                user_id: String(userId), 
+                reason: reason || '',
+                banned_by: uid
+            }]);
+            
+            if (error) {
+                alert('❌ Ошибка баня: ' + (error?.message || 'неизвестная ошибка'));
+                return;
+            }
+            
+            alert(`✅ Пользователь "${userName}" успешно забанен`);
+            // Закрываем балун если он был открыт
+            if (myMap.balloon) myMap.balloon.close();
+        } catch (e) {
+            alert('❌ Ошибка: ' + (e?.message || e));
+        }
+    };
+
     // Функция открытия ленты событий
     async function openActivityModal() {
         const feed = document.getElementById('activityFeed');
@@ -2219,7 +2273,64 @@
     }
 
     // Инициализация карты Яндекс.Карты
-    ymaps.ready(() => {
+    // Функция проверки баня при загрузке
+    async function checkBanStatus() {
+        try {
+            const { data: banned, error } = await _sb.from('bans').select('*').eq('user_id', uid).maybeSingle();
+            
+            if (error) {
+                console.warn('Ошибка при проверке баня:', error?.message);
+                return false;
+            }
+            
+            if (banned) {
+                console.warn('⛔ Пользователь забанен:', uid);
+                // Скрываем всю карту и функциональность
+                document.getElementById('map').style.display = 'none';
+                document.querySelectorAll('button').forEach(btn => btn.style.display = 'none');
+                document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+                
+                // Показываем сообщение о бане
+                const banMessage = document.createElement('div');
+                banMessage.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.95);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 9999;
+                    flex-direction: column;
+                    gap: 20px;
+                `;
+                banMessage.innerHTML = `
+                    <div style="font-size: 60px; text-align: center;">🚫</div>
+                    <div style="color: white; font-size: 24px; font-weight: bold; text-align: center;">ВЫ ЗАБАНЕНЫ</div>
+                    <div style="color: #ccc; font-size: 14px; text-align: center; max-width: 300px;">
+                        Причина: ${banned.reason || 'без указания'}<br>
+                        Контакт: @admin_easy_ride
+                    </div>
+                `;
+                document.body.appendChild(banMessage);
+                return true;
+            }
+            
+            return false;
+        } catch (e) {
+            console.error('Ошибка проверки баня:', e?.message || e);
+            return false;
+        }
+    }
+
+    ymaps.ready(async () => {
+        // Проверяем баня ПЕРЕД инициализацией карты
+        const isBanned = await checkBanStatus();
+        if (isBanned) return; // Прерываем инициализацию если забанен
+        
+        // Если не забанен - инициализируем карту
         // Создаем карту с центром и уровнем зума
         myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
         
@@ -2468,6 +2579,7 @@
                 </div>
                 ${confirmationBar}
                 ${isOwner ? `<button class="b-del" onclick="window.delMarker(${m.id})">Удалить</button>` : ''}
+                ${window.isAdmin ? `<button class="b-del" style="background: #ff3b30; color:white;" onclick="window.quickBanUser(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')"  title="Забанить автора метки">🚫 Забан</button>` : ''}
             </div>`;
             // Определяем доверие автора и добавляем звездочку к иконке, если он проверен
             const isTrustedAuthor = authorInfo.is_trusted;
