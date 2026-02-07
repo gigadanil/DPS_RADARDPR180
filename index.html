@@ -1233,12 +1233,12 @@
                     try {
                         // Загружаем в Storage
                         const fileName = `avatars/${uid}-${Date.now()}`;
-                        const { error: uploadError } = await _sb.storage.from('chat').upload(fileName, blob);
+                        const { error: uploadError } = await _sb.storage.from('uploads').upload(fileName, blob);
 
                         if (uploadError) throw uploadError;
 
                         // Получаем публичный URL
-                        const { data } = _sb.storage.from('chat').getPublicUrl(fileName);
+                        const { data } = _sb.storage.from('uploads').getPublicUrl(fileName);
                         const avatarUrl = data.publicUrl;
 
                         // Отображаем фото как аватар
@@ -1371,7 +1371,7 @@
                         <td>${d.car_plate || 'N/A'}</td>
                         <td>${statusBadge}</td>
                         <td style="display: flex; gap: 5px;">
-                            <button class="delete-btn" onclick="${isBanned ? `unbanDriver('${d.user_id}', '${d.name || 'N/A'}')` : `banDriver('${d.user_id}', '${d.name || 'N/A'}')`}" style="background: ${isBanned ? '#34c759' : '#ff9500'};">${isBanned ? '✅ Разбан' : '🚫 Забан'}</button>
+                            <button class="delete-btn" onclick="${isBanned ? `unbanDriver("${d.user_id}", "${d.name || 'Unknown'}")` : `banDriver("${d.user_id}", "${d.name || 'Unknown'}")`}" style="background: ${isBanned ? '#34c759' : '#ff9500'};">${isBanned ? '✅ Разбан' : '🚫 Забан'}</button>
                             <button class="delete-btn" onclick="deleteDriver('${d.user_id}')">Удалить</button>
                         </td>
                     </tr>`;
@@ -1909,7 +1909,7 @@
                     
                     // Если загрузка успешна, получаем URL
                     if (uploadResult.data) {
-                        const { data: urlData } = _sb.storage.from('chat').getPublicUrl(fileName);
+                        const { data: urlData } = _sb.storage.from('uploads').getPublicUrl(fileName);
                         photoURL = urlData?.publicUrl;
                         console.log('✅ Фото загружено, URL:', photoURL);
                     }
