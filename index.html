@@ -141,7 +141,22 @@
         }
         .chat-context-menu-item:hover { background: #f0f0f5; }
         .chat-context-menu-item.delete { color: #ff3b30; }
-        .chat-context-menu-item.ban { color: #ff9500; }
+        .chat-context-menu-item.report { color: #ff9500; }
+        
+        /* Меню модерации для админа */
+        .moderator-menu {
+            animation: slideIn 0.15s ease-out;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
         
         /* Форма регистрации */
         .registration-form input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
@@ -193,12 +208,7 @@
                 <h2 style="margin: 0;">Общий чат</h2>
                 <button class="modal-close" onclick="closeChatModal()">✕</button>
             </div>
-            <!-- Быстрый бан/разбан по Telegram ID -->
-            <div style="display:flex; gap:8px; margin-top:10px; margin-bottom:10px; align-items:center;">
-                <input id="banTgIdInput" placeholder="Telegram ID для бана/разбана" style="flex:1; padding:8px; border-radius:8px; border:1px solid #ddd;">
-                <button class="delete-btn" style="background:#ff9500;" onclick="banByTgId()">🚫 Забанить</button>
-                <button class="delete-btn" style="background:#34c759;" onclick="unbanByTgId()">✅ Разбан</button>
-            </div>
+
             
             <div class="chat-messages" id="chatMessages">
                 <div style="text-align: center; color: var(--gray); padding: 20px;">Загрузка сообщений...</div>
@@ -246,6 +256,10 @@
             </div>
             
             <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px;">Список водителей</h3>
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <input type="text" id="driverSearchInput" placeholder="Поиск по имени или ID..." style="flex: 1; padding: 8px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px;">
+                <button onclick="clearDriverSearch()" style="padding: 8px 12px; border: none; border-radius: 8px; background: #f0f0f5; cursor: pointer; font-size: 13px; font-weight: 600;">🔄 Сброс</button>
+            </div>
             <div style="overflow-x: auto; max-height: 300px; overflow-y: auto;">
                 <table class="admin-table" id="admin-drivers-table">
                     <thead>
@@ -264,6 +278,18 @@
             </div>
             
             <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px;">Активные метки</h3>
+            <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+                <select id="markerTypeFilter" style="padding: 8px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; cursor: pointer;">
+                    <option value="">📍 Все типы</option>
+                    <option value="dps">� ДПС</option>
+                    <option value="camera">📸 Камера</option>
+                    <option value="patrol">🚔 Рейд</option>
+                    <option value="dtp">💥 ДТП</option>
+                    <option value="works">🚧 Работы</option>
+                    <option value="sos">🆘 SOS</option>
+                </select>
+                <button onclick="clearMarkerFilter()" style="padding: 8px 12px; border: none; border-radius: 8px; background: #f0f0f5; cursor: pointer; font-size: 13px; font-weight: 600;">🔄 Сброс</button>
+            </div>
             <div style="overflow-x: auto; max-height: 300px; overflow-y: auto;">
                 <table class="admin-table" id="admin-markers-table">
                     <thead>
@@ -900,7 +926,12 @@
     }
 
     // Функция открытия профиля
-    async function openProfileModal() {
+    async function openProfileModal(viewUserId = null) {
+        // Если передан ID другого пользователя, смотрим его профиль
+        if (viewUserId && String(viewUserId) !== String(uid)) {
+            return openOtherUserProfile(viewUserId);
+        }
+
         // Загружаем базовую информацию профиля
         try {
             const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate,avatar_url').eq('user_id', uid).maybeSingle();
@@ -1024,10 +1055,170 @@
     function closeProfileModal() {
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'visible';
+        
+        // Восстанавливаем элементы редактирования профиля
+        const avatarDisplay = document.getElementById('profile-avatar-display');
+        avatarDisplay.style.cursor = 'pointer';
+        avatarDisplay.title = 'Нажмите чтобы изменить';
+        avatarDisplay.onclick = () => changeAvatar();
+        
+        // Показываем кнопку загрузки фото
+        const uploadPhotoBtn = document.querySelector('button[onclick="document.getElementById(\'profile-photo-input\').click()"]');
+        if (uploadPhotoBtn) uploadPhotoBtn.style.display = '';
+        
+        // Показываем форму редактирования авто
+        const carEditForm = document.querySelector('div[style*="border: 1px solid #ddd"]');
+        if (carEditForm) carEditForm.style.display = '';
+        
+        // Показываем кнопку "ВЫЙТИ"
+        const logoutBtn = document.querySelector('button[onclick="logout()"]');
+        if (logoutBtn) logoutBtn.style.display = '';
+        
+        // Удаляем секцию модерации
+        const adminSection = document.getElementById('profile-admin-section');
+        if (adminSection) adminSection.remove();
+        
+        // Удаляем информацию об авто других пользователей
+        const carInfoEl = document.getElementById('other-user-car-info');
+        if (carInfoEl) carInfoEl.remove();
+        
         document.getElementById('profileModal').classList.remove('active');
     }
 
-    // Функция открытия модала с глобальным рейтингом водителей
+    // Функция просмотра профиля другого пользователя
+    async function openOtherUserProfile(userId) {
+        try {
+            // Загружаем данные пользователя
+            const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate,avatar_url').eq('user_id', userId).maybeSingle();
+            
+            if (!driver) {
+                alert('Профиль пользователя не найден');
+                return;
+            }
+
+            // Считаем статистику по маркерам этого пользователя
+            let marks_count = 0, likes = 0, dislikes = 0;
+            try {
+                const { data: markers } = await _sb.from('markers').select('votes_up,votes_down').eq('author_id', userId);
+                if (markers) {
+                    marks_count = markers.length;
+                    markers.forEach(m => {
+                        likes += m.votes_up || 0;
+                        dislikes += m.votes_down || 0;
+                    });
+                }
+            } catch (e) {
+                console.warn('Ошибка при подсчёте маркеров:', e?.message || e);
+            }
+
+            // Скрываем элементы редактирования профиля
+            document.getElementById('profile-avatar-display').style.cursor = 'default';
+            document.getElementById('profile-avatar-display').title = '';
+            document.getElementById('profile-avatar-display').onclick = null;
+            document.querySelector('button[onclick="document.getElementById(\'profile-photo-input\').click()"]').style.display = 'none';
+            
+            // Скрываем форму редактирования авто
+            const carEditForm = document.querySelector('div[style*="border: 1px solid #ddd"]');
+            if (carEditForm) carEditForm.style.display = 'none';
+
+            // Отображаем аватар
+            const avatarEl = document.getElementById('profile-avatar-display');
+            if (driver.avatar_url) {
+                avatarEl.style.backgroundImage = `url('${driver.avatar_url}')`;
+                avatarEl.style.backgroundSize = 'cover';
+                avatarEl.style.backgroundPosition = 'center';
+                avatarEl.textContent = '';
+            } else {
+                avatarEl.style.backgroundImage = 'none';
+                avatarEl.textContent = '👤';
+            }
+            
+            // Определяем, является ли пользователь "Проверенным водителем"
+            const isTrusted = (likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20));
+            const profileNameEl = document.getElementById('profile-name-text');
+            profileNameEl.textContent = (isTrusted ? '⭐ ' : '') + (driver.name || 'Аноним');
+            if (isTrusted) profileNameEl.classList.add('trusted'); else profileNameEl.classList.remove('trusted');
+            
+            // Обновляем рейтинг и статистику
+            const rating = marks_count ? ((likes - dislikes) / marks_count) : 0;
+            document.getElementById('profile-rating').textContent = rating.toFixed(1);
+            document.getElementById('profile-marks-count').textContent = marks_count;
+            document.getElementById('profile-votes-sum').textContent = (likes + dislikes);
+            document.getElementById('profile-likes').textContent = likes;
+            document.getElementById('profile-dislikes').textContent = dislikes;
+            
+            // Отображаем статус доверия
+            const trustStatusEl = document.getElementById('profile-trust-status');
+            if (isTrusted) {
+                trustStatusEl.innerHTML = '⭐ Проверенный водитель';
+                trustStatusEl.style.color = '#b8860b';
+            } else {
+                const threshold = typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20;
+                const remaining = Math.max(0, threshold - likes);
+                trustStatusEl.innerHTML = `⏳ ${remaining} лайков до статуса`;
+                trustStatusEl.style.color = '#999';
+            }
+
+            // Добавляем карточку информации об авто
+            const carInfoHtml = `
+                <div style="background: #f9f9f9; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                    <div style="font-size: 12px; color: var(--gray); margin-bottom: 8px; font-weight: 600;">🚗 Автомобиль</div>
+                    <div style="font-weight: 700; color: #000; font-size: 15px;">${driver.car_model || 'Не указан'}</div>
+                    <div style="font-size: 13px; color: var(--gray); margin-top: 6px;"><strong>Номер:</strong> ${driver.car_plate || 'Не указана'}</div>
+                </div>
+            `;
+            
+            // Вставляем инфо об авто временно
+            const statsGrid = document.querySelector('.stats-grid');
+            let carInfoEl = document.getElementById('other-user-car-info');
+            if (!carInfoEl) {
+                carInfoEl = document.createElement('div');
+                carInfoEl.id = 'other-user-car-info';
+                statsGrid.parentElement.insertBefore(carInfoEl, statsGrid);
+            }
+            carInfoEl.innerHTML = carInfoHtml;
+
+            // Добавляем кнопку забана для админов перед кнопками выхода
+            let adminSection = document.getElementById('profile-admin-section');
+            if (adminSection) adminSection.remove();
+            
+            adminSection = document.createElement('div');
+            adminSection.id = 'profile-admin-section';
+            
+            if (isAdmin) {
+                adminSection.innerHTML = `
+                    <div style="padding-top: 15px; border-top: 1px solid #ddd; margin-bottom: 15px;">
+                        <h4 style="margin: 0 0 10px 0; font-size: 12px; color: var(--gray); text-transform: uppercase; font-weight: 600;">⚙️ Модерация</h4>
+                        <button class="main-btn" style="background: #ff9500; margin-bottom: 8px; font-size: 12px;" onclick="reportUser(${userId}, '${(driver.name || 'Пользователь').replace(/'/g, "\\'")}', 'профиль', '')">⚠️ Отправить жалобу</button>
+                        <button class="main-btn" style="background: #ff3b30; margin-bottom: 8px; font-size: 12px;" onclick="deleteAllUserMarkers(${userId}, '${(driver.name || 'Пользователь').replace(/'/g, "\\'")}')">🗑️ Удалить все метки</button>
+                        <button class="main-btn" style="background: #ff3b30; font-size: 12px;" onclick="deleteAllUserMessages(${userId}, '${(driver.name || 'Пользователь').replace(/'/g, "\\'")}')">💬 Удалить сообщения чата</button>
+                    </div>
+                `;
+            } else {
+                adminSection.innerHTML = `
+                    <div style="padding-top: 15px; border-top: 1px solid #ddd; margin-bottom: 15px;">
+                        <button class="main-btn" style="background: #ff9500; font-size: 12px;" onclick="reportUser(${userId}, '${(driver.name || 'Пользователь').replace(/'/g, "\\'")}', 'профиль', '')">⚠️ Пожаловаться</button>
+                    </div>
+                `;
+            }
+
+            // Вставляем перед кнопкой "ВЫЙТИ"
+            const logoutBtn = document.querySelector('button[onclick="logout()"]');
+            logoutBtn.parentElement.insertBefore(adminSection, logoutBtn);
+
+            // Скрываем кнопку "ВЫЙТИ"
+            logoutBtn.style.display = 'none';
+
+            // Открываем модальное окно профиля
+            const target = document.querySelector('.target');
+            if (target) target.style.visibility = 'hidden';
+            document.getElementById('profileModal').classList.add('active');
+
+        } catch (e) {
+            console.warn('Ошибка при загрузке профиля пользователя:', e?.message || e);
+            alert('Ошибка при загрузке профиля: ' + (e?.message || 'неизвестная ошибка'));
+        }
+    }    // Функция открытия модала с глобальным рейтингом водителей
     async function openRatingsModal() {
         const ratingsList = document.getElementById('ratingsList');
         ratingsList.innerHTML = '<div style="color: var(--gray);">⏳ Загрузка рейтинга...</div>';
@@ -1077,7 +1268,7 @@
                 const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
                 const trustBadge = driver.is_trusted ? ' ⭐' : '';
                 html += `
-                    <div style="padding: 12px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="padding: 12px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#f9f9f9'; this.style.transform='translateX(4px)'" onmouseout="this.style.background=''; this.style.transform='translateX(0)'" onclick="openProfileModal(${driver.user_id}); closeRatingsModal();">
                         <div style="flex: 1;">
                             <div style="font-weight: 700; color: #000; font-size: 14px;">${medal} ${driver.name}${trustBadge}</div>
                             <div style="font-size: 11px; color: var(--gray);">${driver.car_model}</div>
@@ -1358,6 +1549,12 @@
         }
     }
 
+    // Глобальные переменные для хранения полных данных админ-панели
+    let adminAllDrivers = [];
+    let adminBannedIds = new Set();
+    let adminLikesMap = {};
+    let adminAllMarkers = [];
+
     // Функция открытия админ-панели
     async function openAdminModal() {
         if (!isAdmin) {
@@ -1368,55 +1565,39 @@
         // Загружаем список водителей
         try {
             const { data: drivers } = await _sb.from('drivers').select('user_id,name,car_model,car_plate');
+            adminAllDrivers = drivers || [];
             const tbody = document.getElementById('admin-drivers-body');
             tbody.innerHTML = '';
-            if (drivers && drivers.length > 0) {
+            if (adminAllDrivers && adminAllDrivers.length > 0) {
                 // Загружаем список забанненых пользователей
-                let bannedIds = new Set();
+                adminBannedIds = new Set();
                 try {
                     const { data: bans } = await _sb.from('bans').select('user_id');
                     if (bans) {
-                        bans.forEach(b => bannedIds.add(b.user_id.toString()));
+                        bans.forEach(b => adminBannedIds.add(b.user_id.toString()));
                     }
                 } catch (e) {
                     console.warn('Ошибка при загрузке списка банов (возможно, таблица не существует):', e?.message);
                 }
                 
                 // Соберем список ID водителей и подсчитаем лайки за один запрос
-                const driverIds = drivers.map(d => d.user_id.toString());
-                let likesMap = {};
+                const driverIds = adminAllDrivers.map(d => d.user_id.toString());
+                adminLikesMap = {};
                 try {
                     const { data: likesRows } = await _sb.from('markers').select('author_id,votes_up').in('author_id', driverIds);
                     if (likesRows) {
                         likesRows.forEach(r => {
                             const id = r.author_id.toString();
-                            likesMap[id] = (likesMap[id] || 0) + (r.votes_up || 0);
+                            adminLikesMap[id] = (adminLikesMap[id] || 0) + (r.votes_up || 0);
                         });
                     }
                 } catch (e) {
                     console.warn('Не удалось загрузить лайки для водителей:', e?.message || e);
                 }
 
-                drivers.forEach(d => {
-                    const isBanned = bannedIds.has(d.user_id.toString());
-                    const statusBadge = isBanned ? '🚫 ЗАБАН' : '✅';
-                    const statusStyle = isBanned ? 'background: #ff3b30; color: white;' : '';
-                    const likes = likesMap[d.user_id.toString()] || 0;
-                    const isTrustedDriver = likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20);
-                    const nameCell = `${isTrustedDriver ? '⭐ ' : ''}${d.name || 'N/A'}`;
-                    const row = `<tr style="${statusStyle}">
-                        <td>${nameCell}</td>
-                        <td>${d.car_model || 'N/A'}</td>
-                        <td>${d.car_plate || 'N/A'}</td>
-                        <td>${statusBadge}</td>
-                        <td style="display: flex; gap: 5px;">
-                            <button class="delete-btn" onclick="${isBanned ? `unbanDriver("${d.user_id}", "${d.name || 'Unknown'}")` : `banDriver("${d.user_id}", "${d.name || 'Unknown'}")`}" style="background: ${isBanned ? '#34c759' : '#ff9500'};">${isBanned ? '✅ Разбан' : '🚫 Забан'}</button>
-                            <button class="delete-btn" onclick="deleteDriver('${d.user_id}')">Удалить</button>
-                        </td>
-                    </tr>`;
-                    tbody.innerHTML += row;
-                });
-                document.getElementById('admin-drivers-count').textContent = drivers.length;
+                // Рендерим все водителей в таблицу
+                renderDriversTable(adminAllDrivers);
+                document.getElementById('admin-drivers-count').textContent = adminAllDrivers.length;
             } else {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--gray);">Водители не найдены</td></tr>';
             }
@@ -1427,76 +1608,175 @@
 
         // Загружаем список активных маркеров
         try {
-            // Загружаем все метки и фильтруем по истечению на клиенте,
-            // потому что в базе `exp` может быть либо числом (ms), либо TIMESTAMPTZ.
             const { data: markers } = await _sb.from('markers').select('*');
             const now = Date.now();
-            const activeMarkers = (markers || []).filter(m => {
+            adminAllMarkers = (markers || []).filter(m => {
                 if (m.exp === null || typeof m.exp === 'undefined') return true;
                 if (typeof m.exp === 'number') return m.exp > now;
                 const parsed = Date.parse(m.exp);
                 return !isNaN(parsed) ? parsed > now : true;
             });
-            const tbody = document.getElementById('admin-markers-body');
-            tbody.innerHTML = '';
-            if (activeMarkers && activeMarkers.length > 0) {
-                activeMarkers.forEach(m => {
-                    // format existing exp to local datetime-local value if possible
-                    let expVal = '';
-                    if (m.exp) {
-                        try {
-                            const parsed = (typeof m.exp === 'number') ? new Date(Number(m.exp)) : new Date(m.exp);
-                            if (!isNaN(parsed)) {
-                                // to YYYY-MM-DDTHH:MM format
-                                const pad = n => n.toString().padStart(2, '0');
-                                const y = parsed.getFullYear();
-                                const mo = pad(parsed.getMonth() + 1);
-                                const d = pad(parsed.getDate());
-                                const hh = pad(parsed.getHours());
-                                const mm = pad(parsed.getMinutes());
-                                expVal = `${y}-${mo}-${d}T${hh}:${mm}`;
-                            }
-                        } catch (e) { expVal = ''; }
-                    }
-
-                    // Читаем человекочитаемую версию exp для отображения
-                    let readableExp = '';
-                    if (m.exp) {
-                        try {
-                            const parsedExp = (typeof m.exp === 'number') ? new Date(Number(m.exp)) : new Date(m.exp);
-                            if (!isNaN(parsedExp)) {
-                                readableExp = parsedExp.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-                            }
-                        } catch (e) { readableExp = ''; }
-                    }
-
-                    const row = `<tr>
-                        <td>${MAP_ICONS[m.type] || '?'}</td>
-                        <td>${m.comment || 'без комментария'}</td>
-                        <td>${m.votes_up || 0}</td>
-                        <td>${m.votes_down || 0}</td>
-                        <td style="width:260px;">
-                            <input type="datetime-local" id="marker-exp-${m.id}" value="${expVal}" style="width:140px; padding:6px; border-radius:6px; border:1px solid #ddd;">
-                            <button class="delete-btn" style="margin-left:6px;" onclick="setMarkerExpiry(${m.id})">Установить</button>
-                            <button class="delete-btn" style="margin-left:6px; background:#999;" onclick="clearMarkerExpiry(${m.id})">Очистить</button>
-                            <div style="font-size:12px; color: var(--gray); margin-top:6px;">${readableExp ? readableExp : ''}</div>
-                        </td>
-                        <td><button class="delete-btn" onclick="deleteMarkerAdmin(${m.id})">Удалить</button></td>
-                    </tr>`;
-                    tbody.innerHTML += row;
-                });
-                document.getElementById('admin-markers-count').textContent = activeMarkers.length;
-            } else {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--gray);">Активных меток нет</td></tr>';
-            }
+            
+            // Рендерим все метки в таблицу
+            renderMarkersTable(adminAllMarkers);
+            document.getElementById('admin-markers-count').textContent = adminAllMarkers.length;
         } catch (e) {
             console.warn('Ошибка при загрузке маркеров:', e?.message || e);
             document.getElementById('admin-markers-body').innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Ошибка загрузки</td></tr>';
         }
 
+        // Добавляем обработчики событий для поиска и фильтрации
+        const searchInput = document.getElementById('driverSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+            searchInput.addEventListener('keyup', filterDriversTable);
+        }
+
+        const typeFilter = document.getElementById('markerTypeFilter');
+        if (typeFilter) {
+            typeFilter.value = '';
+            typeFilter.addEventListener('change', filterMarkersTable);
+        }
+
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
         document.getElementById('adminModal').classList.add('active');
+    }
+
+    // Функция рендеринга таблицы водителей
+    function renderDriversTable(drivers) {
+        const tbody = document.getElementById('admin-drivers-body');
+        tbody.innerHTML = '';
+        
+        if (!drivers || drivers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--gray);">Не найдено</td></tr>';
+            return;
+        }
+
+        drivers.forEach(d => {
+            const isBanned = adminBannedIds.has(d.user_id.toString());
+            const statusBadge = isBanned ? '🚫 ЗАБАН' : '✅';
+            const statusStyle = isBanned ? 'background: #ff3b30; color: white;' : '';
+            const likes = adminLikesMap[d.user_id.toString()] || 0;
+            const isTrustedDriver = likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20);
+            const nameCell = `${isTrustedDriver ? '⭐ ' : ''}${d.name || 'N/A'}`;
+            const row = `<tr style="${statusStyle}">
+                <td>${nameCell}</td>
+                <td>${d.car_model || 'N/A'}</td>
+                <td>${d.car_plate || 'N/A'}</td>
+                <td>${statusBadge}</td>
+                <td style="display: flex; gap: 5px;">
+                    <button class="delete-btn" onclick="deleteDriver('${d.user_id}')">Удалить</button>
+                </td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+    }
+
+    // Функция рендеринга таблицы маркеров
+    function renderMarkersTable(markers) {
+        const tbody = document.getElementById('admin-markers-body');
+        tbody.innerHTML = '';
+        
+        if (!markers || markers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--gray);">Не найдено</td></tr>';
+            return;
+        }
+
+        markers.forEach(m => {
+            // format existing exp to local datetime-local value if possible
+            let expVal = '';
+            if (m.exp) {
+                try {
+                    const parsed = (typeof m.exp === 'number') ? new Date(Number(m.exp)) : new Date(m.exp);
+                    if (!isNaN(parsed)) {
+                        const pad = n => n.toString().padStart(2, '0');
+                        const y = parsed.getFullYear();
+                        const mo = pad(parsed.getMonth() + 1);
+                        const d = pad(parsed.getDate());
+                        const hh = pad(parsed.getHours());
+                        const mm = pad(parsed.getMinutes());
+                        expVal = `${y}-${mo}-${d}T${hh}:${mm}`;
+                    }
+                } catch (e) { expVal = ''; }
+            }
+
+            let readableExp = '';
+            if (m.exp) {
+                try {
+                    const parsedExp = (typeof m.exp === 'number') ? new Date(Number(m.exp)) : new Date(m.exp);
+                    if (!isNaN(parsedExp)) {
+                        readableExp = parsedExp.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                    }
+                } catch (e) { readableExp = ''; }
+            }
+
+            const row = `<tr>
+                <td>${MAP_ICONS[m.type] || '?'}</td>
+                <td>${m.comment || 'без комментария'}</td>
+                <td>${m.votes_up || 0}</td>
+                <td>${m.votes_down || 0}</td>
+                <td style="width:260px;">
+                    <input type="datetime-local" id="marker-exp-${m.id}" value="${expVal}" style="width:140px; padding:6px; border-radius:6px; border:1px solid #ddd;">
+                    <button class="delete-btn" style="margin-left:6px;" onclick="setMarkerExpiry(${m.id})">Установить</button>
+                    <button class="delete-btn" style="margin-left:6px; background:#999;" onclick="clearMarkerExpiry(${m.id})">Очистить</button>
+                    <div style="font-size:12px; color: var(--gray); margin-top:6px;">${readableExp ? readableExp : ''}</div>
+                </td>
+                <td><button class="delete-btn" onclick="deleteMarkerAdmin(${m.id})">Удалить</button></td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+    }
+
+    // Функция поиска водителей
+    function filterDriversTable() {
+        const searchInput = document.getElementById('driverSearchInput');
+        const query = searchInput.value.toLowerCase().trim();
+        
+        if (!query) {
+            // Если поле пустое, показываем всех
+            renderDriversTable(adminAllDrivers);
+            return;
+        }
+
+        // Фильтруем по имени или ID
+        const filtered = adminAllDrivers.filter(d => {
+            const name = (d.name || '').toLowerCase();
+            const id = String(d.user_id).toLowerCase();
+            return name.includes(query) || id.includes(query);
+        });
+
+        renderDriversTable(filtered);
+    }
+
+    // Функция фильтрации маркеров по типу
+    function filterMarkersTable() {
+        const typeFilter = document.getElementById('markerTypeFilter');
+        const selectedType = typeFilter.value;
+        
+        if (!selectedType) {
+            // Если фильтр пустой, показываем все
+            renderMarkersTable(adminAllMarkers);
+            return;
+        }
+
+        // Фильтруем по типу
+        const filtered = adminAllMarkers.filter(m => m.type === selectedType);
+        renderMarkersTable(filtered);
+    }
+
+    // Функция сброса поиска водителей
+    function clearDriverSearch() {
+        const searchInput = document.getElementById('driverSearchInput');
+        searchInput.value = '';
+        renderDriversTable(adminAllDrivers);
+    }
+
+    // Функция сброса фильтра маркеров
+    function clearMarkerFilter() {
+        const typeFilter = document.getElementById('markerTypeFilter');
+        typeFilter.value = '';
+        renderMarkersTable(adminAllMarkers);
     }
 
     // Функция закрытия админ-панели
@@ -1560,90 +1840,11 @@
         }
     }
 
-    // Функция блокировки (бана) пользователя
-    async function banDriver(driverId, driverName) {
-        if (!isAdmin) {
-            alert('У вас нет доступа к этой операции');
-            return;
-        }
 
-        // Создаем модальное окно для ввода причины бана
-        const reason = prompt(`Укажите причину бана для "${driverName}":\n\nПримеры: "Оскорбления в чате", "Ложные метки", "Спам"\n\nПричина (оставьте пусто если не хотите указывать):`);
-        
-        if (reason === null) {
-            // Пользователь отменил операцию
-            return;
-        }
 
-        try {
-            // Пытаемся добавить пользователя в таблицу bans с причиной
-            const { error } = await _sb.from('bans').insert([{ user_id: driverId, reason: reason || '' }]);
-            
-            if (error && error.code === 'PGRST116') {
-                // Таблица bans не существует, пытаемся обновить is_banned в drivers
-                const { error: updateError } = await _sb.from('drivers').update({ is_banned: true }).eq('user_id', driverId);
-                if (updateError) {
-                    alert('Ошибка при блокировке: ' + (updateError?.message || 'таблица bans не создана'));
-                    console.log('Инструкция: Создайте таблицу bans в Supabase с колонками:\n- user_id (BIGINT PRIMARY KEY)\n- reason (TEXT, может быть пустым)');
-                    return;
-                }
-            } else if (error) {
-                alert('Ошибка при блокировке: ' + (error?.message || 'неизвестная ошибка'));
-                return;
-            }
-            
-            alert('✅ Пользователь ' + driverName + ' успешно заблокирован!' + (reason ? `\nПричина: ${reason}` : ''));
-            openAdminModal(); // Обновляем список
-        } catch (e) {
-            alert('Ошибка при блокировке: ' + (e?.message || e));
-        }
-    }
 
-    // Функция разблокировки пользователя
-    async function unbanDriver(driverId, driverName) {
-        if (!isAdmin) {
-            alert('У вас нет доступа к этой операции');
-            return;
-        }
 
-        if (confirm(`Разблокировать пользователя "${driverName}"?`)) {
-            try {
-                // Пытаемся удалить из таблицы bans
-                const { error } = await _sb.from('bans').delete().eq('user_id', driverId);
-                
-                if (error && error.code === 'PGRST116') {
-                    // Таблица bans не существует, пытаемся обновить is_banned в drivers
-                    const { error: updateError } = await _sb.from('drivers').update({ is_banned: false }).eq('user_id', driverId);
-                    if (updateError) {
-                        alert('Ошибка при разблокировке: ' + (updateError?.message || 'неизвестная ошибка'));
-                        return;
-                    }
-                } else if (error) {
-                    alert('Ошибка при разблокировке: ' + (error?.message || 'неизвестная ошибка'));
-                    return;
-                }
-                
-                alert('✅ Пользователь ' + driverName + ' успешно разблокирован!');
-                openAdminModal(); // Обновляем список
-            } catch (e) {
-                alert('Ошибка при разблокировке: ' + (e?.message || e));
-            }
-        }
-    }
 
-    // Бан/Разбан по TG ID из поля ввода (в админ-панели)
-    function banByTgId() {
-        const id = (document.getElementById('banTgIdInput') || {}).value;
-        if (!id) return alert('Введите Telegram ID для бана');
-        // Используем бан по ID - имя указываем как ID в подсказках
-        banDriver(id, id);
-    }
-
-    function unbanByTgId() {
-        const id = (document.getElementById('banTgIdInput') || {}).value;
-        if (!id) return alert('Введите Telegram ID для разбана');
-        unbanDriver(id, id);
-    }
 
     // Функция удаления водителя (админ)
     async function deleteDriver(driverId) {
@@ -1733,17 +1934,15 @@
         };
         menu.appendChild(deleteBtn);
         
-        // Кнопка баня (только для админа)
-        if (isAdmin) {
-            const banBtn = document.createElement('button');
-            banBtn.className = 'chat-context-menu-item ban';
-            banBtn.innerHTML = '🚫 Забанить автора';
-            banBtn.onclick = () => {
-                quickBanUser(userId, userName);
-                menu.remove();
-            };
-            menu.appendChild(banBtn);
-        }
+        // Кнопка жалобы на пользователя
+        const reportBtn = document.createElement('button');
+        reportBtn.className = 'chat-context-menu-item report';
+        reportBtn.innerHTML = '⚠️ Пожаловаться';
+        reportBtn.onclick = () => {
+            reportUser(userId, userName, 'сообщение', message.text);
+            menu.remove();
+        };
+        menu.appendChild(reportBtn);
         
         // Добавляем меню в документ
         document.body.appendChild(menu);
@@ -1813,34 +2012,185 @@
         }
     }
 
-    // Функция быстрого баня пользователя
-    async function quickBanUser(userId, userName) {
-        if (!isAdmin) {
-            alert('Только администратор может банить пользователей');
-            return;
-        }
+    // Функция отправки жалобы на пользователя
+    async function reportUser(userId, userName, reportType = 'сообщение', content = '') {
+        const reason = prompt(`Пожаловаться на пользователя "${userName}"?\n\nУкажите причину жалобы:\n\nПримеры: "Оскорбления", "Спам", "Ложные метки", "Мошенничество"`, '');
         
-        const reason = prompt(`Забанить пользователя "${userName}"?\n\nУкажите причину (или оставьте пусто):`, 'Нарушение правил');
         if (reason === null) return; // Отмена
+        if (!reason.trim()) return alert('Укажите причину жалобы');
         
         try {
-            const { error } = await _sb.from('bans').insert([{ 
-                user_id: String(userId), 
-                reason: reason || '',
-                banned_by: uid
+            // Проверяем, существует ли таблица reports, если её нет - создадим запись или выведем ошибку
+            const { error } = await _sb.from('reports').insert([{
+                reporter_id: uid,
+                reported_user_id: userId,
+                reported_user_name: userName,
+                report_type: reportType,
+                reason: reason.trim(),
+                content: content,
+                created_at: new Date().toISOString()
             }]);
             
             if (error) {
-                alert('❌ Ошибка баня: ' + (error?.message || 'неизвестная ошибка'));
+                if (error.code === 'PGRST116') {
+                    alert('⚠️ Систем жалоб на данный момент недоступна. Администраторы будут уведомлены о проблеме.');
+                } else {
+                    alert('Ошибка при отправке жалобы: ' + (error?.message || 'неизвестная ошибка'));
+                }
                 return;
             }
             
-            alert(`✅ Пользователь "${userName}" успешно забанен`);
-            await loadChatMessages();
+            alert('✅ Спасибо за сообщение! Ваша жалоба успешно отправлена администраторам.');
         } catch (e) {
             alert('❌ Ошибка: ' + (e?.message || e));
         }
     }
+
+    // Функция быстрого меню модерации для админа (одним кликом на юзера)
+    async function showUserModeratorMenu(userId, userName, event) {
+        if (!isAdmin) {
+            reportUser(userId, userName, 'сообщение', '');
+            return;
+        }
+
+        // Защита от undefined event
+        if (!event) {
+            event = { pageX: window.innerWidth / 2, pageY: window.innerHeight / 2, stopPropagation: () => {} };
+        }
+
+        if (event.stopPropagation) {
+            event.stopPropagation();
+        }
+
+        // Удаляем старое меню если оно есть
+        const oldMenu = document.querySelector('.moderator-menu');
+        if (oldMenu) oldMenu.remove();
+
+        // Создаём меню
+        const menu = document.createElement('div');
+        menu.className = 'moderator-menu';
+        menu.style.cssText = `
+            position: fixed;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 3000;
+            border: 2px solid #ff9500;
+            overflow: hidden;
+        `;
+        menu.style.left = (event.pageX || window.innerWidth / 2) + 'px';
+        menu.style.top = (event.pageY || window.innerHeight / 2) + 'px';
+
+        // Функция для создания кнопки меню
+        const createMenuBtn = (text, color, callback) => {
+            const btn = document.createElement('button');
+            btn.style.cssText = `
+                display: block;
+                width: 100%;
+                border: none;
+                padding: 10px 15px;
+                text-align: left;
+                cursor: pointer;
+                background: white;
+                color: ${color};
+                font-weight: 600;
+                border-bottom: 1px solid #eee;
+                font-size: 13px;
+            `;
+            btn.innerHTML = text;
+            btn.onmouseover = () => btn.style.background = '#f9f9f9';
+            btn.onmouseout = () => btn.style.background = 'white';
+            btn.onclick = callback;
+            return btn;
+        };
+
+        // Кнопка удаления всех сообщений пользователя
+        menu.appendChild(createMenuBtn('🗑️ Удалить все сообщения', '#ff3b30', () => {
+            deleteAllUserMessages(userId, userName);
+            menu.remove();
+        }));
+
+        // Кнопка удаления всех меток пользователя
+        menu.appendChild(createMenuBtn('📍 Удалить все метки', '#ff9500', () => {
+            deleteAllUserMarkers(userId, userName);
+            menu.remove();
+        }));
+
+        // Кнопка отправки жалобы
+        menu.appendChild(createMenuBtn('⚠️ Пожаловаться', '#007aff', () => {
+            reportUser(userId, userName, 'сообщение', '');
+            menu.remove();
+        }));
+
+        // Кнопка просмотра профиля
+        menu.appendChild(createMenuBtn('👤 Открыть профиль', '#34c759', () => {
+            // TODO: Реализовать открытие профиля если есть функция
+            alert('Функция просмотра других профилей пока не доступна');
+            menu.remove();
+        }));
+
+        // Добавляем меню в документ
+        document.body.appendChild(menu);
+
+        // Закрываем меню при клике вне его
+        setTimeout(() => {
+            document.addEventListener('click', function closeMenu(e) {
+                if (!menu.contains(e.target)) {
+                    menu.remove();
+                    document.removeEventListener('click', closeMenu);
+                }
+            });
+        }, 0);
+    }
+
+    // Функция удаления всех меток пользователя
+    async function deleteAllUserMarkers(userId, userName) {
+        if (!isAdmin) {
+            alert('Только администратор может удалять метки других пользователей');
+            return;
+        }
+
+        if (!confirm(`Удалить все метки пользователя "${userName}"? Это действие необратимо.`)) return;
+
+        try {
+            const { error } = await _sb.from('markers').delete().eq('author_id', userId);
+            if (error) {
+                alert('Ошибка: ' + (error?.message || 'неизвестная ошибка'));
+                return;
+            }
+            alert('✅ Все метки пользователя удалены. Обновите карту.');
+            // Перезагружаем маркеры если функция существует
+            if (typeof loadMarkers === 'function') {
+                loadMarkers();
+            }
+        } catch (e) {
+            alert('Ошибка: ' + (e?.message || e));
+        }
+    }
+
+    // Версия меню модерации для маркеров (вызывается из balloonContent)
+    window.showUserModeratorMenuFromMarker = (userId, userName) => {
+        if (!window.isAdmin) {
+            window.reportUser(userId, userName, 'маркер', '');
+            return;
+        }
+
+        // Закрываем текущий балун
+        if (window.myMap && window.myMap.balloon) {
+            window.myMap.balloon.close();
+        }
+
+        // Показываем меню через небольшую задержку
+        setTimeout(() => {
+            window.showUserModeratorMenu(userId, userName, new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                pageX: window.innerWidth / 2,
+                pageY: window.innerHeight / 2
+            }));
+        }, 100);
+    };
 
     // Переменная для интервала обновления чата
     let chatUpdateInterval = null;
@@ -1944,11 +2294,29 @@
 
                 messageEl.innerHTML = `
                     ${deleteButtonHTML}
-                    ${!isOwn ? `<div class="chat-message-author" style="display: flex; align-items: center; cursor: pointer;" data-user-id="${msg.author_id}" data-user-name="${(msg.author_name || 'Пользователь').replace(/"/g, '&quot;')}">${avatarHTML}<span>${msg.author_name || 'Аноним'}</span> ${starsBadge}</div>` : ''}
+                    ${!isOwn ? `<div class="chat-message-author" style="display: flex; align-items: center; cursor: ${isAdmin ? 'pointer' : 'default'}; ${isAdmin ? 'padding: 4px 8px; border-radius: 6px; transition: all 0.2s; user-select: none;' : ''}" data-user-id="${msg.author_id}" data-user-name="${(msg.author_name || 'Пользователь').replace(/"/g, '&quot;')}">${avatarHTML}<span>${msg.author_name || 'Аноним'}</span> ${starsBadge}</div>` : ''}
                     <div>${msg.text || ''}</div>
                     ${photoHTML}
                     <div class="chat-message-time">${timestamp}</div>
                 `;
+                
+                // Добавляем обработчик клика на имя для админа
+                if (isAdmin && !isOwn) {
+                    const authorDiv = messageEl.querySelector('.chat-message-author');
+                    if (authorDiv) {
+                        authorDiv.onclick = (e) => {
+                            showUserModeratorMenu(msg.author_id, msg.author_name || 'Пользователь', e);
+                        };
+                        authorDiv.onmouseover = () => {
+                            authorDiv.style.background = '#f0f0f5';
+                            authorDiv.style.transform = 'scale(1.02)';
+                        };
+                        authorDiv.onmouseout = () => {
+                            authorDiv.style.background = '';
+                            authorDiv.style.transform = 'scale(1)';
+                        };
+                    }
+                }
                 container.appendChild(messageEl);
                 
                 // Добавляем обработчик клика на сообщение (если админ)
@@ -2235,35 +2603,11 @@
         }
     };
 
-    // Функция быстрого баня через window (для вызова из balloonContent)
-    window.quickBanUser = async (userId, userName) => {
-        if (!isAdmin) {
-            alert('Только администратор может банить пользователей');
-            return;
-        }
-        
-        const reason = prompt(`Забанить пользователя "${userName}"?\n\nУкажите причину (или оставьте пусто):`, 'Нарушение правил');
-        if (reason === null) return; // Отмена
-        
-        try {
-            const { error } = await _sb.from('bans').insert([{ 
-                user_id: String(userId), 
-                reason: reason || '',
-                banned_by: uid
-            }]);
-            
-            if (error) {
-                alert('❌ Ошибка баня: ' + (error?.message || 'неизвестная ошибка'));
-                return;
-            }
-            
-            alert(`✅ Пользователь "${userName}" успешно забанен`);
-            // Закрываем балун если он был открыт
-            if (myMap.balloon) myMap.balloon.close();
-        } catch (e) {
-            alert('❌ Ошибка: ' + (e?.message || e));
-        }
-    };
+    // Экспорт функций модерации через window для доступа из balloonContent
+    window.deleteAllUserMessages = deleteAllUserMessages;
+    window.deleteAllUserMarkers = deleteAllUserMarkers;
+    window.reportUser = reportUser;
+    window.deleteMessage = deleteMessage;
 
     // Функция открытия ленты событий
     async function openActivityModal() {
@@ -2683,7 +3027,7 @@
             const starsBadgeLocal = `<span style="margin-left:8px; color: ${authorInfo.is_trusted ? '#b8860b' : '#f5c542'}; font-weight:700;">${starsHTMLLocal}</span>`;
 
             const bHtml = `<div class="b-cont">
-                <div style="font-size:13px; margin-bottom:6px; color:#222;"><strong>${authorInfo.name || 'Аноним'}</strong> ${authorInfo.is_trusted ? '<span style="color:#b8860b; font-weight:800; margin-left:6px;">⭐</span>' : ''} ${starsBadgeLocal}</div>
+                <div style="font-size:13px; margin-bottom:6px; color:#222; cursor: ${window.isAdmin ? 'pointer' : 'default'}; padding: 4px; border-radius: 4px; transition: all 0.2s;" onmouseover="${window.isAdmin ? `this.style.background='#f0f0f5'; this.style.transform='scale(1.02)'` : ''}" onmouseout="${window.isAdmin ? `this.style.background=''; this.style.transform='scale(1)'` : ''}" onclick="${window.isAdmin ? `window.showUserModeratorMenuFromMarker(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')` : ''}"><strong>${authorInfo.name || 'Аноним'}</strong> ${authorInfo.is_trusted ? '<span style="color:#b8860b; font-weight:800; margin-left:6px;">⭐</span>' : ''} ${starsBadgeLocal}</div>
                 <strong>${m.comment || 'Метка'}</strong>
                 ${m.photo_url ? `<div style="margin-top: 8px; margin-bottom: 8px;"><img src="${m.photo_url}" style="max-width: 100%; border-radius: 8px; cursor: pointer; max-height: 250px;" onclick="openPhotoViewer('${m.photo_url}')" title="Нажмите для увеличения"></div>` : ''}
                 <div class="b-poll">
@@ -2696,7 +3040,7 @@
                 </div>
                 ${confirmationBar}
                 ${isOwner ? `<button class="b-del" onclick="window.delMarker(${m.id})">Удалить</button>` : ''}
-                ${window.isAdmin ? `<button class="b-del" style="background: #ff3b30; color:white;" onclick="window.quickBanUser(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')"  title="Забанить автора метки">🚫 Забан</button>` : ''}
+                <button class="b-del" style="background: #ff9500; color:white;" onclick="window.reportUser(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')" title="Пожаловаться на автора метки">⚠️ Пожаловаться</button>
             </div>`;
             // Определяем доверие автора и добавляем звездочку к иконке, если он проверен
             const isTrustedAuthor = authorInfo.is_trusted;
