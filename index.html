@@ -92,6 +92,34 @@
         .admin-stat-card .value { font-size: 28px; font-weight: 800; color: var(--blue); }
         .admin-stat-card .label { font-size: 12px; color: var(--gray); margin-top: 5px; }
         
+        /* Кнопки модерации в профиле */
+        .moderation-section { margin-top: 20px; padding-top: 20px; border-top: 2px solid #f0f0f5; }
+        .moderation-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 12px; text-align: center; }
+        .moderation-buttons { display: flex; gap: 10px; }
+        .mod-btn { flex: 1; border: none; padding: 12px; border-radius: 12px; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .mod-btn:active { transform: scale(0.95); }
+        .mod-btn-temp { background: #ff9500; color: white; }
+        .mod-btn-temp:hover { background: #e68600; }
+        .mod-btn-perm { background: #ff3b30; color: white; }
+        .mod-btn-perm:hover { background: #e63027; }
+        .mod-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        /* Модальное окно для временного бана */
+        .ban-duration-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 3000; align-items: center; justify-content: center; }
+        .ban-duration-modal.active { display: flex; }
+        .ban-duration-content { background: white; border-radius: 20px; padding: 25px; max-width: 350px; width: 90%; }
+        .ban-duration-title { font-size: 18px; font-weight: 700; margin-bottom: 15px; text-align: center; }
+        .ban-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .ban-option { background: #f0f0f5; border: 2px solid transparent; padding: 12px; border-radius: 12px; cursor: pointer; text-align: center; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+        .ban-option:hover { background: #e5e5ea; }
+        .ban-option.selected { background: #fff; border-color: #ff9500; color: #ff9500; }
+        .ban-option .duration { display: block; font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+        .ban-option .label { display: block; font-size: 11px; color: var(--gray); }
+        .ban-actions { display: flex; gap: 10px; }
+        .ban-confirm-btn, .ban-cancel-btn { flex: 1; border: none; padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 700; cursor: pointer; }
+        .ban-confirm-btn { background: #ff9500; color: white; }
+        .ban-cancel-btn { background: #f0f0f5; color: #333; }
+        
         /* Чат */
         .chat-btn { position: absolute; bottom: 100px; right: 15px; z-index: 1500; width: 50px; height: 50px; border-radius: 50%; background: var(--blue); border: 2px solid white; cursor: pointer; font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
         .chat-btn:hover { transform: scale(1.05); }
@@ -3272,6 +3300,339 @@
         });
     }
 </script>
+    <!-- Модальное окно для модерации пользователя -->
+    <div id="moderatorModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="margin:0;">Модерация пользователя</h3>
+                <button class="modal-close" onclick="closeModerationModal()">×</button>
+            </div>
+            <div id="moderatorModalContent">
+                <div style="background: #f0f0f5; padding: 15px; border-radius: 12px; margin-bottom: 20px;">
+                    <div style="font-size: 14px; color: var(--gray); margin-bottom: 8px;">Пользователь:</div>
+                    <div id="modUserName" style="font-size: 18px; font-weight: 700; margin-bottom: 4px;">—</div>
+                    <div style="font-size: 12px; color: var(--gray);">
+                        Telegram ID: <span id="modUserId" style="font-weight: 600; color: #000;">—</span>
+                    </div>
+                </div>
+                
+                <div class="moderation-section">
+                    <div class="moderation-title">⚙️ Действия модерации</div>
+                    <div class="moderation-buttons">
+                        <button class="mod-btn mod-btn-temp" onclick="openBanDurationModal()">
+                            <span style="font-size: 18px;">⏱️</span>
+                            Временный бан
+                        </button>
+                        
+                        <button class="mod-btn mod-btn-perm" onclick="banUser('permanent')">
+                            <span style="font-size: 18px;">🚫</span>
+                            Постоянный бан
+                        </button>
+                    </div>
+                    
+                    <div style="margin-top: 10px; padding: 12px; background: #fff3cd; border-radius: 8px; font-size: 12px; color: #856404;">
+                        ⚠️ Забаненные пользователи не смогут создавать метки и отправлять сообщения в чат
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно выбора длительности бана -->
+    <div id="banDurationModal" class="ban-duration-modal">
+        <div class="ban-duration-content">
+            <div class="ban-duration-title">⏱️ Выберите длительность бана</div>
+            
+            <div class="ban-options">
+                <div class="ban-option" data-hours="1">
+                    <span class="duration">1 час</span>
+                    <span class="label">Быстрое предупреждение</span>
+                </div>
+                <div class="ban-option" data-hours="6">
+                    <span class="duration">6 часов</span>
+                    <span class="label">Серьёзное нарушение</span>
+                </div>
+                <div class="ban-option" data-hours="24">
+                    <span class="duration">24 часа</span>
+                    <span class="label">Сутки</span>
+                </div>
+                <div class="ban-option" data-hours="72">
+                    <span class="duration">3 дня</span>
+                    <span class="label">Длительное наказание</span>
+                </div>
+                <div class="ban-option" data-hours="168">
+                    <span class="duration">7 дней</span>
+                    <span class="label">Неделя</span>
+                </div>
+                <div class="ban-option" data-hours="720">
+                    <span class="duration">30 дней</span>
+                    <span class="label">Месяц</span>
+                </div>
+            </div>
+            
+            <div class="ban-actions">
+                <button class="ban-cancel-btn" onclick="closeBanDurationModal()">Отмена</button>
+                <button class="ban-confirm-btn" onclick="confirmTempBan()">Забанить</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Переменная для хранения ID текущего модерируемого пользователя
+        let currentModeratingUserId = null;
+
+        // Функция открытия модального окна модерации (вызывается при клике на имя автора в маркере)
+        window.showUserModeratorMenuFromMarker = function(userId, userName) {
+            if (!window.isAdmin) {
+                console.warn('Доступ запрещён: только для администраторов');
+                return;
+            }
+            
+            currentModeratingUserId = userId;
+            document.getElementById('modUserName').textContent = userName || 'Аноним';
+            document.getElementById('modUserId').textContent = userId;
+            document.getElementById('moderatorModal').classList.add('active');
+        };
+
+        // Функция закрытия модального окна модерации
+        function closeModerationModal() {
+            document.getElementById('moderatorModal').classList.remove('active');
+            currentModeratingUserId = null;
+        }
+
+        // Переменная для хранения выбранной длительности бана (в часах)
+        let selectedBanHours = 24; // По умолчанию 24 часа
+
+        // Функция открытия модального окна выбора длительности бана
+        function openBanDurationModal() {
+            // Закрываем модальное окно модерации
+            document.getElementById('moderatorModal').classList.remove('active');
+            
+            // Открываем модальное окно выбора длительности
+            document.getElementById('banDurationModal').classList.add('active');
+            
+            // Сбрасываем предыдущий выбор
+            document.querySelectorAll('.ban-option').forEach(opt => opt.classList.remove('selected'));
+            
+            // Устанавливаем обработчики на опции
+            document.querySelectorAll('.ban-option').forEach(option => {
+                option.onclick = function() {
+                    // Убираем выделение со всех опций
+                    document.querySelectorAll('.ban-option').forEach(opt => opt.classList.remove('selected'));
+                    // Добавляем выделение на выбранную опцию
+                    this.classList.add('selected');
+                    // Сохраняем выбранное количество часов
+                    selectedBanHours = parseInt(this.getAttribute('data-hours'));
+                };
+            });
+        }
+
+        // Функция закрытия модального окна выбора длительности бана
+        function closeBanDurationModal() {
+            document.getElementById('banDurationModal').classList.remove('active');
+            // Возвращаемся к модальному окну модерации
+            document.getElementById('moderatorModal').classList.add('active');
+        }
+
+        // Функция подтверждения временного бана
+        async function confirmTempBan() {
+            // Проверяем, выбрана ли длительность
+            const selectedOption = document.querySelector('.ban-option.selected');
+            if (!selectedOption) {
+                alert('⚠️ Пожалуйста, выберите длительность бана');
+                return;
+            }
+            
+            // Закрываем модальное окно выбора длительности
+            document.getElementById('banDurationModal').classList.remove('active');
+            
+            // Вызываем функцию бана с выбранной длительностью
+            await banUserWithDuration(selectedBanHours);
+        }
+
+        // Функция бана пользователя с указанной длительностью (в часах)
+        async function banUserWithDuration(hours) {
+            if (!currentModeratingUserId) {
+                alert('Ошибка: не выбран пользователь для модерации');
+                return;
+            }
+
+            const userName = document.getElementById('modUserName').textContent;
+            
+            // Форматируем длительность для сообщения
+            let durationText = '';
+            if (hours < 24) {
+                durationText = `${hours} ${hours === 1 ? 'час' : hours < 5 ? 'часа' : 'часов'}`;
+            } else if (hours < 168) {
+                const days = Math.floor(hours / 24);
+                durationText = `${days} ${days === 1 ? 'день' : days < 5 ? 'дня' : 'дней'}`;
+            } else {
+                const days = Math.floor(hours / 24);
+                durationText = `${days} ${days === 1 ? 'день' : days < 5 ? 'дня' : 'дней'}`;
+            }
+            
+            const confirmMessage = `Вы уверены, что хотите забанить пользователя "${userName}" на ${durationText}?`;
+
+            if (!confirm(confirmMessage)) {
+                // Если отменили, возвращаемся к модальному окну модерации
+                document.getElementById('moderatorModal').classList.add('active');
+                return;
+            }
+
+            try {
+                // Определяем дату окончания бана
+                const bannedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+
+                // Проверяем, есть ли уже запись о бане
+                const { data: existingBan } = await _sb
+                    .from('bans')
+                    .select('*')
+                    .eq('user_id', currentModeratingUserId)
+                    .single();
+
+                if (existingBan) {
+                    // Обновляем существующий бан
+                    const { error } = await _sb
+                        .from('bans')
+                        .update({
+                            banned_until: bannedUntil,
+                            ban_type: 'temp',
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('user_id', currentModeratingUserId);
+
+                    if (error) throw error;
+                } else {
+                    // Создаем новую запись о бане
+                    const { error } = await _sb
+                        .from('bans')
+                        .insert({
+                            user_id: currentModeratingUserId,
+                            banned_until: bannedUntil,
+                            ban_type: 'temp',
+                            banned_by: uid,
+                            created_at: new Date().toISOString()
+                        });
+
+                    if (error) throw error;
+                }
+
+                alert(`✅ Пользователь "${userName}" забанен на ${durationText}`);
+                currentModeratingUserId = null;
+
+                // Удаляем все маркеры забаненного пользователя с карты (опционально)
+                if (confirm('Удалить все метки этого пользователя с карты?')) {
+                    const { error: deleteError } = await _sb
+                        .from('markers')
+                        .delete()
+                        .eq('author_id', currentModeratingUserId);
+
+                    if (deleteError) {
+                        console.error('Ошибка удаления меток:', deleteError);
+                    } else {
+                        alert('✅ Метки пользователя удалены');
+                        await refreshMarkers(); // Обновляем карту
+                    }
+                }
+
+            } catch (error) {
+                console.error('Ошибка при бане пользователя:', error);
+                alert('❌ Произошла ошибка при попытке забанить пользователя');
+                // Возвращаемся к модальному окну модерации
+                document.getElementById('moderatorModal').classList.add('active');
+            }
+        }
+
+        // Функция бана пользователя
+        async function banUser(banType) {
+            if (!currentModeratingUserId) {
+                alert('Ошибка: не выбран пользователь для модерации');
+                return;
+            }
+
+            const userName = document.getElementById('modUserName').textContent;
+            const confirmMessage = banType === 'temp' 
+                ? `Вы уверены, что хотите забанить пользователя "${userName}" на 24 часа?`
+                : `Вы уверены, что хотите НАВСЕГДА забанить пользователя "${userName}"?`;
+
+            if (!confirm(confirmMessage)) return;
+
+            try {
+                // Определяем дату окончания бана
+                const bannedUntil = banType === 'temp' 
+                    ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // +24 часа
+                    : new Date('2099-12-31').toISOString(); // "Навсегда"
+
+                // Проверяем, есть ли уже запись о бане
+                const { data: existingBan } = await _sb
+                    .from('bans')
+                    .select('*')
+                    .eq('user_id', currentModeratingUserId)
+                    .single();
+
+                if (existingBan) {
+                    // Обновляем существующий бан
+                    const { error } = await _sb
+                        .from('bans')
+                        .update({
+                            banned_until: bannedUntil,
+                            ban_type: banType,
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('user_id', currentModeratingUserId);
+
+                    if (error) throw error;
+                } else {
+                    // Создаем новую запись о бане
+                    const { error } = await _sb
+                        .from('bans')
+                        .insert({
+                            user_id: currentModeratingUserId,
+                            banned_until: bannedUntil,
+                            ban_type: banType,
+                            banned_by: uid,
+                            created_at: new Date().toISOString()
+                        });
+
+                    if (error) throw error;
+                }
+
+                const successMessage = banType === 'temp'
+                    ? `✅ Пользователь "${userName}" забанен на 24 часа`
+                    : `✅ Пользователь "${userName}" забанен навсегда`;
+
+                alert(successMessage);
+                closeModerationModal();
+
+                // Удаляем все маркеры забаненного пользователя с карты (опционально)
+                if (confirm('Удалить все метки этого пользователя с карты?')) {
+                    const { error: deleteError } = await _sb
+                        .from('markers')
+                        .delete()
+                        .eq('author_id', currentModeratingUserId);
+
+                    if (deleteError) {
+                        console.error('Ошибка удаления меток:', deleteError);
+                    } else {
+                        alert('✅ Метки пользователя удалены');
+                        await refreshMarkers(); // Обновляем карту
+                    }
+                }
+
+            } catch (error) {
+                console.error('Ошибка при бане пользователя:', error);
+                alert('❌ Ошибка при бане пользователя: ' + (error.message || 'Неизвестная ошибка'));
+            }
+        }
+
+        // Закрытие модального окна при клике вне его области
+        document.getElementById('moderatorModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModerationModal();
+            }
+        });
+    </script>
+
     <!-- Кнопка открытия нижнего виджета (появляется когда он закрыт) -->
     <button id="openActionBtn" class="open-action-btn" onclick="toggleActionCard()">▲</button>
 </body>
