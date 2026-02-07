@@ -1229,31 +1229,29 @@
                 );
 
                 // Получаем blob из canvas
-                canvas.toBlob(async (blob) => {
+                canvas.toBlob((blob) => {
                     try {
-                        // Загружаем в Storage
-                        const fileName = `avatars/${uid}-${Date.now()}`;
-                        const { error: uploadError } = await _sb.storage.from('uploads').upload(fileName, blob);
+                        // Преобразуем blob в Base64
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            const base64 = event.target.result; // data:image/jpeg;base64,...
 
-                        if (uploadError) throw uploadError;
+                            // Отображаем фото как аватар
+                            const avatarEl = document.getElementById('profile-avatar-display');
+                            avatarEl.style.backgroundImage = `url('${base64}')`;
+                            avatarEl.style.backgroundSize = 'cover';
+                            avatarEl.style.backgroundPosition = 'center';
+                            avatarEl.textContent = '';
 
-                        // Получаем публичный URL
-                        const { data } = _sb.storage.from('uploads').getPublicUrl(fileName);
-                        const avatarUrl = data.publicUrl;
+                            // Сохраняем Base64 в поле
+                            document.getElementById('profile-avatar-url').value = base64;
+                            document.getElementById('profile-avatar-value').value = '';
 
-                        // Отображаем фото как аватар
-                        const avatarEl = document.getElementById('profile-avatar-display');
-                        avatarEl.style.backgroundImage = `url('${avatarUrl}')`;
-                        avatarEl.style.backgroundSize = 'cover';
-                        avatarEl.style.backgroundPosition = 'center';
-                        avatarEl.textContent = '';
-
-                        document.getElementById('profile-avatar-url').value = avatarUrl;
-                        document.getElementById('profile-avatar-value').value = '';
-
-                        // Закрываем редактор
-                        closeAvatarEditor();
-                        alert('✅ Аватар сохранен!');
+                            // Закрываем редактор
+                            closeAvatarEditor();
+                            alert('✅ Аватар сохранен!');
+                        };
+                        reader.readAsDataURL(blob);
                     } catch (err) {
                         alert('Ошибка загрузки: ' + (err?.message || err));
                     }
@@ -1875,7 +1873,7 @@
 
         let photoURL = null;
 
-        // Если есть фото, загружаем его в Supabase Storage
+        // Если есть фото, преобразуем в Base64
         if (selectedChatPhoto) {
             try {
                 // Сжимаем изображение
@@ -1888,49 +1886,23 @@
                     return;
                 }
 
-                try {
-                    const fileName = `chat-photos/${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                    console.log('Загруженное фото:', fileName, 'размер:', compressedBlob.size);
-                    
-                    // Специально для chat Storage нужен формат без `.storage`
-                    const uploadResult = await _sb.storage
-                        .from('chat')
-                        .upload(fileName, compressedBlob, {
-                            cacheControl: '3600',
-                            upsert: false
-                        });
-                    
-                    if (uploadResult.error) {
-                        console.error('❌ Ошибка загрузки на сервер:', uploadResult.error);
-                        alert('❌ Ошибка загрузки фото: ' + (uploadResult.error?.message || 'неизвестная ошибка'));
-                        selectedChatPhoto = null;
-                        return;
-                    }
-                    
-                    // Если загрузка успешна, получаем URL
-                    if (uploadResult.data) {
-                        const { data: urlData } = _sb.storage.from('uploads').getPublicUrl(fileName);
-                        photoURL = urlData?.publicUrl;
-                        console.log('✅ Фото загружено, URL:', photoURL);
-                    }
-                } catch (storageError) {
-                    console.error('❌ Ошибка Storage API:', storageError);
-                    alert('❌ Ошибка при загрузке фото: ' + (storageError?.message || 'проверьте сеть'));
-                    selectedChatPhoto = null;
-                    return;
-                }
+                // Преобразуем blob в Base64
+                const reader = new FileReader();
+                await new Promise((resolve, reject) => {
+                    reader.onload = function(event) {
+                        photoURL = event.target.result; // data:image/jpeg;base64,...
+                        console.log('✅ Фото преобразовано в Base64, размер:', photoURL.length);
+                        resolve();
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(compressedBlob);
+                });
             } catch (e) {
-                console.error('❌ Ошибка при сжатии фото:', e?.message || e);
+                console.error('❌ Ошибка при обработке фото:', e?.message || e);
                 alert('❌ Ошибка обработки фото: ' + (e?.message || e));
                 selectedChatPhoto = null;
                 return;
             }
-        }
-
-        // Если фото требовалось, но не загружено - отменяем отправку
-        if (selectedChatPhoto && !photoURL) {
-            alert('❌ Фото не загружено. Попробуйте снова.');
-            return;
         }
 
         // Вставляем сообщение в БД
