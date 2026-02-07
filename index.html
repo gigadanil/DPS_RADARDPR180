@@ -115,6 +115,34 @@
         .chat-photo-btn { background: #f0f0f5; color: var(--blue); border: none; padding: 10px; border-radius: 10px; cursor: pointer; font-size: 16px; }
         .chat-photo-btn:hover { background: #e0e0e5; }
         
+        /* Контекстное меню для сообщений */
+        .chat-context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 9999;
+            min-width: 180px;
+            padding: 8px 0;
+        }
+        .chat-context-menu-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            font-size: 14px;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .chat-context-menu-item:hover { background: #f0f0f5; }
+        .chat-context-menu-item.delete { color: #ff3b30; }
+        .chat-context-menu-item.ban { color: #ff9500; }
+        
         /* Форма регистрации */
         .registration-form input { width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
         .registration-form label { display: block; font-weight: 600; margin-bottom: 5px; font-size: 13px; color: #000; }
@@ -504,7 +532,7 @@
     // Кэш данных авторов для оптимизации запросов к БД
     let authorsCache = {};
     let authorsCacheTime = 0;
-    const CACHE_DURATION = 30000; // Кэширование на 30 секунд
+    const CACHE_DURATION = 300000; // Кэширование на 5 минут
     // Таймер для дебаунса loadMarkers
     let loadMarkersTimeout = null;
 
@@ -539,8 +567,8 @@
         };
     }
     
-    // Кэшированная версия loadMarkers с дебаунсом
-    const loadMarkersDebounced = debounce(() => loadMarkers(), 500);
+    // Оптимизированный дебаунс для loadMarkers (750ms вместо 500ms)
+    const loadMarkersDebounced = debounce(() => loadMarkers(), 750);
     function initGPS() {
         if (!navigator.geolocation) {
             console.warn('Geolocation не поддерживается браузером');
@@ -549,9 +577,9 @@
         
         // Опции для geolocation
         const options = {
-            enableHighAccuracy: true, // Используем высокую точность
-            timeout: 10000,
-            maximumAge: 0
+            enableHighAccuracy: true,
+            timeout: 15000,            // Оптимизация: увеличили таймаут
+            maximumAge: 5000           // Кэшируем GPS данные на 5 сек
         };
         
         // Начинаем отслеживание местоположения
@@ -775,11 +803,15 @@
 
     // Функция открытия модального окна регистрации
     function openRegistrationModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
         document.getElementById('registrationModal').classList.add('active');
     }
 
     // Функция закрытия модального окна регистрации
     function closeRegistrationModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
         document.getElementById('registrationModal').classList.remove('active');
     }
 
@@ -983,16 +1015,16 @@
             console.warn('Не удалось обновить рейтинг в drivers (возможно, колонки likes_sum/is_trusted отсутствуют):', e?.message || e);
         }
 
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
         document.getElementById('profileModal').classList.add('active');
-        // Сдвигаем центральную метку чтобы она не перекрывалась модалью
-        setTimeout(() => updateTargetOffset(), 100);
     }
 
     // Функция закрытия профиля
     function closeProfileModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
         document.getElementById('profileModal').classList.remove('active');
-        // Возвращаем метку на место
-        updateTargetOffset();
     }
 
     // Функция открытия модала с глобальным рейтингом водителей
@@ -1006,6 +1038,8 @@
             
             if (!drivers || drivers.length === 0) {
                 ratingsList.innerHTML = '<div style="color: var(--gray); padding: 20px;">Водители не найдены</div>';
+                const target = document.querySelector('.target');
+                if (target) target.style.visibility = 'hidden';
                 document.getElementById('ratingsModal').classList.add('active');
                 return;
             }
@@ -1062,22 +1096,30 @@
             ratingsList.innerHTML = '<div style="color: red; padding: 20px;">Ошибка загрузки рейтинга</div>';
         }
         
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
         document.getElementById('ratingsModal').classList.add('active');
     }
 
     // Функция закрытия рейтинга
     function closeRatingsModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
         document.getElementById('ratingsModal').classList.remove('active');
     }
 
     // Функция открытия просмотра фото
     function openPhotoViewer(photoUrl) {
         document.getElementById('photoViewerImage').src = photoUrl;
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
         document.getElementById('photoViewerModal').classList.add('active');
     }
 
     // Функция закрытия просмотра фото
     function closePhotoViewer() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
         document.getElementById('photoViewerModal').classList.remove('active');
     }
 
@@ -1130,6 +1172,8 @@
                         document.getElementById('avatarOffsetY').value = 0;
                         
                         // Открываем модальное окно редактора
+                        const target = document.querySelector('.target');
+                        if (target) target.style.visibility = 'hidden';
                         document.getElementById('avatarEditorModal').classList.add('active');
                     };
                     reader.readAsDataURL(file);
@@ -1175,6 +1219,8 @@
 
     // Функция закрытия редактора аватара
     function closeAvatarEditor() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
         document.getElementById('avatarEditorModal').classList.remove('active');
         avatarEditorState = {
             fileBlob: null,
@@ -1448,11 +1494,15 @@
             document.getElementById('admin-markers-body').innerHTML = '<tr><td colspan="6" style="text-align: center; color: red;">Ошибка загрузки</td></tr>';
         }
 
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
         document.getElementById('adminModal').classList.add('active');
     }
 
     // Функция закрытия админ-панели
     function closeAdminModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
         document.getElementById('adminModal').classList.remove('active');
     }
 
@@ -1654,11 +1704,61 @@
 
         document.getElementById('chatModal').classList.add('active');
         await loadChatMessages();
-        // Автоматически обновляем сообщения каждые 2 секунды
-        chatUpdateInterval = setInterval(loadChatMessages, 2000);
+        // Автоматически обновляем сообщения каждые 5 секунд
+        chatUpdateInterval = setInterval(loadChatMessages, 5000);
     }
 
     // Функция закрытия чата
+    // Функция показа контекстного меню для сообщений
+    function showChatContextMenu(event, message, userId, userName) {
+        event.stopPropagation();
+        
+        // Удаляем старое меню если оно есть
+        const oldMenu = document.querySelector('.chat-context-menu');
+        if (oldMenu) oldMenu.remove();
+        
+        // Создаём меню
+        const menu = document.createElement('div');
+        menu.className = 'chat-context-menu';
+        menu.style.left = event.pageX + 'px';
+        menu.style.top = event.pageY + 'px';
+        
+        // Кнопка удаления сообщения (для владельца или админа)
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'chat-context-menu-item delete';
+        deleteBtn.innerHTML = '❌ Удалить сообщение';
+        deleteBtn.onclick = () => {
+            deleteMessage(message.id, userId);
+            menu.remove();
+        };
+        menu.appendChild(deleteBtn);
+        
+        // Кнопка баня (только для админа)
+        if (isAdmin) {
+            const banBtn = document.createElement('button');
+            banBtn.className = 'chat-context-menu-item ban';
+            banBtn.innerHTML = '🚫 Забанить автора';
+            banBtn.onclick = () => {
+                quickBanUser(userId, userName);
+                menu.remove();
+            };
+            menu.appendChild(banBtn);
+        }
+        
+        // Добавляем меню в документ
+        document.body.appendChild(menu);
+        
+        // Закрываем меню при клике вне его
+        setTimeout(() => {
+            document.addEventListener('click', function closeMenu(e) {
+                if (!menu.contains(e.target)) {
+                    menu.remove();
+                    document.removeEventListener('click', closeMenu);
+                }
+            });
+        }, 0);
+    }
+
     function closeChatModal() {
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'visible';
@@ -1748,7 +1848,9 @@
     // Функция загрузки сообщений чата
     async function loadChatMessages() {
         try {
-            const { data: messages } = await _sb.from('messages').select('*').order('created_at', { ascending: true }).limit(50);  // Сократили с 100 на 50 для оптимизации
+            // Ограничиваем количество сообщений до 30 для быстрости
+            // Ограничиваем кол-во сообщений до 30 для быстроты рендера
+            const { data: messages } = await _sb.from('messages').select('*').order('created_at', { ascending: true }).limit(30);
             const container = document.getElementById('chatMessages');
 
             if (!messages || messages.length === 0) {
@@ -1842,12 +1944,23 @@
 
                 messageEl.innerHTML = `
                     ${deleteButtonHTML}
-                    ${!isOwn ? `<div class="chat-message-author" style="display: flex; align-items: center;">${avatarHTML}<span>${msg.author_name || 'Аноним'}</span> ${starsBadge} ${isAdmin ? `<button style="margin-left: 5px; background: #ff9500; color: white; border: none; border-radius: 3px; padding: 1px 4px; font-size: 9px; cursor: pointer;" onclick="deleteAllUserMessages(${msg.author_id}, '${(msg.author_name || 'Пользователь').replace(/'/g, "\\'")}')" title="Удалить все сообщения этого пользователя">🗑️</button><button style="margin-left: 3px; background: #ff3b30; color: white; border: none; border-radius: 3px; padding: 1px 4px; font-size: 9px; cursor: pointer;" onclick="quickBanUser(${msg.author_id}, '${(msg.author_name || 'Пользователь').replace(/'/g, "\\'")}')" title="Забанить пользователя">🚫</button>` : ''}</div>` : ''}
+                    ${!isOwn ? `<div class="chat-message-author" style="display: flex; align-items: center; cursor: pointer;" data-user-id="${msg.author_id}" data-user-name="${(msg.author_name || 'Пользователь').replace(/"/g, '&quot;')}">${avatarHTML}<span>${msg.author_name || 'Аноним'}</span> ${starsBadge}</div>` : ''}
                     <div>${msg.text || ''}</div>
                     ${photoHTML}
                     <div class="chat-message-time">${timestamp}</div>
                 `;
                 container.appendChild(messageEl);
+                
+                // Добавляем обработчик клика на сообщение (если админ)
+                if (isAdmin && !isOwn) {
+                    messageEl.style.cursor = 'pointer';
+                    messageEl.addEventListener('click', function(e) {
+                        const author = this.querySelector('[data-user-id]');
+                        if (author) {
+                            showChatContextMenu(e, msg, author.dataset.userId, author.dataset.userName);
+                        }
+                    });
+                }
             });
 
             // Скролим вниз к последнему сообщению
@@ -2223,11 +2336,15 @@
             feed.innerHTML = '<div style="color: red; padding: 20px;">Ошибка загрузки</div>';
         }
         
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
         document.getElementById('activityModal').classList.add('active');
     }
 
     // Функция закрытия ленты событий
     function closeActivityModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
         document.getElementById('activityModal').classList.remove('active');
     }
 
@@ -2273,13 +2390,13 @@
     }
 
     // Инициализация карты Яндекс.Карты
-    // Функция проверки баня при загрузке
+    // Функция проверки бана при загрузке
     async function checkBanStatus() {
         try {
             const { data: banned, error } = await _sb.from('bans').select('*').eq('user_id', uid).maybeSingle();
             
             if (error) {
-                console.warn('Ошибка при проверке баня:', error?.message);
+                console.warn('Ошибка при проверке бана:', error?.message);
                 return false;
             }
             
@@ -2326,7 +2443,7 @@
     }
 
     ymaps.ready(async () => {
-        // Проверяем баня ПЕРЕД инициализацией карты
+        // Проверяем бана ПЕРЕД инициализацией карты
         const isBanned = await checkBanStatus();
         if (isBanned) return; // Прерываем инициализацию если забанен
         
