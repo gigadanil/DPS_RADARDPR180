@@ -194,6 +194,21 @@
 </head>
 <body>
     <div class="target">📍</div>
+
+    <!-- Overlay: Требуется вход через Telegram -->
+    <div id="tgAuthOverlay" class="auth-overlay" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:20px; border-radius:12px; max-width:420px; width:90%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
+            <h3 style="margin-top:0;">Требуется вход через Telegram</h3>
+            <p style="color:#444;">Для использования приложения необходимо открыть его через Telegram-бота и пройти регистрацию.</p>
+            <div style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
+                <button onclick="openTelegramBot()" style="padding:10px 14px; border-radius:10px; border:none; background:#00a2ff; color:#fff; font-weight:700;">Открыть в Telegram</button>
+                <button onclick="location.reload()" style="padding:10px 14px; border-radius:10px; border:1px solid #ccc; background:#fff;">Перезагрузить</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Онлайн-счётчик пользователей -->
+    <div id="onlineCountBadge" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 1600; background: white; padding: 6px 10px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); font-weight:700; display: none;">Онлайн: —</div>
     <div id="map"></div>
     
     <!-- Кнопка чата -->
@@ -438,10 +453,12 @@
     </div>
     
     <!-- Модальное окно для просмотра фото в полный размер -->
+    <input type="hidden" id="photoUrl" value="">
     <div id="photoViewerModal" class="modal" onclick="closePhotoViewer()">
         <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; padding: 20px;" onclick="event.stopPropagation()">
             <div style="position: relative; max-width: 90vw; max-height: 90vh;">
                 <button class="modal-close" onclick="closePhotoViewer()" style="position: absolute; top: -50px; right: 0; font-size: 30px;">✕</button>
+                <button class="modal-close" onclick="deletePhotoFromChat()" style="position: absolute; top: -50px; right: 40px; font-size: 24px; background: #ff3b30; color: white; border: none; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;" title="Удалить фото">🗑️</button>
                 <img id="photoViewerImage" src="" style="max-width: 100%; max-height: 90vh; border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);" alt="Photo">
             </div>
         </div>
@@ -508,6 +525,8 @@
     // Константы для подключения к Supabase базе данных
     const SUPABASE_URL = "https://phazbjchjhsruwalddis.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
+    // Telegram bot username (used to open/start the bot when user is not in Telegram)
+    const BOT_USERNAME = 'DPSRADARDPR180bot';
     // Клиент Supabase для работы с БД
     const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     
@@ -520,11 +539,27 @@
             )
         ]);
     }
+
+    // Открыть бот в Telegram (пытаемся сначала tg://, затем https://)
+    function openTelegramBot() {
+        try {
+            const tgUrl = `tg://resolve?domain=${BOT_USERNAME}`;
+            const webUrl = `https://t.me/${BOT_USERNAME}`;
+            // Попытка открыть в приложении
+            window.open(tgUrl, '_blank');
+            // Через 300ms открываем веб-вариант как fallback
+            setTimeout(() => { window.open(webUrl, '_blank'); }, 300);
+        } catch (e) {
+            console.warn('Не удалось открыть Telegram:', e);
+            window.open(`https://t.me/${BOT_USERNAME}`, '_blank');
+        }
+    }
     
     // Иконки для разных типов маркеров (ДПС, Рейд, Камера, ДТП, Работы, SOS)
     const MAP_ICONS = { dps: '👮', patrol: '🚔', camera: '📸', dtp: '💥', works: '🚧', sos: '🆘' };
-    // ID текущего пользователя из Telegram или "guest" если не авторизован
-    const uid = window.Telegram?.WebApp?.initDataUnsafe?.user?.id?.toString() || "guest";
+    // ID текущего пользователя из Telegram (null если не авторизован)
+    const rawTgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+    const uid = rawTgId ? Number(rawTgId) : null;
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
     let myMap, selectedType = 'dps';
     // Текущее GPS местоположение пользователя
@@ -777,7 +812,9 @@
         // Получаем данные Telegram
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
         if (!tgUser) {
-            alert('Приложение должно открываться через Telegram бота');
+            // Показываем оверлей с требованием открыть через Telegram
+            const overlay = document.getElementById('tgAuthOverlay');
+            if (overlay) overlay.style.display = 'flex';
             return;
         }
 
@@ -798,6 +835,9 @@
             document.getElementById('adminBtn').classList.add('visible');
         }
 
+        // Показываем онлайн-бейдж (если поддерживается)
+        try { document.getElementById('onlineCountBadge').style.display = 'block'; } catch(e) {}
+
         // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
         try {
             const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle();
@@ -814,6 +854,18 @@
             console.warn('drivers table read failed:', e.message || e);
             document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
             openRegistrationModal();
+        }
+
+        // Начинаем обновлять last_seen и загружать онлайн-статистику
+        try {
+            await updateLastSeen();
+            // heartbeat каждую минуту
+            setInterval(() => { updateLastSeen().catch(()=>{}); }, 60*1000);
+            // обновление счётчика онлайн каждые 30 секунд
+            await loadOnlineCount();
+            setInterval(() => { loadOnlineCount().catch(()=>{}); }, 30*1000);
+        } catch (e) {
+            console.warn('Не удалось запустить heartbeat/online count:', e?.message || e);
         }
     }
 
@@ -1302,6 +1354,7 @@
     // Функция открытия просмотра фото
     function openPhotoViewer(photoUrl) {
         document.getElementById('photoViewerImage').src = photoUrl;
+        document.getElementById('photoUrl').value = photoUrl;
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
         document.getElementById('photoViewerModal').classList.add('active');
@@ -1312,6 +1365,50 @@
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'visible';
         document.getElementById('photoViewerModal').classList.remove('active');
+    }
+    
+    // Функция удаления фото из чата
+    async function deletePhotoFromChat() {
+        const photoUrl = document.getElementById('photoUrl')?.value;
+        if (!photoUrl) {
+            alert('Фото не найдено');
+            return;
+        }
+        
+        if (!confirm('Удалить это фото?')) return;
+        
+        try {
+            // Найти сообщение с этим фото и удалить его
+            const { data: messages } = await _sb.from('messages').select('id, author_id').eq('photo_url', photoUrl);
+            
+            if (!messages || messages.length === 0) {
+                alert('Сообщение с этим фото не найдено');
+                return;
+            }
+            
+            const msg = messages[0];
+            const isOwnMessage = msg.author_id === uid;
+            const isAdminDeleting = isAdmin && msg.author_id !== uid;
+            
+            if (!isOwnMessage && !isAdminDeleting) {
+                alert('Вы можете удалять только свои фото');
+                return;
+            }
+            
+            // Удаляем сообщение с фото
+            const { error } = await _sb.from('messages').delete().eq('id', msg.id);
+            if (error) {
+                alert('Ошибка удаления: ' + (error?.message || 'неизвестная ошибка'));
+                return;
+            }
+            
+            alert('✅ Фото и сообщение удалены');
+            closePhotoViewer();
+            await loadChatMessages();
+        } catch (e) {
+            console.error('Ошибка при удалении фото:', e);
+            alert('Ошибка: ' + (e?.message || e));
+        }
     }
 
     // Функция выхода из аккаунта
@@ -1968,24 +2065,30 @@
 
     // Функция удаления одного сообщения
     async function deleteMessage(messageId, authorId) {
-        const isOwnMessage = String(authorId) === String(uid);
-        const isAdminDeleting = isAdmin && String(authorId) !== String(uid);
-        
-        if (!isOwnMessage && !isAdminDeleting) {
-            alert('Вы можете удалять только свои сообщения');
-            return;
-        }
-        
-        if (!confirm('Удалить это сообщение?')) return;
-        
         try {
-            const { error } = await _sb.from('messages').delete().eq('id', messageId);
+            const msgId = parseInt(messageId);
+            const authId = parseInt(authorId);
+            
+            const isOwnMessage = authId === uid;
+            const isAdminDeleting = isAdmin && authId !== uid;
+            
+            if (!isOwnMessage && !isAdminDeleting) {
+                alert('Вы можете удалять только свои сообщения');
+                return;
+            }
+            
+            if (!confirm('Удалить это сообщение?')) return;
+            
+            const { error } = await _sb.from('messages').delete().eq('id', msgId);
             if (error) {
+                console.error('Ошибка удаления:', error);
                 alert('Ошибка удаления: ' + (error?.message || 'неизвестная ошибка'));
                 return;
             }
+            console.log('✅ Сообщение удалено:', msgId);
             await loadChatMessages();
         } catch (e) {
+            console.error('Ошибка при удалении:', e);
             alert('Ошибка удаления: ' + (e?.message || e));
         }
     }
@@ -2014,35 +2117,67 @@
 
     // Функция отправки жалобы на пользователя
     async function reportUser(userId, userName, reportType = 'сообщение', content = '') {
+        if (!uid) {
+            alert('Пожалуйста, авторизуйтесь через Telegram');
+            const overlay = document.getElementById('tgAuthOverlay'); if (overlay) overlay.style.display = 'flex';
+            return;
+        }
+        if (!currentDriver) {
+            alert('Пожалуйста, завершите регистрацию через Telegram перед отправкой жалобы');
+            openRegistrationModal();
+            return;
+        }
+
         const reason = prompt(`Пожаловаться на пользователя "${userName}"?\n\nУкажите причину жалобы:\n\nПримеры: "Оскорбления", "Спам", "Ложные метки", "Мошенничество"`, '');
         
         if (reason === null) return; // Отмена
         if (!reason.trim()) return alert('Укажите причину жалобы');
         
         try {
-            // Проверяем, существует ли таблица reports, если её нет - создадим запись или выведем ошибку
-            const { error } = await _sb.from('reports').insert([{
+            // Попытка записать жалобу в таблицу reports
+            const reportData = {
                 reporter_id: uid,
                 reported_user_id: userId,
                 reported_user_name: userName,
                 report_type: reportType,
                 reason: reason.trim(),
                 content: content,
+                status: 'new',
                 created_at: new Date().toISOString()
-            }]);
+            };
             
-            if (error) {
-                if (error.code === 'PGRST116') {
-                    alert('⚠️ Систем жалоб на данный момент недоступна. Администраторы будут уведомлены о проблеме.');
-                } else {
-                    alert('Ошибка при отправке жалобы: ' + (error?.message || 'неизвестная ошибка'));
+            const { error: reportError } = await _sb.from('reports').insert([reportData]);
+            
+            if (reportError) {
+                console.error('Ошибка при записи в таблицу reports:', reportError);
+                
+                // Если таблица не существует - сохраняем в альтернативную таблицу или логируем
+                if (reportError.message && reportError.message.includes('reports')) {
+                    console.warn('Таблица reports не существует. Попытаемся сохранить в messages...');
+                    
+                    // Альтернативный вариант - сохраняем как специальное сообщение в чат
+                    const adminMessage = {
+                        author_id: -1,
+                        author_name: '🚨 АДМИН АЛЕРТ',
+                        text: `📋 ЖАЛОБА: ${reason.trim()}\n👤 На: ${userName} (ID: ${userId})\n📝 Тип: ${reportType}\n📌 От: пользователя`,
+                        created_at: new Date().toISOString()
+                    };
+                    
+                    const { error: msgError } = await _sb.from('messages').insert([adminMessage]);
+                    
+                    if (msgError) {
+                        alert('⚠️ Ошибка при отправке жалобы: ' + (msgError?.message || 'неизвестная ошибка'));
+                        console.error('Ошибка при сохранении альтернативной жалобы:', msgError);
+                        return;
+                    }
                 }
-                return;
             }
             
             alert('✅ Спасибо за сообщение! Ваша жалоба успешно отправлена администраторам.');
+            console.log('✅ Жалоба отправлена:', reportData);
         } catch (e) {
-            alert('❌ Ошибка: ' + (e?.message || e));
+            console.error('Ошибка при отправке жалобы:', e);
+            alert('❌ Ошибка при отправке жалобы: ' + (e?.message || e));
         }
     }
 
@@ -2271,7 +2406,7 @@
 
                 let deleteButtonHTML = '';
                 if (canDelete) {
-                    deleteButtonHTML = `<button style="position: absolute; top: 5px; right: 5px; background: #ff3b30; color: white; border: none; border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer;" onclick="deleteMessage(${msg.id}, ${msg.author_id})">❌</button>`;
+                    deleteButtonHTML = `<button class="chat-delete-btn" data-msg-id="${msg.id}" data-author-id="${msg.author_id}" style="position: absolute; top: 5px; right: 5px; background: #ff3b30; color: white; border: none; border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer; transition: all 0.2s;" title="Удалить сообщение">❌</button>`;
                 }
 
                 // Бейдж звёзд
@@ -2319,12 +2454,31 @@
                 }
                 container.appendChild(messageEl);
                 
+                // Добавляем обработчик на кнопку удаления
+                const deleteBtn = messageEl.querySelector('.chat-delete-btn');
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', async function(e) {
+                        e.stopPropagation();
+                        const msgId = this.dataset.msgId;
+                        const authorId = this.dataset.authorId;
+                        await deleteMessage(msgId, authorId);
+                    });
+                    deleteBtn.addEventListener('mouseover', function() {
+                        this.style.background = '#d32f2b';
+                        this.style.transform = 'scale(1.1)';
+                    });
+                    deleteBtn.addEventListener('mouseout', function() {
+                        this.style.background = '#ff3b30';
+                        this.style.transform = 'scale(1)';
+                    });
+                }
+                
                 // Добавляем обработчик клика на сообщение (если админ)
                 if (isAdmin && !isOwn) {
                     messageEl.style.cursor = 'pointer';
                     messageEl.addEventListener('click', function(e) {
                         const author = this.querySelector('[data-user-id]');
-                        if (author) {
+                        if (author && !e.target.closest('.chat-delete-btn')) {
                             showChatContextMenu(e, msg, author.dataset.userId, author.dataset.userName);
                         }
                     });
@@ -2375,6 +2529,11 @@
 
     // Функция отправки сообщения в чат
     async function sendChatMessage() {
+        if (!currentDriver) {
+            alert('Пожалуйста, завершите регистрацию через Telegram');
+            openRegistrationModal();
+            return;
+        }
         const messageText = document.getElementById('chatInput').value.trim();
         
         if (!messageText && !selectedChatPhoto) {
@@ -2445,6 +2604,45 @@
         } catch (e) {
             alert('❌ Ошибка отправки: ' + (e?.message || e));
             console.error('Ошибка отправки:', e);
+        }
+    }
+
+    // Обновляет поле last_seen для текущего пользователя (если колонка существует)
+    let presenceSupported = true;
+    async function updateLastSeen() {
+        if (!uid) return;
+        if (!presenceSupported) return;
+        try {
+            const payload = { user_id: uid, last_seen: new Date().toISOString() };
+            const { error } = await _sb.from('drivers').upsert([payload], { onConflict: 'user_id' });
+            if (error) {
+                // Если возникает ошибка, возможно колонки нет — отключаем поддержку
+                console.warn('updateLastSeen error:', error.message || error);
+                presenceSupported = false;
+            }
+        } catch (e) {
+            console.warn('Ошибка updateLastSeen:', e?.message || e);
+            presenceSupported = false;
+        }
+    }
+
+    // Загружает количество пользователей с last_seen в пределах последних 2 минут
+    async function loadOnlineCount() {
+        const badge = document.getElementById('onlineCountBadge');
+        if (!badge) return;
+        if (!presenceSupported) {
+            badge.textContent = 'Онлайн: N/A';
+            return;
+        }
+        try {
+            const threshold = new Date(Date.now() - 2*60*1000).toISOString();
+            const res = await _sb.from('drivers').select('user_id', { count: 'exact' }).gte('last_seen', threshold);
+            const count = res.count || (res.data ? res.data.length : 0);
+            badge.textContent = `Онлайн: ${count}`;
+        } catch (e) {
+            console.warn('Ошибка loadOnlineCount:', e?.message || e);
+            badge.textContent = 'Онлайн: ?';
+            presenceSupported = false;
         }
     }
 
@@ -2524,8 +2722,9 @@
     // Функция подтверждения актуальности метки (голосование "Стоят" или "Уехали")
     window.confirmMarker = async (markerId, status) => {
         // status: 'stay' или 'leave'
-        if (!uid || uid === 'guest') {
+        if (!uid) {
             alert('Пожалуйста, авторизуйтесь через Telegram');
+            const overlay = document.getElementById('tgAuthOverlay'); if (overlay) overlay.style.display = 'flex';
             return;
         }
 
