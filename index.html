@@ -11,10 +11,18 @@
         :root { --blue: #007aff; --bg: #f2f2f7; --gray: #8e8e93; }
         body, html { width: 100%; height: 100%; margin: 0; padding: 0; font-family: -apple-system, sans-serif; background: var(--bg); overflow: hidden; }
         #map { width: 100%; height: 100%; position: absolute; }
-        .target { position: absolute; top: 50%; left: 50%; transform: translate(-50%, calc(-100% - var(--target-shift, 0px))); z-index: 2000; pointer-events: none; color: var(--blue); }
-        .target svg { width: 45px; height: 45px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
-        /* .target.shift-up теперь управляет дополнительным сдвигом через JS */
-        .target.shift-up { transform: translateY(var(--target-shift, 0px)); }
+        .target {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -100%);
+            z-index: 9999;
+            pointer-events: none;
+            font-size: 40px;
+            transition: visibility 0.2s, opacity 0.2s;
+            visibility: visible;
+            opacity: 1;
+        }
         .bottom-ui { position: absolute; bottom: 20px; left: 0; right: 0; z-index: 1000; padding: 0 10px; }
         .action-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-radius: 24px; padding: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); position: relative; }
         .action-card.hidden { display: none; }
@@ -142,7 +150,7 @@
     </style>
 </head>
 <body>
-    <div class="target"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z"/></svg></div>
+    <div class="target">📍</div>
     <div id="map"></div>
     
     <!-- Кнопка чата -->
@@ -156,6 +164,12 @@
             <div class="modal-header">
                 <h2 style="margin: 0;">Общий чат</h2>
                 <button class="modal-close" onclick="closeChatModal()">✕</button>
+            </div>
+            <!-- Быстрый бан/разбан по Telegram ID -->
+            <div style="display:flex; gap:8px; margin-top:10px; margin-bottom:10px; align-items:center;">
+                <input id="banTgIdInput" placeholder="Telegram ID для бана/разбана" style="flex:1; padding:8px; border-radius:8px; border:1px solid #ddd;">
+                <button class="delete-btn" style="background:#ff9500;" onclick="banByTgId()">🚫 Забанить</button>
+                <button class="delete-btn" style="background:#34c759;" onclick="unbanByTgId()">✅ Разбан</button>
             </div>
             
             <div class="chat-messages" id="chatMessages">
@@ -442,6 +456,17 @@
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
     // Клиент Supabase для работы с БД
     const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    
+    // Вспомогательная функция для запросов к Supabase с таймаутом
+    async function queryWithTimeout(promise, timeoutMs = 15000) {
+        return Promise.race([
+            promise,
+            new Promise((_, reject) =>
+                setTimeout(() => reject(new Error(`Timeout: нет ответа от сервера в течение ${timeoutMs/1000}с - проверьте сеть`)), timeoutMs)
+            )
+        ]);
+    }
+    
     // Иконки для разных типов маркеров (ДПС, Рейд, Камера, ДТП, Работы, SOS)
     const MAP_ICONS = { dps: '👮', patrol: '🚔', camera: '📸', dtp: '💥', works: '🚧', sos: '🆘' };
     // ID текущего пользователя из Telegram или "guest" если не авторизован
@@ -454,6 +479,8 @@
     let gpsWatchId = null;
     // Маркер текущего местоположения на карте
     let userLocationMarker = null;
+    // Коллекция для маркеров (чтобы не удалять служебные geoObjects при обновлении)
+    let markersCollection = null;
     // Флаг автоследования: если true — карта центрируется на пользователе при обновлении GPS
     let autoFollow = true;
     // Данные профиля текущего пользователя
@@ -474,6 +501,12 @@
     let actionCardVisible = true;
     // Флаг для отключения автосцентрирования GPS после размещения метки
     let disableAutoFollowOnce = false;
+    // Кэш данных авторов для оптимизации запросов к БД
+    let authorsCache = {};
+    let authorsCacheTime = 0;
+    const CACHE_DURATION = 30000; // Кэширование на 30 секунд
+    // Таймер для дебаунса loadMarkers
+    let loadMarkersTimeout = null;
 
     // Функция для переключения видимости нижнего виджета
     function toggleActionCard() {
@@ -483,35 +516,15 @@
         const openBtn = document.getElementById('openActionBtn');
         if (actionCardVisible) {
             card.classList.remove('hidden');
-            // сдвигаем центральную метку выше, чтобы она не перекрывалась виджетом
-            if (target) target.classList.add('shift-up');
-            // обновляем реальный сдвиг в px
-            updateTargetOffset();
+            // Метка остаётся видна
+            if (target) target.style.visibility = 'visible';
             if (openBtn) openBtn.classList.remove('visible');
         } else {
             card.classList.add('hidden');
-            if (target) target.classList.remove('shift-up');
-            // сбрасываем сдвиг
-            updateTargetOffset();
+            // Метка остаётся видна
+            if (target) target.style.visibility = 'visible';
             if (openBtn) openBtn.classList.add('visible');
         }
-    }
-
-    // Динамически вычисляет сдвиг центральной метки, чтобы она не перекрывалась нижним виджетом
-    function updateTargetOffset() {
-        const target = document.querySelector('.target');
-        const bottom = document.querySelector('.bottom-ui');
-        if (!target) return;
-        let shift = 0;
-        if (bottom && !bottom.classList.contains('hidden')) {
-            // берём высоту виджета (включая отступы) и добавляем больший запас для мобильных
-            const rect = bottom.getBoundingClientRect();
-            const isMobile = window.innerHeight < 800; // Телефон обычно <800px высотой
-            const margin = isMobile ? 100 : 80; // Увеличиваем запас, чтобы метка не пропадала за виджет
-            shift = Math.max(0, rect.height + margin);
-        }
-        // применяем значение в CSS-переменную
-        target.style.setProperty('--target-shift', shift + 'px');
     }
 
     // Границы Донецкой области ДНР (примерные координаты)
@@ -522,7 +535,17 @@
         east: 40.4      // Восточная граница
     };
 
-    // Функция инициализации GPS отслеживания
+    // Дебаунс функция для предотвращения частых вызовов
+    function debounce(func, delay) {
+        let timeoutId;
+        return function(...args) {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(() => func.apply(this, args), delay);
+        };
+    }
+    
+    // Кэшированная версия loadMarkers с дебаунсом
+    const loadMarkersDebounced = debounce(() => loadMarkers(), 500);
     function initGPS() {
         if (!navigator.geolocation) {
             console.warn('Geolocation не поддерживается браузером');
@@ -775,17 +798,23 @@
         const car = document.getElementById('driver-car').value;
         const plate = document.getElementById('driver-plate').value;
 
-        // Проверяем, существует ли уже пользователь с этим user_id
         try {
-            const { data: existingDriver } = await _sb.from('drivers').select('user_id').eq('user_id', uid).maybeSingle();
+            // Проверяем, существует ли уже пользователь с этим user_id
+            const { data: existingDriver } = await queryWithTimeout(
+                _sb.from('drivers').select('user_id').eq('user_id', uid).maybeSingle(),
+                10000
+            );
             
             if (existingDriver) {
                 // Если водитель существует, обновляем его данные
-                const { error } = await _sb.from('drivers').update({
-                    name: name,
-                    car_model: car,
-                    car_plate: plate
-                }).eq('user_id', uid);
+                const { error } = await queryWithTimeout(
+                    _sb.from('drivers').update({
+                        name: name,
+                        car_model: car,
+                        car_plate: plate
+                    }).eq('user_id', uid),
+                    10000
+                );
 
                 if (!error) {
                     currentDriver = {
@@ -798,18 +827,21 @@
                         markers_count: 0
                     };
                     closeRegistrationModal();
-                    alert('Профиль обновлен, ' + name + '!');
+                    alert('✅ Профиль обновлен, ' + name + '!');
                 } else {
-                    alert('Ошибка обновления профиля: ' + (error?.message || 'неизвестная ошибка'));
+                    alert('❌ Ошибка обновления: ' + (error?.message || 'попытайте еще раз'));
                 }
             } else {
                 // Если водителя нет, вставляем его
-                const { error } = await _sb.from('drivers').insert([{
-                    user_id: uid,
-                    name: name,
-                    car_model: car,
-                    car_plate: plate
-                }]);
+                const { error } = await queryWithTimeout(
+                    _sb.from('drivers').insert([{
+                        user_id: uid,
+                        name: name,
+                        car_model: car,
+                        car_plate: plate
+                    }]),
+                    10000
+                );
 
                 if (!error) {
                     currentDriver = {
@@ -822,13 +854,19 @@
                         markers_count: 0
                     };
                     closeRegistrationModal();
-                    alert('Спасибо за регистрацию, ' + name + '! Теперь вы можете добавлять метки.');
+                    alert('✅ Спасибо за регистрацию, ' + name + '!');
                 } else {
-                    alert('Ошибка регистрации: ' + (error?.message || 'неизвестная ошибка'));
+                    alert('❌ Ошибка регистрации: ' + (error?.message || 'попытайте еще раз'));
                 }
             }
         } catch (e) {
-            alert('Ошибка регистрации: ' + (e?.message || e));
+            // Обработка AbortError и timeout
+            if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
+                alert('❌ Ошибка состояния сети\n\nУбедитесь, что:\n- Включена мобильная связь или Wi-Fi\n- Есть подключение к интернету\n\nПопробуйте еще раз.');
+            } else if (e?.message?.includes('Timeout')) {
+                alert('❌ Сервер не отвечает\n\nСервер работает слишком долго. Попробуйте еще раз через минуту.');
+            } else {
+                alert('❌ Ошибка регистрации:\n\n' + (e?.message || String(e)));\n            }\n            console.error('Ошибка регистрации:', e);
         }
     }
 
@@ -1548,6 +1586,20 @@
         }
     }
 
+    // Бан/Разбан по TG ID из поля ввода (в админ-панели)
+    function banByTgId() {
+        const id = (document.getElementById('banTgIdInput') || {}).value;
+        if (!id) return alert('Введите Telegram ID для бана');
+        // Используем бан по ID - имя указываем как ID в подсказках
+        banDriver(id, id);
+    }
+
+    function unbanByTgId() {
+        const id = (document.getElementById('banTgIdInput') || {}).value;
+        if (!id) return alert('Введите Telegram ID для разбана');
+        unbanDriver(id, id);
+    }
+
     // Функция удаления водителя (админ)
     async function deleteDriver(driverId) {
         if (!isAdmin) {
@@ -1606,16 +1658,12 @@
         await loadChatMessages();
         // Автоматически обновляем сообщения каждые 2 секунды
         chatUpdateInterval = setInterval(loadChatMessages, 2000);
-        // Смещаем центральную метку при открытии чата
-        setTimeout(() => updateTargetOffset(), 100);
     }
 
     // Функция закрытия чата
     function closeChatModal() {
         document.getElementById('chatModal').classList.remove('active');
         if (chatUpdateInterval) clearInterval(chatUpdateInterval);
-        // Возвращаем центральную метку на место при закрытии чата
-        updateTargetOffset();
     }
 
     // Функция удаления одного сообщения
@@ -1670,7 +1718,7 @@
     // Функция загрузки сообщений чата
     async function loadChatMessages() {
         try {
-            const { data: messages } = await _sb.from('messages').select('*').order('created_at', { ascending: true }).limit(100);
+            const { data: messages } = await _sb.from('messages').select('*').order('created_at', { ascending: true }).limit(50);  // Сократили с 100 на 50 для оптимизации
             const container = document.getElementById('chatMessages');
 
             if (!messages || messages.length === 0) {
@@ -1678,14 +1726,38 @@
                 return;
             }
 
-            // Собираем уникальные авторы и получаем их likes_sum/is_trusted/avatar/avatar_url за один запрос
+            // Собираем уникальные авторы и получаем их данные (с кэшированием)
             const authorIds = Array.from(new Set(messages.map(m => String(m.author_id))));
             let authorsMap = {};
-            try {
-                const { data: authors } = await _sb.from('drivers').select('user_id,likes_sum,is_trusted,avatar,avatar_url').in('user_id', authorIds);
-                if (authors) authors.forEach(a => { authorsMap[String(a.user_id)] = a; });
-            } catch (e) {
-                console.warn('Не удалось загрузить данные профилей авторов (drivers):', e?.message || e);
+            const now = Date.now();
+            
+            // Проверяем, не устарел ли кэш
+            if (now - authorsCacheTime > CACHE_DURATION) {
+                authorsCache = {};
+                authorsCacheTime = now;
+            }
+            
+            // Берём из кэша то что есть
+            const cachedIds = authorIds.filter(id => authorsCache[id]);
+            const uncachedIds = authorIds.filter(id => !authorsCache[id]);
+            
+            // Копируем кэшированные данные
+            cachedIds.forEach(id => { authorsMap[id] = authorsCache[id]; });
+            
+            // Загружаем только некэшированные
+            if (uncachedIds.length > 0) {
+                try {
+                    const { data: authors } = await _sb.from('drivers').select('user_id,likes_sum,is_trusted,avatar,avatar_url').in('user_id', uncachedIds);
+                    if (authors) {
+                        authors.forEach(a => {
+                            const id = String(a.user_id);
+                            authorsMap[id] = a;
+                            authorsCache[id] = a; // Кэшируем
+                        });
+                    }
+                } catch (e) {
+                    console.warn('Не удалось загрузить данные профилей авторов:', e?.message || e);
+                }
             }
 
             // Утилита: переводим likes_sum в 0..5 звёзд
@@ -1709,8 +1781,8 @@
                 messageEl.style.position = 'relative';
 
                 let photoHTML = '';
-                if (msg.photo_url) {
-                    photoHTML = `<img src="${msg.photo_url}" class="chat-message-photo" onclick="openPhotoViewer('${msg.photo_url}')" title="Нажмите для увеличения">`;
+                if (msg.photo_url && msg.photo_url.trim()) {
+                    photoHTML = `<img src="${msg.photo_url}" class="chat-message-photo" onclick="openPhotoViewer('${msg.photo_url}')" title="Нажмите для увеличения" style="display: block; margin-top: 8px; max-width: 100%;">`;
                 }
 
                 const timestamp = new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -1801,7 +1873,7 @@
 
         let photoURL = null;
 
-        // Если есть фото, пытаемся загрузить его в Supabase Storage
+        // Если есть фото, загружаем его в Supabase Storage
         if (selectedChatPhoto) {
             try {
                 // Сжимаем изображение
@@ -1809,57 +1881,85 @@
                 
                 // Проверяем размер после сжатия (максимум 2MB)
                 if (compressedBlob.size > 2 * 1024 * 1024) {
-                    alert('Фото слишком большое даже после сжатия. Максимум 2MB.');
+                    alert('❌ Фото слишком большое даже после сжатия. Максимум 2MB.');
                     selectedChatPhoto = null;
                     return;
                 }
 
                 try {
                     const fileName = `chat-photos/${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                    const { error: uploadError, data: uploadData } = await _sb.storage.from('chat').upload(fileName, compressedBlob);
+                    console.log('Загруженное фото:', fileName, 'размер:', compressedBlob.size);
                     
-                    if (uploadError) {
-                        console.warn('Ошибка загрузки в Storage:', uploadError?.message);
-                        // Пытаемся получить URL даже если ошибка
-                        const { data } = _sb.storage.from('chat').getPublicUrl(fileName);
-                        if (data?.publicUrl) {
-                            photoURL = data.publicUrl;
-                        }
-                    } else {
-                        // Получаем публичный URL фото
-                        const { data } = _sb.storage.from('chat').getPublicUrl(fileName);
-                        photoURL = data?.publicUrl || null;
+                    // Специально для chat Storage нужен формат без `.storage`
+                    const uploadResult = await _sb.storage
+                        .from('chat')
+                        .upload(fileName, compressedBlob, {
+                            cacheControl: '3600',
+                            upsert: false
+                        });
+                    
+                    if (uploadResult.error) {
+                        console.error('❌ Ошибка загрузки на сервер:', uploadResult.error);
+                        alert('❌ Ошибка загрузки фото: ' + (uploadResult.error?.message || 'неизвестная ошибка'));
+                        selectedChatPhoto = null;
+                        return;
+                    }
+                    
+                    // Если загрузка успешна, получаем URL
+                    if (uploadResult.data) {
+                        const { data: urlData } = _sb.storage.from('chat').getPublicUrl(fileName);
+                        photoURL = urlData?.publicUrl;
+                        console.log('✅ Фото загружено, URL:', photoURL);
                     }
                 } catch (storageError) {
-                    console.warn('Ошибка Storage:', storageError?.message);
-                    // Продолжаем без фото
+                    console.error('❌ Ошибка Storage API:', storageError);
+                    alert('❌ Ошибка при загрузке фото: ' + (storageError?.message || 'проверьте сеть'));
+                    selectedChatPhoto = null;
+                    return;
                 }
             } catch (e) {
-                console.warn('Ошибка при загрузке фото:', e?.message || e);
-                // Продолжаем отправку без фото
+                console.error('❌ Ошибка при сжатии фото:', e?.message || e);
+                alert('❌ Ошибка обработки фото: ' + (e?.message || e));
+                selectedChatPhoto = null;
+                return;
             }
+        }
+
+        // Если фото требовалось, но не загружено - отменяем отправку
+        if (selectedChatPhoto && !photoURL) {
+            alert('❌ Фото не загружено. Попробуйте снова.');
+            return;
         }
 
         // Вставляем сообщение в БД
         try {
-            const { error } = await _sb.from('messages').insert([{
+            const messageData = {
                 author_id: uid,
                 author_name: currentDriver?.name || 'Аноним',
                 text: messageText || '',
-                photo_url: photoURL,
                 created_at: new Date().toISOString()
-            }]);
+            };
+            
+            // Добавляем фото только если оно есть
+            if (photoURL) {
+                messageData.photo_url = photoURL;
+            }
+            
+            const { error } = await _sb.from('messages').insert([messageData]);
 
             if (!error) {
+                console.log('✅ Сообщение отправлено');
                 document.getElementById('chatInput').value = '';
                 selectedChatPhoto = null;
                 document.getElementById('chatPhotoPreview').innerHTML = '';
                 await loadChatMessages();
             } else {
-                alert('Ошибка отправки: ' + (error?.message || 'неизвестная ошибка'));
+                alert('❌ Ошибка отправки: ' + (error?.message || 'неизвестная ошибка'));
+                console.error('Ошибка БД:', error);
             }
         } catch (e) {
-            alert('Ошибка отправки: ' + (e?.message || e));
+            alert('❌ Ошибка отправки: ' + (e?.message || e));
+            console.error('Ошибка отправки:', e);
         }
     }
 
@@ -2143,17 +2243,20 @@
         // Создаем карту с центром и уровнем зума
         myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
         
-        // Рисуем границы Донецкой области ДНР
-        const donetskBoundary = new ymaps.Rectangle([
-            [DONETSK_REGION.south, DONETSK_REGION.west],
-            [DONETSK_REGION.north, DONETSK_REGION.east]
-        ], {}, {
-            fillColor: '#0066ff33',
-            strokeColor: '#007aff',
-            strokeWidth: 2,
-            strokeOpacity: 0.7
-        });
-        myMap.geoObjects.add(donetskBoundary);
+        // Границы Донецкой области (скрыты)
+        // const donetskBoundary = new ymaps.Rectangle([
+        //     [DONETSK_REGION.south, DONETSK_REGION.west],
+        //     [DONETSK_REGION.north, DONETSK_REGION.east]
+        // ], {}, {
+        //     fillColor: '#0066ff33',
+        //     strokeColor: '#007aff',
+        //     strokeWidth: 2,
+        //     strokeOpacity: 0.7
+        // });
+        // myMap.geoObjects.add(donetskBoundary);
+        // Инициализируем коллекцию маркеров — её можно безопасно очищать без удаления прочих объектов
+        markersCollection = new ymaps.GeoObjectCollection();
+        myMap.geoObjects.add(markersCollection);
         
         // При изменении центра карты обновляем адрес
         myMap.events.add('actionend', () => {
@@ -2182,25 +2285,15 @@
         try { updateFollowButton(); } catch(e) { /* ignore */ }
         // Загружаем маркеры с сервера
         loadMarkers();
-        // Обновляем маркеры каждые 10 секунд
-        setInterval(loadMarkers, 10000);
+        // Обновляем маркеры каждые 20 секунд (вместо 10) для экономии батареи
+        setInterval(loadMarkersDebounced, 20000);
 
         // Если actionCard скрыт по умолчанию, показываем кнопку открытия
         const openBtn = document.getElementById('openActionBtn');
         if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
-        // Установим начальное положение центральной метки в зависимости от видимости виджета
-        const target = document.querySelector('.target');
-        if (target) {
-            if (actionCardVisible) target.classList.add('shift-up'); else target.classList.remove('shift-up');
-            // Обновляем сдвиг метки по высоте виджета
-            try { updateTargetOffset(); } catch(e) { console.warn(e); }
-        }
     });
 
-    // Обновляем сдвиг при изменении размера окна
-    window.addEventListener('resize', () => {
-        try { updateTargetOffset(); } catch(e) { /* ignore */ }
-    });
+
 
     // Функция проверки, находится ли точка в Донецкой области
     function isInDonetskRegion(coords) {
@@ -2305,8 +2398,8 @@
             counterEl.innerHTML = counterHTML;
         }
         
-        // Удаляем старые маркеры с карты
-        myMap.geoObjects.removeAll();
+        // Удаляем только маркеры, которые мы рендерим (не трогаем userLocationMarker и служебные объекты)
+        if (markersCollection) markersCollection.removeAll();
         // Получаем текущее местоположение карты (центр)
         const userCoords = myMap.getCenter();
 
@@ -2402,8 +2495,8 @@
             // Создаем маркер с иконкой и балуном
             const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: iconInner }, 
             { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [30, 30], iconImageOffset: [-15, -15] });
-            // Добавляем маркер на карту
-            myMap.geoObjects.add(p);
+            // Добавляем маркер в коллекцию
+            if (markersCollection) markersCollection.add(p);
             
             // Проверяем расстояние до опасных маркеров (камеры и ДПС)
             if ((m.type === 'camera' || m.type === 'dps') && m.coords && Array.isArray(m.coords)) {
