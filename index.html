@@ -255,10 +255,13 @@
         /* Стили для профиля и личного кабинета */
         .profile-btn { position: absolute; top: calc(15px + var(--safe-area-inset-top)); right: calc(15px + var(--safe-area-inset-right)); z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: white; border: 2px solid var(--blue); cursor: pointer; font-size: 22px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .profile-btn:active { transform: scale(1.05); }
+        /* Кнопка сообщения о баге */
+        .feedback-btn { position: absolute; top: calc(15px + var(--safe-area-inset-top)); right: calc(70px + var(--safe-area-inset-right)); z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: white; border: 2px solid #dc3545; cursor: pointer; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .feedback-btn:active { transform: scale(1.05); }
         /* Кнопка "Где я" */
-        .loc-btn { position: absolute; top: calc(15px + var(--safe-area-inset-top)); right: calc(70px + var(--safe-area-inset-right)); z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: white; border: 2px solid var(--blue); cursor: pointer; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
+        .loc-btn { position: absolute; top: calc(15px + var(--safe-area-inset-top)); right: calc(125px + var(--safe-area-inset-right)); z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: white; border: 2px solid var(--blue); cursor: pointer; font-size: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
         .loc-btn:active { transform: scale(1.05); }
-        .follow-toggle { position: absolute; top: calc(15px + var(--safe-area-inset-top)); right: calc(120px + var(--safe-area-inset-right)); z-index: 1500; width: 40px; height: 40px; border-radius: 50%; background: white; border: 2px solid #34c759; cursor: pointer; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
+        .follow-toggle { position: absolute; top: calc(15px + var(--safe-area-inset-top)); right: calc(180px + var(--safe-area-inset-right)); z-index: 1500; width: 40px; height: 40px; border-radius: 50%; background: white; border: 2px solid #34c759; cursor: pointer; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
         .follow-toggle.inactive { background: #fff; border-color: #ccc; color: #888; }
         .follow-toggle.active { background: #34c759; color: white; border-color: #34c759; }
         
@@ -497,7 +500,35 @@
             50% { transform: scale(1.1); }
         }
     </style>
+
+    <!-- ============= ЭКРАН ВВОДА КОДА ЗБТ ПРИГЛАШЕНИЯ ============= -->
+    <div id="betaInviteOverlay" class="beta-invite-overlay" style="display:none; position:fixed; inset:0; z-index:99998; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; font-family:system-ui, -apple-system, sans-serif;">
+        <div style="background:#fff; padding:40px 25px; border-radius:20px; max-width:450px; width:95%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); animation: slideUp 0.4s ease;">
+            <div style="font-size:64px; margin-bottom:20px; animation: pulse 2s ease-in-out infinite;">🎉</div>
+            <h2 style="margin:0 0 10px 0; font-size:28px; font-weight:800; color:#222;">Закрытое Бета-Тестирование</h2>
+            <p style="color:#666; font-size:15px; line-height:1.6; margin:0 0 30px 0;">
+                Введите код приглашения для доступа<br>к приложению EASY RIDE 180
+            </p>
+            
+            <div style="display:flex; flex-direction:column; gap:15px; margin-bottom:25px;">
+                <input id="betaInviteCode" type="text" placeholder="Введите код приглашения..." style="padding:14px 16px; border:2px solid #e0e0e0; border-radius:12px; font-size:16px; font-weight:600; letter-spacing:2px; text-transform:uppercase; text-align:center; transition:all 0.3s; outline:none;" onfocus="this.style.borderColor='#007aff'; this.style.boxShadow='0 0 0 3px rgba(0,122,255,0.1)'" onblur="this.style.borderColor='#e0e0e0'; this.style.boxShadow='none'">
+                
+                <button onclick="verifyBetaCode()" style="padding:14px 20px; border-radius:12px; border:none; background:linear-gradient(135deg, #007aff 0%, #0051d5 100%); color:#fff; font-weight:700; font-size:16px; cursor:pointer; transition:all 0.3s; box-shadow:0 4px 12px rgba(0,122,255,0.3);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,122,255,0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,122,255,0.3)'">
+                    ✓ Проверить код
+                </button>
+            </div>
+            
+            <div id="betaStatus" style="display:none; padding:12px; border-radius:10px; margin-bottom:20px; font-size:14px; font-weight:500;"></div>
+            
+            <div style="padding:15px; background:#f9f9f9; border-radius:12px; border:1px solid #e0e0e0;">
+                <p style="margin:0; font-size:13px; color:#888; line-height:1.6;">
+                    💡 Код мог быть выслан вам<br>в личные сообщения в Telegram
+                </p>
+            </div>
+        </div>
+    </div>
     
+
     <!-- Онлайн-счётчик пользователей -->
     <div id="onlineCountBadge" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 1600; background: white; padding: 6px 10px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); font-weight:700; display: none;">Онлайн: —</div>
     <div id="map"></div>
@@ -537,10 +568,81 @@
     <button class="admin-btn" id="adminBtn" onclick="openAdminModal()">⚙️</button>
     <!-- Кнопка профиля -->
     <button class="profile-btn" id="profileBtn" onclick="openProfileModal()" title="Профиль">👤</button>
+    <!-- Кнопка отправки нареканий -->
+    <button class="feedback-btn" id="feedbackBtn" onclick="openBugReportModal()" title="Сообщить о баге">🐛</button>
     <!-- Кнопка 'Где я' -->
     <button class="loc-btn" id="locBtn" onclick="centerOnMyLocation()" title="Где я">📍</button>
     <!-- Переключатель автослежения GPS -->
     <button class="follow-toggle" id="followToggleBtn" onclick="toggleFollow()" title="Автослежение GPS">🔔</button>
+    
+    <!-- Модальное окно отправки отчета о баге -->
+    <div id="bugReportModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2 style="margin: 0;">🐛 Сообщить о баге</h2>
+                <button class="modal-close" onclick="closeBugReportModal()">✕</button>
+            </div>
+            
+            <div style="padding: 20px; max-height: 70vh; overflow-y: auto;">
+                <p style="color: #666; margin-bottom: 20px;">Помогите нам улучшить приложение. Опишите найденную проблему:</p>
+                
+                <!-- Категория -->
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Категория:</label>
+                    <select id="bugCategory" style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        <option value="ui">🎨 Проблема интерфейса</option>
+                        <option value="map">🗺️ Проблема карты</option>
+                        <option value="markers">📍 Проблема с метками</option>
+                        <option value="chat">💬 Проблема чата</option>
+                        <option value="crash">💥 Приложение зависло</option>
+                        <option value="performance">⚡ Проблема производительности</option>
+                        <option value="other">❓ Другое</option>
+                    </select>
+                </div>
+                
+                <!-- Описание -->
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Описание проблемы:</label>
+                    <textarea id="bugDescription" 
+                        style="width: 100%; min-height: 120px; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-family: inherit; font-size: 14px; resize: vertical;"
+                        placeholder="Что произошло? Когда появилась проблема? Какие шаги привели к ошибке?"></textarea>
+                </div>
+                
+                <!-- Контакт -->
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Ваше имя (опционально):</label>
+                    <input type="text" id="bugReporterName" 
+                        style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;"
+                        placeholder="Как вас зовут?">
+                </div>
+                
+                <!-- Чек-лист -->
+                <div style="background: #f0f7ff; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 13px;">
+                    <label style="display: flex; align-items: center; margin-bottom: 8px;">
+                        <input type="checkbox" id="bugReproducible" style="margin-right: 8px;">
+                        <span>Я могу повторить эту ошибку</span>
+                    </label>
+                    <label style="display: flex; align-items: center;">
+                        <input type="checkbox" id="bugIncludeLogs" style="margin-right: 8px;">
+                        <span>Включить техническую информацию</span>
+                    </label>
+                </div>
+                
+                <!-- Статус отправки -->
+                <div id="bugReportStatus" style="display: none; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-weight: 500;"></div>
+                
+                <!-- Кнопки -->
+                <div style="display: flex; gap: 10px;">
+                    <button onclick="submitBugReport()" style="flex: 1; background: linear-gradient(135deg, #dc3545 0%, #c82333 100%); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 15px;">
+                        📤 Отправить отчет
+                    </button>
+                    <button onclick="closeBugReportModal()" style="flex: 1; background: #f0f0f5; border: none; padding: 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 15px;">
+                        Отмена
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
     
     <!-- Модальное окно админ-панели -->
     <div id="adminModal" class="modal">
@@ -612,6 +714,50 @@
                         <tr><td colspan="6" style="text-align: center; color: var(--gray);">Загрузка...</td></tr>
                     </tbody>
                 </table>
+            </div>
+            
+            <!-- ============= СЕКЦИЯ УПРАВЛЕНИЯ ЗБТ КОДАМИ ============= -->
+            <div id="betaInvitesSection" style="margin-top: 30px; padding: 20px; background: #f0f7ff; border-radius: 12px; border: 2px solid #007aff;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">🎉 Управление ЗБТ кодами</h3>
+                    <button onclick="refreshBetaCodes()" style="background: var(--blue); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        🔄 Обновить
+                    </button>
+                </div>
+
+                <!-- Генерирование нового кода -->
+                <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #e0e0e0;">
+                    <h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 700;">Создать новый код:</h4>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <input type="number" id="betaCodeCountInput" placeholder="Кол-во использований (1-100)" min="1" max="100" value="1" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; width: 200px; font-size: 14px;">
+                        <input type="text" id="betaCodeDescInput" placeholder="Описание (опционально)" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; flex: 1; min-width: 200px; font-size: 14px;">
+                        <button onclick="generateBetaCode()" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 700; white-space: nowrap;">
+                            ✨ Создать код
+                        </button>
+                    </div>
+                    <div id="betaCodeStatus" style="margin-top: 10px; display: none; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: 500;"></div>
+                </div>
+
+                <!-- Список кодов -->
+                <div style="max-height: 250px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="background: #007aff; color: white; font-weight: 700; position: sticky; top: 0;">
+                            <tr>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Код</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Макс. исп.</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Текущ. исп.</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Итого</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Статус</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Действие</th>
+                            </tr>
+                        </thead>
+                        <tbody id="betaCodesTableBody">
+                            <tr style="background: #f9f9f9;">
+                                <td colspan="6" style="padding: 20px; text-align: center; color: #888;">Загрузка...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
             
             <!-- Вкладка для управления запросами на разбан -->
@@ -1218,6 +1364,18 @@
 
     // Функция инициализации приложения
     async function initApp() {
+        // ПЕРВАЯ ПРОВЕРКА: Нужен ли код приглашения для ЗБТ?
+        const hasBetaAccess = localStorage.getItem('beta_access_granted') === 'true';
+        if (!hasBetaAccess) {
+            // Показываем экран ввода кода
+            const betaOverlay = document.getElementById('betaInviteOverlay');
+            if (betaOverlay) betaOverlay.style.display = 'flex';
+            // Скрываем splash screen
+            const splash = document.getElementById('splashScreen');
+            if (splash) splash.classList.add('hidden');
+            return;
+        }
+
         // Получаем данные Telegram
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
         if (!tgUser) {
@@ -1321,6 +1479,85 @@
         document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
         // Добавляем класс active к выбранной кнопке
         el.classList.add('active');
+    }
+
+    // ============= ФУНКЦИИ ДЛЯ ЗБТ ПРИГЛАШЕНИЙ =============
+
+    async function verifyBetaCode() {
+        const codeInput = document.getElementById('betaInviteCode');
+        const status = document.getElementById('betaStatus');
+        const code = (codeInput.value || '').trim().toUpperCase();
+
+        if (!code) {
+            status.textContent = '❌ Пожалуйста, введите код';
+            status.style.color = '#dc3545';
+            status.style.display = 'block';
+            return;
+        }
+
+        status.textContent = '⏳ Проверка...';
+        status.style.color = '#007aff';
+        status.style.display = 'block';
+
+        try {
+            // Проверяем код в БД
+            const { data, error } = await _sb.rpc('validate_beta_invite', { 
+                p_code: code 
+            });
+
+            if (error) {
+                throw new Error(error.message || 'Ошибка проверки кода');
+            }
+
+            if (data && data.length > 0) {
+                const result = data[0];
+                
+                if (!result.is_valid) {
+                    status.textContent = '❌ ' + (result.message || 'Код не валиден');
+                    status.style.color = '#dc3545';
+                    status.style.display = 'block';
+                    codeInput.style.borderColor = '#dc3545';
+                    return;
+                }
+
+                // Код валиден! Используем его
+                const { error: claimError } = await _sb.rpc('claim_beta_invite', { 
+                    p_code: code,
+                    p_user_id: String(uid)
+                });
+
+                if (claimError) {
+                    throw claimError;
+                }
+
+                // Успешно! Сохраняем в localStorage и перезагружаем
+                localStorage.setItem('beta_access_granted', 'true');
+                localStorage.setItem('beta_code_used', code);
+                localStorage.setItem('beta_access_date', new Date().toISOString());
+
+                status.textContent = '✅ Доступ предоставлен! Загрузка...';
+                status.style.color = '#28a745';
+                status.style.display = 'block';
+
+                // Скрываем overlay и инициализируем приложение
+                setTimeout(() => {
+                    document.getElementById('betaInviteOverlay').style.display = 'none';
+                    initApp();
+                }, 1000);
+
+            } else {
+                status.textContent = '❌ Код не найден';
+                status.style.color = '#dc3545';
+                status.style.display = 'block';
+            }
+
+        } catch (err) {
+            console.error('Ошибка при проверке кода:', err);
+            status.textContent = '❌ ' + (err?.message || 'Ошибка сервера');
+            status.style.color = '#dc3545';
+            status.style.display = 'block';
+            codeInput.style.borderColor = '#dc3545';
+        }
     }
 
     // Функция открытия модального окна регистрации
@@ -1805,6 +2042,91 @@
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'visible';
         document.getElementById('ratingsModal').classList.remove('active');
+    }
+
+    // ============= ФУНКЦИИ ДЛЯ ОТПРАВКИ ОТЧЕТОВ О БАГАХ =============
+
+    function openBugReportModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
+        
+        // Предзаполняем имя если было указано ранее
+        const driverName = currentDriver?.name || window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || '';
+        document.getElementById('bugReporterName').value = driverName;
+        
+        // Очищаем поля
+        document.getElementById('bugDescription').value = '';
+        document.getElementById('bugCategory').value = 'ui';
+        document.getElementById('bugReproducible').checked = false;
+        document.getElementById('bugIncludeLogs').checked = false;
+        document.getElementById('bugReportStatus').style.display = 'none';
+        
+        document.getElementById('bugReportModal').classList.add('active');
+    }
+
+    function closeBugReportModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
+        document.getElementById('bugReportModal').classList.remove('active');
+    }
+
+    async function submitBugReport() {
+        const category = document.getElementById('bugCategory').value;
+        const description = document.getElementById('bugDescription').value.trim();
+        const reporterName = document.getElementById('bugReporterName').value.trim();
+        const reproducible = document.getElementById('bugReproducible').checked;
+        const includeLogs = document.getElementById('bugIncludeLogs').checked;
+        const status = document.getElementById('bugReportStatus');
+
+        if (!description) {
+            status.textContent = '❌ Пожалуйста, опишите проблему';
+            status.style.color = '#dc3545';
+            status.style.display = 'block';
+            return;
+        }
+
+        status.textContent = '⏳ Отправка отчета...';
+        status.style.color = '#007aff';
+        status.style.display = 'block';
+
+        try {
+            // Собираем информацию о системе если нужна
+            let additionalInfo = '';
+            if (includeLogs) {
+                additionalInfo = `\n\n---ТЕХНИЧЕСКАЯ ИНФОРМАЦИЯ---\n`;
+                additionalInfo += `User ID: ${uid}\n`;
+                additionalInfo += `Время: ${new Date().toISOString()}\n`;
+                additionalInfo += `ОС: ${window.navigator.userAgent}\n`;
+                additionalInfo += `Может быть повторена: ${reproducible ? 'Да' : 'Нет'}`;
+            }
+
+            const fullMessage = `${description}${additionalInfo}`;
+
+            // Сохраняем в таблицу feedback
+            const { error } = await _sb.from('feedback').insert({
+                user_id: String(uid),
+                user_name: reporterName || 'Анонимно',
+                message: `[${category.toUpperCase()}] ${fullMessage}`,
+                status: 'new'
+            });
+
+            if (error) {
+                throw error;
+            }
+
+            status.textContent = '✅ Спасибо! Отчет отправлен модераторам';
+            status.style.color = '#28a745';
+            
+            // Закрываем модальное окно через 2 секунды
+            setTimeout(() => {
+                closeBugReportModal();
+            }, 2000);
+
+        } catch (err) {
+            console.error('Ошибка при отправке отчета:', err);
+            status.textContent = '❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка');
+            status.style.color = '#dc3545';
+        }
     }
 
     // Функция открытия просмотра фото
@@ -2332,6 +2654,145 @@
         const typeFilter = document.getElementById('markerTypeFilter');
         typeFilter.value = '';
         renderMarkersTable(adminAllMarkers);
+    }
+
+    // ============= ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ЗБТ КОДАМИ =============
+
+    async function generateBetaCode() {
+        const countInput = document.getElementById('betaCodeCountInput');
+        const descInput = document.getElementById('betaCodeDescInput');
+        const status = document.getElementById('betaCodeStatus');
+        
+        const count = Math.max(1, Math.min(100, parseInt(countInput.value) || 1));
+        const desc = descInput.value.trim() || null;
+
+        status.textContent = '⏳ Генерирование...';
+        status.style.color = '#007aff';
+        status.style.display = 'block';
+
+        try {
+            // Генерируем уникальный код (6 символов, буквы и цифры)
+            const code = Array.from({length: 6}, () => 
+                'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]
+            ).join('');
+
+            // Вставляем в БД
+            const { error } = await _sb.from('beta_invites').insert({
+                code: code,
+                created_by: String(uid),
+                max_uses: count,
+                description: desc
+            });
+
+            if (error) {
+                throw error;
+            }
+
+            status.textContent = `✅ Код создан: ${code}`;
+            status.style.color = '#28a745';
+            
+            countInput.value = '1';
+            descInput.value = '';
+
+            // Обновляем таблицу
+            await refreshBetaCodes();
+
+        } catch (err) {
+            console.error('Ошибка при создании кода:', err);
+            status.textContent = '❌ ' + (err?.message || 'Ошибка сервера');
+            status.style.color = '#dc3545';
+        }
+    }
+
+    async function refreshBetaCodes() {
+        try {
+            const { data, error } = await _sb
+                .from('beta_invites')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                throw error;
+            }
+
+            const tbody = document.getElementById('betaCodesTableBody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr style="background: #f9f9f9;">
+                        <td colspan="6" style="padding: 20px; text-align: center; color: #888;">
+                            Нет созданных кодов
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = data.map(invite => {
+                const isUsed = invite.current_uses >= invite.max_uses;
+                const isActive = invite.is_active && !isUsed;
+                
+                return `
+                    <tr style="background: ${isUsed ? '#fff3cd' : 'white'}; border-bottom: 1px solid #ddd;">
+                        <td style="padding: 10px; border: 1px solid #ddd; font-weight: 700; font-family: monospace;">${invite.code}</td>
+                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${invite.max_uses}</td>
+                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${invite.current_uses}</td>
+                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+                            ${invite.current_uses}/${invite.max_uses}
+                        </td>
+                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+                            <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; background: ${isActive ? '#d4edda' : '#f8d7da'}; color: ${isActive ? '#28a745' : '#dc3545'};">
+                                ${isActive ? '✓ Активен' : '✕ Использован'}
+                            </span>
+                        </td>
+                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
+                            <button onclick="copyBetaCode('${invite.code}')" style="background: #007aff; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 5px;">
+                                📋 Скопир.
+                            </button>
+                            <button onclick="deactivateBetaCode(${invite.id})" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
+                                ✕ Отклю.
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+        } catch (err) {
+            console.error('Ошибка загрузки кодов:', err);
+            document.getElementById('betaCodesTableBody').innerHTML = `
+                <tr style="background: #fff3cd;">
+                    <td colspan="6" style="padding: 20px; text-align: center; color: #dc3545;">
+                        ❌ Ошибка загрузки кодов
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    function copyBetaCode(code) {
+        navigator.clipboard.writeText(code).then(() => {
+            alert('✅ Код скопирован: ' + code);
+        }).catch(() => {
+            alert('❌ Ошибка копирования');
+        });
+    }
+
+    async function deactivateBetaCode(inviteId) {
+        if (!confirm('Деактивировать этот код?')) return;
+
+        try {
+            const { error } = await _sb
+                .from('beta_invites')
+                .update({ is_active: false })
+                .eq('id', inviteId);
+
+            if (error) {
+                throw error;
+            }
+
+            await refreshBetaCodes();
+        } catch (err) {
+            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+        }
     }
 
     // Функция закрытия админ-панели
