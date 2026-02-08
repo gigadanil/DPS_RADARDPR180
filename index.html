@@ -824,6 +824,53 @@
         </table>
     </div>
     </div>
+
+            <!-- ============= СЕКЦИЯ ПРОСМОТРА ОТЧЕТОВ О БАГАХ ============= -->
+            <div id="bugReportsSection" style="margin-top: 30px; padding: 20px; background: #fff3cd; border-radius: 12px; border: 2px solid #ff9500;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">🐛 Отчеты о багах</h3>
+                    <button onclick="refreshBugReports()" style="background: var(--blue); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        🔄 Обновить
+                    </button>
+                </div>
+
+                <!-- Статистика -->
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+                    <div style="background: white; border-radius: 12px; padding: 15px; text-align: center;">
+                        <div style="font-size: 24px; font-weight: 800; color: #ff9500;" id="newBugsCount">0</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">Новые</div>
+                    </div>
+                    <div style="background: white; border-radius: 12px; padding: 15px; text-align: center;">
+                        <div style="font-size: 24px; font-weight: 800; color: #007aff;" id="readBugsCount">0</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">Прочитано</div>
+                    </div>
+                    <div style="background: white; border-radius: 12px; padding: 15px; text-align: center;">
+                        <div style="font-size: 24px; font-weight: 800; color: #28a745;" id="resolvedBugsCount">0</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">Решены</div>
+                    </div>
+                </div>
+
+                <!-- Таблица отчетов -->
+                <div style="max-height: 300px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="background: #ff9500; color: white; font-weight: 700; position: sticky; top: 0;">
+                            <tr>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Категория</th>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Описание</th>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">От кого</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Статус</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Дата</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Действие</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bugReportsTableBody">
+                            <tr style="background: white;">
+                                <td colspan="6" style="padding: 20px; text-align: center; color: #888;">Загрузка...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
     
     <button class="main-btn" onclick="closeAdminModal()" style="margin-top: 20px;">Закрыть</button>
         </div>
@@ -1132,6 +1179,8 @@
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
     let isAdmin = false;
+    // Флаг инициализации приложения (чтобы не вызывать initApp повторно)
+    let initAppInProgress = false;
     // Переменная для хранения выбранной фотографии
     let selectedChatPhoto = null;
     // Множество для отслеживания уже воспроизведенных уведомлений (чтобы не спамить звук)
@@ -1364,6 +1413,10 @@
 
     // Функция инициализации приложения
     async function initApp() {
+        // Предотвращаем двойной вызов
+        if (initAppInProgress) return;
+        initAppInProgress = true;
+
         // ПЕРВАЯ ПРОВЕРКА: Нужен ли код приглашения для ЗБТ?
         const hasBetaAccess = localStorage.getItem('beta_access_granted') === 'true';
         if (!hasBetaAccess) {
@@ -1373,8 +1426,13 @@
             // Скрываем splash screen
             const splash = document.getElementById('splashScreen');
             if (splash) splash.classList.add('hidden');
+            initAppInProgress = false;
             return;
         }
+
+        // Если бета-доступ есть - скрываем overlay
+        const betaOverlay = document.getElementById('betaInviteOverlay');
+        if (betaOverlay) betaOverlay.style.display = 'none';
 
         // Получаем данные Telegram
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
@@ -1385,6 +1443,7 @@
             // Скрываем splash screen
             const splash = document.getElementById('splashScreen');
             if (splash) splash.classList.add('hidden');
+            initAppInProgress = false;
             return;
         }
 
@@ -1469,6 +1528,9 @@
         } catch (e) {
             console.warn('Не удалось запустить heartbeat/online count:', e?.message || e);
         }
+
+        // Инициализация завершена
+        initAppInProgress = false;
     }
 
     // Функция для установки выбранного типа маркера
@@ -1542,8 +1604,9 @@
                 // Скрываем overlay и инициализируем приложение
                 setTimeout(() => {
                     document.getElementById('betaInviteOverlay').style.display = 'none';
+                    initAppInProgress = false;  // Сбрасываем флаг перед инициализацией
                     initApp();
-                }, 1000);
+                }, 800);
 
             } else {
                 status.textContent = '❌ Код не найден';
@@ -2514,6 +2577,7 @@
         }
 
         await loadUnbanRequests();
+        await refreshBugReports();
 
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
@@ -2790,6 +2854,121 @@
             }
 
             await refreshBetaCodes();
+        } catch (err) {
+            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+        }
+    }
+
+    // ============= ФУНКЦИИ ДЛЯ ПРОСМОТРА ОТЧЕТОВ О БАГАХ =============
+
+    async function refreshBugReports() {
+        try {
+            const { data, error } = await _sb
+                .from('feedback')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                throw error;
+            }
+
+            const reports = data || [];
+            
+            // Обновляем статистику
+            const newCount = reports.filter(r => r.status === 'new').length;
+            const readCount = reports.filter(r => r.status === 'read').length;
+            const resolvedCount = reports.filter(r => r.status === 'resolved').length;
+            
+            document.getElementById('newBugsCount').textContent = newCount;
+            document.getElementById('readBugsCount').textContent = readCount;
+            document.getElementById('resolvedBugsCount').textContent = resolvedCount;
+
+            // Рендерим таблицу
+            const tbody = document.getElementById('bugReportsTableBody');
+            if (reports.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: #888;">Нет отчетов</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = reports.map(report => {
+                const date = new Date(report.created_at).toLocaleString('ru-RU', { 
+                    day: '2-digit', 
+                    month: '2-digit', 
+                    year: 'numeric', 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                });
+                
+                const message = report.message || '';
+                let category = '❓ Другое';
+                if (message.startsWith('[UI]')) category = '🎨 Интерфейс';
+                else if (message.startsWith('[MAP]')) category = '🗺️ Карта';
+                else if (message.startsWith('[MARKERS]')) category = '📍 Метки';
+                else if (message.startsWith('[CHAT]')) category = '💬 Чат';
+                else if (message.startsWith('[CRASH]')) category = '💥 Краш';
+                else if (message.startsWith('[PERFORMANCE]')) category = '⚡ Производительность';
+                
+                const description = message.substring(message.indexOf(']') + 2, 60) + (message.length > 60 ? '...' : '');
+                
+                const statusBadge = report.status === 'new' ? '🔴 Новое' : 
+                                   report.status === 'read' ? '🟡 Прочитано' : 
+                                   '✅ Решено';
+                const statusColor = report.status === 'new' ? '#dc3545' : 
+                                   report.status === 'read' ? '#ff9500' : 
+                                   '#28a745';
+
+                return `<tr style="background: ${report.status === 'new' ? '#fff0f0' : 'white'};">
+                    <td>${category}</td>
+                    <td style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px;" title="${message}">${description}</td>
+                    <td>${report.user_name || 'Аноним'}</td>
+                    <td style="text-align: center;">
+                        <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; background: ${statusColor}; color: white;">
+                            ${statusBadge}
+                        </span>
+                    </td>
+                    <td style="text-align: center; font-size: 12px;">${date}</td>
+                    <td style="text-align: center;">
+                        ${report.status !== 'resolved' ? `<button onclick="markBugAsResolved('${report.id}')" style="background: #28a745; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600; margin-right: 3px;">✓ Решено</button>` : ''}
+                        <button onclick="deleteBugReport('${report.id}')" style="background: #dc3545; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;">🗑️ Удалить</button>
+                    </td>
+                </tr>`;
+            }).join('');
+
+        } catch (err) {
+            console.error('Ошибка загрузки отчетов:', err);
+            document.getElementById('bugReportsTableBody').innerHTML = `
+                <tr><td colspan="6" style="text-align: center; padding: 20px; color: #dc3545;">
+                    ❌ Ошибка загрузки отчетов
+                </td></tr>
+            `;
+        }
+    }
+
+    async function markBugAsResolved(reportId) {
+        try {
+            const { error } = await _sb
+                .from('feedback')
+                .update({ status: 'resolved' })
+                .eq('id', reportId);
+
+            if (error) throw error;
+            await refreshBugReports();
+        } catch (err) {
+            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+        }
+    }
+
+    async function deleteBugReport(reportId) {
+        if (!confirm('Удалить этот отчет?')) return;
+
+        try {
+            const { error } = await _sb
+                .from('feedback')
+                .delete()
+                .eq('id', reportId);
+
+            if (error) throw error;
+            await refreshBugReports();
         } catch (err) {
             alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
         }
