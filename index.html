@@ -418,6 +418,15 @@
         .achievement { display: inline-block; text-align: center; padding: 8px; margin: 4px; background: #f9f9f9; border-radius: 10px; border: 1px solid #e0e0e0; font-size: 11px; min-width: 70px; }
         .achievement-icon { font-size: 24px; margin-bottom: 4px; }
         .achievement-title { font-weight: 700; color: var(--blue); }
+        
+        /* Overlay ограничения доступа */
+        #tgAuthOverlay {
+            display: none !important;
+        }
+        
+        #tgAuthOverlay[style*="display: flex"] {
+            display: flex !important;
+        }
     </style>
 </head>
 <body>
@@ -448,15 +457,46 @@
 
     <!-- Overlay: Требуется вход через Telegram -->
     <div id="tgAuthOverlay" class="auth-overlay" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
-        <div style="background:#fff; padding:20px; border-radius:12px; max-width:420px; width:90%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.3);">
-            <h3 style="margin-top:0;">Требуется вход через Telegram</h3>
-            <p style="color:#444;">Для использования приложения необходимо открыть его через Telegram-бота и пройти регистрацию.</p>
-            <div style="display:flex; gap:8px; justify-content:center; margin-top:12px;">
-                <button onclick="openTelegramBot()" style="padding:10px 14px; border-radius:10px; border:none; background:#00a2ff; color:#fff; font-weight:700;">Открыть в Telegram</button>
-                <button onclick="location.reload()" style="padding:10px 14px; border-radius:10px; border:1px solid #ccc; background:#fff;">Перезагрузить</button>
+        <div style="background:#fff; padding:40px 25px; border-radius:16px; max-width:420px; width:95%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.3); animation: slideUp 0.4s ease;">
+            <div style="font-size:48px; margin-bottom:20px; animation: pulse 2s ease-in-out infinite;">🔐</div>
+            <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; color:#333;">Доступ ограничен</h2>
+            <p style="color:#666; font-size:16px; line-height:1.6; margin:0 0 25px 0;">
+                Это приложение доступно только через<br><strong>Telegram Mini App</strong>.
+            </p>
+            <p style="color:#888; font-size:14px; line-height:1.5; margin:0 0 30px 0;">
+                Пожалуйста, откройте его в Telegram.
+            </p>
+            <div style="display:flex; flex-direction:column; gap:12px; justify-content:center;">
+                <button onclick="openTelegramBot()" style="padding:14px 20px; border-radius:12px; border:none; background:linear-gradient(135deg, #007aff 0%, #0051d5 100%); color:#fff; font-weight:700; font-size:16px; cursor:pointer; transition:all 0.3s; box-shadow:0 4px 12px rgba(0,122,255,0.3);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,122,255,0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,122,255,0.3)'">
+                    📱 Открыть в Telegram
+                </button>
+                <button onclick="location.reload()" style="padding:12px 20px; border-radius:12px; border:2px solid #ddd; background:#fff; color:#666; font-weight:600; font-size:15px; cursor:pointer; transition:all 0.3s;" onmouseover="this.style.borderColor='#bbb'; this.style.background='#f5f5f5'" onmouseout="this.style.borderColor='#ddd'; this.style.background='#fff'">
+                    🔄 Перезагрузить страницу
+                </button>
+            </div>
+            <div style="margin-top:25px; padding:15px; background:#f0f7ff; border-radius:10px; border-left:4px solid #007aff;">
+                <p style="margin:0; font-size:12px; color:#0051d5; line-height:1.5;">
+                    💡 <strong>Совет:</strong> Найдите бота <strong>@DPSRADARDPR180bot</strong> в Telegram или перейдите по ссылке выше.
+                </p>
             </div>
         </div>
     </div>
+    <style>
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+    </style>
     
     <!-- Онлайн-счётчик пользователей -->
     <div id="onlineCountBadge" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 1600; background: white; padding: 6px 10px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); font-weight:700; display: none;">Онлайн: —</div>
@@ -637,7 +677,11 @@
             </tbody>
         </table>
     </div>
-</div>
+    </div>
+    
+    <button class="main-btn" onclick="closeAdminModal()" style="margin-top: 20px;">Закрыть</button>
+        </div>
+    </div>
 
 <!-- Модальное окно для рассмотрения запроса -->
 <div id="reviewUnbanModal" class="modal">
@@ -686,10 +730,6 @@
         </div>
     </div>
 </div>
-
-            <button class="main-btn" onclick="closeAdminModal()" style="margin-top: 20px;">Закрыть</button>
-        </div>
-    </div>
     
     <!-- Модальное окно для регистрации (только данные об авто) -->
     <div id="registrationModal" class="modal">
@@ -1155,9 +1195,14 @@
     // Функция проверки, забанен ли пользователь
     async function isUserBanned(userId) {
         try {
-            // Проверяем наличие пользователя в таблице bans
-            const { data: banned, error } = await _sb.from('bans').select('*').eq('user_id', userId).maybeSingle();
-            if (error && error.code !== 'PGRST116') { // PGRST116 - таблица не существует
+            // Проверяем наличие пользователя в таблице bans с таймаутом 8 сек
+            const { data: banned, error } = await Promise.race([
+                _sb.from('bans').select('*').eq('user_id', userId).maybeSingle(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Ban check timeout')), 8000)
+                )
+            ]);
+            if (error && error.code !== 'PGRST116') {
                 console.warn('Ошибка при проверке баня:', error?.message);
                 return { isBanned: false, reason: null };
             }
@@ -1166,7 +1211,7 @@
                 reason: banned?.reason || null
             };
         } catch (e) {
-            console.warn('Ошибка при проверке баня:', e?.message || e);
+            console.warn('Ошибка при проверке баня (timeout или error):', e?.message || e);
             return { isBanned: false, reason: null };
         }
     }
@@ -1179,18 +1224,36 @@
             // Показываем оверлей с требованием открыть через Telegram
             const overlay = document.getElementById('tgAuthOverlay');
             if (overlay) overlay.style.display = 'flex';
+            // Скрываем splash screen
+            const splash = document.getElementById('splashScreen');
+            if (splash) splash.classList.add('hidden');
             return;
         }
 
-        // Проверяем, не забанен ли пользователь
-        const banInfo = await isUserBanned(uid);
-        if (banInfo.isBanned) {
-            let banMessage = '❌ Вы заблокированы администратором и не можете использовать приложение.';
-            if (banInfo.reason) {
-                banMessage += `\n\nПричина: ${banInfo.reason}`;
+        // Успешно загрузили Telegram - скрываем overlay если был показан
+        const overlay = document.getElementById('tgAuthOverlay');
+        if (overlay) overlay.style.display = 'none';
+
+        try {
+            // Проверяем, не забанен ли пользователь (с таймаутом)
+            const banInfo = await Promise.race([
+                isUserBanned(uid),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Ban check timeout')), 5000)
+                )
+            ]).catch(() => ({ isBanned: false })); // Если ошибка, продолжаем работу
+            
+            if (banInfo.isBanned) {
+                let banMessage = '❌ Вы заблокированы администратором и не можете использовать приложение.';
+                if (banInfo.reason) {
+                    banMessage += `\n\nПричина: ${banInfo.reason}`;
+                }
+                alert(banMessage);
+                return;
             }
-            alert(banMessage);
-            return;
+        } catch (e) {
+            console.warn('Ошибка проверки блокировки:', e?.message || e);
+            // Продолжаем работу при ошибке
         }
 
         // Проверяем, является ли пользователь администратором
@@ -1204,7 +1267,12 @@
 
         // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
         try {
-            const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle();
+            const { data: driver } = await Promise.race([
+                _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Driver check timeout')), 8000)
+                )
+            ]);
             if (!driver) {
                 // Если нет, показываем форму для добавления данных об авто
                 document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
@@ -1222,11 +1290,23 @@
 
         // Начинаем обновлять last_seen и загружать онлайн-статистику
         try {
-            await updateLastSeen();
+            await Promise.race([
+                updateLastSeen(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('LastSeen timeout')), 5000)
+                )
+            ]).catch(() => console.warn('updateLastSeen timeout'));
+            
             // heartbeat каждую минуту
             setInterval(() => { updateLastSeen().catch(()=>{}); }, 60*1000);
             // обновление счётчика онлайн каждые 30 секунд
-            await loadOnlineCount();
+            await Promise.race([
+                loadOnlineCount(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('OnlineCount timeout')), 5000)
+                )
+            ]).catch(() => console.warn('loadOnlineCount timeout'));
+            
             setInterval(() => { loadOnlineCount().catch(()=>{}); }, 30*1000);
         } catch (e) {
             console.warn('Не удалось запустить heartbeat/online count:', e?.message || e);
@@ -3657,63 +3737,109 @@
         }
     }
 
+    // ============= ИНИЦИАЛИЗАЦИЯ КАРТЫ В ЯНДЕКС.ГОТОВАЯ =============
     ymaps.ready(async () => {
-        // Проверяем бана ПЕРЕД инициализацией карты
-        const isBanned = await checkBanStatus();
-        if (isBanned) return; // Прерываем инициализацию если забанен
-        
-        // Если не забанен - инициализируем карту
-        // Создаем карту с центром и уровнем зума
-        myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
-        
-        // Границы Донецкой области (скрыты)
-        // const donetskBoundary = new ymaps.Rectangle([
-        //     [DONETSK_REGION.south, DONETSK_REGION.west],
-        //     [DONETSK_REGION.north, DONETSK_REGION.east]
-        // ], {}, {
-        //     fillColor: '#0066ff33',
-        //     strokeColor: '#007aff',
-        //     strokeWidth: 2,
-        //     strokeOpacity: 0.7
-        // });
-        // myMap.geoObjects.add(donetskBoundary);
-        // Инициализируем коллекцию маркеров — её можно безопасно очищать без удаления прочих объектов
-        markersCollection = new ymaps.GeoObjectCollection();
-        myMap.geoObjects.add(markersCollection);
-        
-        // При изменении центра карты обновляем адрес
-        myMap.events.add('actionend', () => {
-            ymaps.geocode(myMap.getCenter()).then(res => {
-                const obj = res.geoObjects.get(0);
-                document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
-                
-                // Проверяем, в какой области находимся
-                const coords = myMap.getCenter();
-                if (isInDonetskRegion(coords)) {
-                    document.getElementById('addr-text').style.color = '#34c759';
-                } else {
-                    document.getElementById('addr-text').style.color = '#ff3b30';
-                }
-            });
-        });
-        // Если пользователь начал вручную передвигать карту — отключаем автоследование
-        myMap.events.add('actionstart', () => {
-            autoFollow = false;
-        });
-        // Инициализируем приложение (проверяем регистрацию)
-        initApp();
-        // Инициализируем GPS отслеживание
-        initGPS();
-        // Обновим состояние кнопки автослежения
-        try { updateFollowButton(); } catch(e) { /* ignore */ }
-        // Загружаем маркеры с сервера
-        loadMarkers();
-        // Обновляем маркеры каждые 20 секунд (вместо 10) для экономии батареи
-        setInterval(loadMarkersDebounced, 20000);
+        // Показываем экран приветствия
+        showSplashScreen();
 
-        // Если actionCard скрыт по умолчанию, показываем кнопку открытия
-        const openBtn = document.getElementById('openActionBtn');
-        if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
+        try {
+            // Проверяем статус бана с таймаутом
+            userBanStatus = await Promise.race([
+                checkBanStatus(),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Ban status check timeout')), 8000)
+                )
+            ]);
+
+            if (userBanStatus) {
+                // Пользователь забанен - показываем уведомление
+                showBanNotice(userBanStatus);
+                return; // Не инициализируем карту
+            }
+
+            // Если не забанен - инициализируем карту
+            // Создаем карту с центром и уровнем зума
+            myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+            
+            // Границы Донецкой области (скрыты)
+            // const donetskBoundary = new ymaps.Rectangle([
+            //     [DONETSK_REGION.south, DONETSK_REGION.west],
+            //     [DONETSK_REGION.north, DONETSK_REGION.east]
+            // ], {}, {
+            //     fillColor: '#0066ff33',
+            //     strokeColor: '#007aff',
+            //     strokeWidth: 2,
+            //     strokeOpacity: 0.7
+            // });
+            // myMap.geoObjects.add(donetskBoundary);
+            // Инициализируем коллекцию маркеров — её можно безопасно очищать без удаления прочих объектов
+            markersCollection = new ymaps.GeoObjectCollection();
+            myMap.geoObjects.add(markersCollection);
+            
+            // При изменении центра карты обновляем адрес
+            myMap.events.add('actionend', () => {
+                ymaps.geocode(myMap.getCenter()).then(res => {
+                    const obj = res.geoObjects.get(0);
+                    document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
+                    
+                    // Проверяем, в какой области находимся
+                    const coords = myMap.getCenter();
+                    if (isInDonetskRegion(coords)) {
+                        document.getElementById('addr-text').style.color = '#34c759';
+                    } else {
+                        document.getElementById('addr-text').style.color = '#ff3b30';
+                    }
+                });
+            });
+            // Если пользователь начал вручную передвигать карту — отключаем автоследование
+            myMap.events.add('actionstart', () => {
+                autoFollow = false;
+            });
+            
+            // Инициализируем приложение (проверяем регистрацию)
+            appInitialized = true;
+            initApp();
+            
+            // Инициализируем GPS отслеживание
+            initGPS();
+            // Обновим состояние кнопки автослежения
+            try { updateFollowButton(); } catch(e) { /* ignore */ }
+            // Загружаем маркеры с сервера
+            loadMarkers();
+            // Обновляем маркеры каждые 20 секунд (вместо 10) для экономии батареи
+            setInterval(loadMarkersDebounced, 20000);
+
+            // Если actionCard скрыт по умолчанию, показываем кнопку открытия
+            const openBtn = document.getElementById('openActionBtn');
+            if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
+            
+            // Скрываем экран приветствия
+            hideSplashScreenImmediately();
+
+        } catch (error) {
+            console.error('Ошибка инициализации карты (timeout или ошибка):', error?.message);
+            // Скрываем splash screen при ошибке и продолжаем работу
+            hideSplashScreenImmediately();
+            appInitialized = true;
+            
+            // Пытаемся инициализировать карту, даже при ошибке проверки бана
+            try {
+                myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+                markersCollection = new ymaps.GeoObjectCollection();
+                myMap.geoObjects.add(markersCollection);
+                
+                initApp();
+                initGPS();
+                try { updateFollowButton(); } catch(e) { /* ignore */ }
+                loadMarkers();
+                setInterval(loadMarkersDebounced, 20000);
+                
+                const openBtn = document.getElementById('openActionBtn');
+                if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
+            } catch(e) {
+                console.error('Ошибка инициализации карты:', e);
+            }
+        }
     });
 
 
@@ -3787,8 +3913,17 @@
         // Загружаем маркеры, которые еще не истекли (exp > текущее время)
         // Загружаем все метки и фильтруем их по exp на клиенте,
         // чтобы корректно работать с разными типами поля exp (BIGINT или TIMESTAMPTZ)
-        const { data: markers } = await _sb.from('markers').select('*');
-        if (!markers || !myMap) return;
+        try {
+            const { data: markers } = await Promise.race([
+                _sb.from('markers').select('*'),
+                new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Markers load timeout')), 10000)
+                )
+            ]);
+            if (!markers || !myMap) {
+                console.warn('Маркеры не загружены или карта не инициализирована');
+                return;
+            }
         const now = Date.now();
         const activeMarkers = (markers || []).filter(m => {
             if (m.exp === null || typeof m.exp === 'undefined') return true;
@@ -3942,6 +4077,9 @@
                 }
             }
         });
+        } catch (error) {
+            console.error('Ошибка при загрузке маркеров (timeout или ошибка БД):', error?.message);
+        }
     }
 </script>
     <!-- Модальное окно для модерации пользователя -->
@@ -4308,14 +4446,19 @@
             const usernameText = document.getElementById('usernameText');
 
             greetingText.textContent = getGreeting();
-            usernameText.textContent = `Водитель ${username}`;
+            
+            // Получаем имя водителя из разных источников
+            const driverName = currentDriver?.name || 
+                               window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || 
+                               'водитель';
+            usernameText.textContent = `Водитель ${driverName}`;
 
             splashScreen.classList.remove('hidden');
 
-            // Скрываем экран через 1 секунду (вместо 3)
+            // Скрываем экран через 2 секунды (вместо 1)
             setTimeout(() => {
                 splashScreen.classList.add('hidden');
-            }, 1000);
+            }, 2000);
         }
         
         // Функция для скрытия экрана загрузки немедленно
@@ -4458,28 +4601,8 @@
         }
 
         // ============= ИНИЦИАЛИЗАЦИЯ С ПРОВЕРКОЙ БАНА =============
-        const originalInit = initMap;
-        
-        async function initMapWithBanCheck() {
-            // Показываем экран приветствия
-            showSplashScreen();
+        // Эта логика теперь интегрирована в ymaps.ready() выше
 
-            // Проверяем статус бана
-            userBanStatus = await checkBanStatus();
-
-            if (userBanStatus) {
-                // Пользователь забанен - показываем уведомление
-                showBanNotice(userBanStatus);
-                return; // Не инициализируем карту
-            }
-
-            // Пользователь не забанен - запускаем приложение
-            appInitialized = true;
-            originalInit();
-        }
-
-        // Заменяем оригинальную инициализацию
-        window.initMap = initMapWithBanCheck;
 
 </script>
 
