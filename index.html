@@ -4557,43 +4557,49 @@
             btn.textContent = '⏳ Отправка...';
 
             try {
-                const userIdString = String(uid);
-                
-                // Проверяем, есть ли уже запрос
-                const { data: existingRequest } = await _sb
-                    .from('unban_requests')
-                    .select('*')
-                    .eq('user_id', userIdString)
-                    .eq('status', 'pending')
-                    .maybeSingle();
-
-                if (existingRequest) {
-                    status.textContent = '✅ Ваш запрос уже на рассмотрении';
-                    status.style.display = 'block';
-                    btn.textContent = '✓ Запрос отправлен';
-                    return;
+                // Проверяем авторизацию
+                const userIdNum = uid;
+                if (!userIdNum) {
+                    throw new Error('Не авторизован');
                 }
 
-                // Создаем новый запрос на разбан
-                const { error } = await _sb
-                    .from('unban_requests')
-                    .insert({
-                        user_id: userIdString,
-                        username: username,
-                        status: 'pending',
-                        created_at: new Date().toISOString()
-                    });
+                const userIdString = String(userIdNum);
+                
+                // Получаем имя пользователя - важна правильная переменная
+                const driverName = currentDriver && currentDriver.name ? currentDriver.name : null;
+                const telegramName = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user && window.Telegram.WebApp.initDataUnsafe.user.first_name ? window.Telegram.WebApp.initDataUnsafe.user.first_name : null;
+                const fullName = driverName || telegramName || 'водитель';
+                
+                console.log('Начало: userIdString=' + userIdString + ', fullName=' + fullName);
+                
+                // Вставляем запрос
+                const insertResult = await _sb.from('unban_requests').insert({
+                    user_id: userIdString,
+                    username: fullName,
+                    status: 'pending',
+                    created_at: new Date().toISOString()
+                });
 
-                if (error) throw error;
+                if (insertResult.error) {
+                    throw insertResult.error;
+                }
 
                 status.textContent = '✅ Запрос отправлен модераторам';
+                status.style.color = '#28a745';
                 status.style.display = 'block';
                 btn.textContent = '✓ Запрос отправлен';
+                btn.disabled = true;
 
-            } catch (error) {
-                console.error('Ошибка отправки запроса:', error);
-                status.textContent = '❌ Ошибка отправки запроса';
-                status.style.color = '#ff3b30';
+            } catch (err) {
+                console.error('requestUnban ошибка:', err);
+                
+                let msg = '❌ Ошибка отправки запроса';
+                if (err && err.message) {
+                    msg = '❌ ' + err.message.substring(0, 80);
+                }
+                
+                status.textContent = msg;
+                status.style.color = '#dc3545';
                 status.style.display = 'block';
                 btn.disabled = false;
                 btn.textContent = '📨 Подать запрос на разбан';
