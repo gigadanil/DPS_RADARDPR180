@@ -871,6 +871,30 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Раздел Техническое Обслуживание -->
+            <div id="maintenanceSection" style="margin-top: 30px; padding: 20px; background: #e8d5ff; border-radius: 12px; border: 2px solid #9c27b0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">⚙️ Техническое обслуживание</h3>
+                    <div id="maintenanceStatus" style="background: #28a745; color: white; padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 600;">Карта активна</div>
+                </div>
+
+                <div style="background: white; border-radius: 12px; padding: 15px; margin-bottom: 15px;">
+                    <p style="margin: 0 0 15px 0; font-size: 14px; color: #333;">Закройте карту для технического обслуживания. Пользователи увидят уведомление:</p>
+                    <input type="text" id="maintenanceMessage" placeholder="Введите сообщение пользователям (макс 100 символов)" 
+                           style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px; margin-bottom: 15px; box-sizing: border-box;"
+                           maxlength="100" value="⚠️ Техническое обслуживание. Приносим извинения.">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <button onclick="enableMaintenance()" style="background: var(--red); color: white; border: none; padding: 12px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px;">
+                        🔴 Закрыть карту на ТО
+                    </button>
+                    <button onclick="disableMaintenance()" style="background: #28a745; color: white; border: none; padding: 12px 16px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px;">
+                        🟢 Открыть карту
+                    </button>
+                </div>
+            </div>
     
     <button class="main-btn" onclick="closeAdminModal()" style="margin-top: 20px;">Закрыть</button>
         </div>
@@ -1468,6 +1492,14 @@
                 alert(banMessage);
                 return;
             }
+
+            // ПРОВЕРЯЕМ ТЕХНИЧЕСКОЕ ОБСЛУЖИВАНИЕ
+            const isMaintenanceActive = await checkMaintenanceStatus();
+            if (isMaintenanceActive) {
+                initAppInProgress = false;
+                return; // Оверлей ТО заблокирует интерфейс
+            }
+
         } catch (e) {
             console.warn('Ошибка проверки блокировки:', e?.message || e);
             // Продолжаем работу при ошибке
@@ -2578,6 +2610,7 @@
 
         await loadUnbanRequests();
         await refreshBugReports();
+        await refreshMaintenanceStatus();
 
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
@@ -2972,6 +3005,164 @@
         } catch (err) {
             alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
         }
+    }
+
+    async function refreshMaintenanceStatus() {
+        try {
+            const { data } = await _sb
+                .from('user_settings')
+                .select('value')
+                .eq('key', 'maintenance_mode')
+                .single();
+
+            const statusEl = document.getElementById('maintenanceStatus');
+            if (!statusEl) return;
+
+            if (data) {
+                const settings = JSON.parse(data.value);
+                if (settings.active) {
+                    statusEl.textContent = '🔴 Техническое обслуживание АКТИВно';
+                    statusEl.style.background = '#dc3545';
+                    const msgEl = document.getElementById('maintenanceMessage');
+                    if (msgEl) msgEl.value = settings.message || '';
+                } else {
+                    statusEl.textContent = '🟢 Карта активна';
+                    statusEl.style.background = '#28a745';
+                }
+            } else {
+                statusEl.textContent = '🟢 Карта активна';
+                statusEl.style.background = '#28a745';
+            }
+        } catch (err) {
+            // Ключ не найден - это нормально
+            const statusEl = document.getElementById('maintenanceStatus');
+            if (statusEl) {
+                statusEl.textContent = '🟢 Карта активна';
+                statusEl.style.background = '#28a745';
+            }
+        }
+    }
+
+    // Функции управления техническим обслуживанием
+    async function enableMaintenance() {
+        const message = document.getElementById('maintenanceMessage').value || '⚠️ Техническое обслуживание. Приносим извинения.';
+        
+        try {
+            // Сохраняем статус ТО в user_settings
+            const { error } = await _sb
+                .from('user_settings')
+                .upsert({
+                    user_id: BigInt(uid),
+                    key: 'maintenance_mode',
+                    value: JSON.stringify({ active: true, message: message, timestamp: Date.now() })
+                }, { onConflict: 'user_id,key' });
+
+            if (error) throw error;
+            
+            alert('✅ Карта закрыта на техническое обслуживание!');
+            await refreshMaintenanceStatus();
+        } catch (err) {
+            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+        }
+    }
+
+    async function disableMaintenance() {
+        try {
+            // Удаляем статус ТО
+            const { error } = await _sb
+                .from('user_settings')
+                .delete()
+                .eq('user_id', BigInt(uid))
+                .eq('key', 'maintenance_mode');
+
+            if (error) throw error;
+            
+            alert('✅ Карта открыта для пользователей!');
+            await refreshMaintenanceStatus();
+        } catch (err) {
+            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+        }
+    }
+
+    function updateMaintenanceStatus(isActive, message) {
+        const status = document.getElementById('maintenanceStatus');
+        if (isActive) {
+            status.textContent = '🔴 Техническое обслуживание';
+            status.style.background = '#dc3545';
+        } else {
+            status.textContent = '🟢 Карта активна';
+            status.style.background = '#28a745';
+        }
+    }
+
+    async function checkMaintenanceStatus() {
+        try {
+            const { data } = await _sb
+                .from('user_settings')
+                .select('value')
+                .eq('key', 'maintenance_mode')
+                .single();
+
+            if (data) {
+                const settings = JSON.parse(data.value);
+                if (settings.active) {
+                    // Показываем оверлей ТО
+                    showMaintenanceOverlay(settings.message);
+                    return true;
+                }
+            }
+        } catch (err) {
+            // Ключ не найден, ТО не активно
+        }
+        return false;
+    }
+
+    function showMaintenanceOverlay(message) {
+        // Удалим старый оверлей если есть
+        const oldOverlay = document.getElementById('maintenanceOverlay');
+        if (oldOverlay) oldOverlay.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'maintenanceOverlay';
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            font-family: Arial, sans-serif;
+        `;
+
+        const content = document.createElement('div');
+        content.style.cssText = `
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 300px;
+        `;
+
+        content.innerHTML = `
+            <div style="font-size: 60px; margin-bottom: 15px;">⚙️</div>
+            <h2 style="margin: 0 0 15px 0; font-size: 24px; font-weight: 800; color: #333;">Техническое обслуживание</h2>
+            <p style="margin: 0; font-size: 16px; color: #666; line-height: 1.5;">${message}</p>
+            <p style="margin: 15px 0 0 0; font-size: 12px; color: #999;">Приносим извинения за неудобства!</p>
+        `;
+
+        overlay.appendChild(content);
+        document.body.appendChild(overlay);
+
+        // Повторяем проверку каждые 10 сек чтобы обновить статус
+        setTimeout(() => {
+            const latest = document.getElementById('maintenanceOverlay');
+            if (latest) checkMaintenanceStatus();
+        }, 10000);
     }
 
     // Функция закрытия админ-панели
