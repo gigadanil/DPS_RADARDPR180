@@ -3010,7 +3010,7 @@
     async function refreshMaintenanceStatus() {
         try {
             const { data } = await _sb
-                .from('user_settings')
+                .from('app_maintenance')
                 .select('value')
                 .eq('key', 'maintenance_mode')
                 .single();
@@ -3048,14 +3048,13 @@
         const message = document.getElementById('maintenanceMessage').value || '⚠️ Техническое обслуживание. Приносим извинения.';
         
         try {
-            // Сохраняем статус ТО в user_settings
+            // Сохраняем статус ТО в app_maintenance
             const { error } = await _sb
-                .from('user_settings')
+                .from('app_maintenance')
                 .upsert({
-                    user_id: parseInt(uid),
                     key: 'maintenance_mode',
                     value: JSON.stringify({ active: true, message: message, timestamp: Date.now() })
-                }, { onConflict: 'user_id,key' });
+                }, { onConflict: 'key' });
 
             if (error) throw error;
             
@@ -3068,11 +3067,10 @@
 
     async function disableMaintenance() {
         try {
-            // Удаляем статус ТО
+            // Удаляем статус ТО из app_maintenance
             const { error } = await _sb
-                .from('user_settings')
+                .from('app_maintenance')
                 .delete()
-                .eq('user_id', parseInt(uid))
                 .eq('key', 'maintenance_mode');
 
             if (error) throw error;
@@ -3098,7 +3096,7 @@
     async function checkMaintenanceStatus() {
         try {
             const { data } = await _sb
-                .from('user_settings')
+                .from('app_maintenance')
                 .select('value')
                 .eq('key', 'maintenance_mode')
                 .single();
