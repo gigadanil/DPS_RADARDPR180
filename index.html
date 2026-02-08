@@ -1475,6 +1475,9 @@
         const overlay = document.getElementById('tgAuthOverlay');
         if (overlay) overlay.style.display = 'none';
 
+        // Определяем админа раньше для проверки ТО
+        isAdmin = String(tgUser.id) === String(ADMIN_ID);
+
         try {
             // Проверяем, не забанен ли пользователь (с таймаутом)
             const banInfo = await Promise.race([
@@ -1494,7 +1497,7 @@
             }
 
             // ПРОВЕРЯЕМ ТЕХНИЧЕСКОЕ ОБСЛУЖИВАНИЕ
-            const isMaintenanceActive = await checkMaintenanceStatus();
+            const isMaintenanceActive = await checkMaintenanceStatus(isAdmin);
             if (isMaintenanceActive) {
                 initAppInProgress = false;
                 return; // Оверлей ТО заблокирует интерфейс
@@ -1506,7 +1509,7 @@
         }
 
         // Проверяем, является ли пользователь администратором
-        isAdmin = String(tgUser.id) === String(ADMIN_ID);
+        // isAdmin уже определен выше
         if (isAdmin) {
             document.getElementById('adminBtn').classList.add('visible');
         }
@@ -3076,7 +3079,19 @@
             if (error) throw error;
             
             alert('✅ Карта открыта для пользователей!');
-            await refreshMaintenanceStatus();
+            
+            // Скрываем оверлей ТО
+            const overlay = document.getElementById('maintenanceOverlay');
+            if (overlay) overlay.remove();
+            
+            // Показываем main контент
+            const main = document.getElementById('main');
+            if (main) main.style.display = 'flex';
+            
+            // Инициализируем приложение полностью
+            await new Promise(r => setTimeout(r, 500));
+            location.reload();
+            
         } catch (err) {
             alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
         }
@@ -3093,7 +3108,7 @@
         }
     }
 
-    async function checkMaintenanceStatus() {
+    async function checkMaintenanceStatus(isUserAdmin = false) {
         try {
             const { data } = await _sb
                 .from('app_maintenance')
@@ -3105,7 +3120,7 @@
                 const settings = JSON.parse(data.value);
                 if (settings.active) {
                     // Показываем оверлей ТО
-                    showMaintenanceOverlay(settings.message);
+                    showMaintenanceOverlay(settings.message, isUserAdmin);
                     return true;
                 }
             }
@@ -3115,7 +3130,7 @@
         return false;
     }
 
-    function showMaintenanceOverlay(message) {
+    function showMaintenanceOverlay(message, isUserAdmin = false) {
         // Удалим старый оверлей если есть
         const oldOverlay = document.getElementById('maintenanceOverlay');
         if (oldOverlay) oldOverlay.remove();
@@ -3146,11 +3161,21 @@
             max-width: 300px;
         `;
 
+        let adminButton = '';
+        if (isUserAdmin) {
+            adminButton = `
+                <button onclick="disableMaintenance()" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 15px; width: 100%;">
+                    🔑 Отключить ТО (Админ)
+                </button>
+            `;
+        }
+
         content.innerHTML = `
             <div style="font-size: 60px; margin-bottom: 15px;">⚙️</div>
             <h2 style="margin: 0 0 15px 0; font-size: 24px; font-weight: 800; color: #333;">Техническое обслуживание</h2>
             <p style="margin: 0; font-size: 16px; color: #666; line-height: 1.5;">${message}</p>
             <p style="margin: 15px 0 0 0; font-size: 12px; color: #999;">Приносим извинения за неудобства!</p>
+            ${adminButton}
         `;
 
         overlay.appendChild(content);
@@ -3159,7 +3184,7 @@
         // Повторяем проверку каждые 10 сек чтобы обновить статус
         setTimeout(() => {
             const latest = document.getElementById('maintenanceOverlay');
-            if (latest) checkMaintenanceStatus();
+            if (latest) checkMaintenanceStatus(isUserAdmin);
         }, 10000);
     }
 
