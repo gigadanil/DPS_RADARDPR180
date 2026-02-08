@@ -3052,7 +3052,7 @@
             const { error } = await _sb
                 .from('user_settings')
                 .upsert({
-                    user_id: BigInt(uid),
+                    user_id: parseInt(uid),
                     key: 'maintenance_mode',
                     value: JSON.stringify({ active: true, message: message, timestamp: Date.now() })
                 }, { onConflict: 'user_id,key' });
@@ -3072,7 +3072,7 @@
             const { error } = await _sb
                 .from('user_settings')
                 .delete()
-                .eq('user_id', BigInt(uid))
+                .eq('user_id', parseInt(uid))
                 .eq('key', 'maintenance_mode');
 
             if (error) throw error;
