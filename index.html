@@ -286,6 +286,12 @@
         .admin-stat-card .value { font-size: 28px; font-weight: 800; color: var(--blue); }
         .admin-stat-card .label { font-size: 12px; color: var(--gray); margin-top: 5px; }
         
+        /* Стили для фильтров запросов на разбан */
+        .filter-btn { transition: all 0.2s; }
+        .filter-btn:active { transform: scale(0.95); }
+        .filter-btn.active { opacity: 1; }
+        .filter-btn:not(.active) { opacity: 0.6; }
+        
         /* Кнопки модерации в профиле */
         .moderation-section { margin-top: 20px; padding-top: 20px; border-top: 2px solid #f0f0f5; }
         .moderation-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 12px; text-align: center; }
@@ -314,22 +320,6 @@
         .ban-confirm-btn { background: #ff9500; color: white; }
         .ban-cancel-btn { background: #f0f0f5; color: #333; }
         
-
-        /* Стили для фильтров запросов на разбан */
-        .filter-btn {
-            transition: all 0.2s;
-        }
-        .filter-btn:active {
-            transform: scale(0.95);
-        }
-        .filter-btn.active {
-            opacity: 1;
-        }
-        .filter-btn:not(.active) {
-            opacity: 0.6;
-        }
-        
-
         /* Чат */
         .chat-btn { position: absolute; bottom: calc(100px + var(--safe-area-inset-bottom)); right: calc(15px + var(--safe-area-inset-right)); z-index: 1500; width: 50px; height: 50px; border-radius: 50%; background: var(--blue); border: 2px solid white; cursor: pointer; font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
         .chat-btn:hover { transform: scale(1.05); }
@@ -584,125 +574,123 @@
                 </table>
             </div>
             
+            <!-- Вкладка для управления запросами на разбан -->
+<div id="unbanRequestsSection" style="margin-top: 30px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h3 style="margin: 0; font-size: 18px; font-weight: 700;">📨 Запросы на разбан</h3>
+        <button onclick="refreshUnbanRequests()" style="background: var(--blue); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+            🔄 Обновить
+        </button>
+    </div>
 
-            <!-- ============ РАЗДЕЛ УПРАВЛЕНИЯ ЗАПРОСАМИ НА РАЗБАН ============ -->
-            <div id="unbanRequestsSection" style="margin-top: 30px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">📨 Запросы на разбан</h3>
-                    <button onclick="refreshUnbanRequests()" style="background: var(--blue); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                        🔄 Обновить
-                    </button>
+    <!-- Статистика -->
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+        <div style="background: #fff3cd; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 24px; font-weight: 800; color: #ff9500;" id="pendingRequestsCount">0</div>
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">Ожидают</div>
+        </div>
+        <div style="background: #d4edda; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 24px; font-weight: 800; color: #28a745;" id="approvedRequestsCount">0</div>
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">Одобрено</div>
+        </div>
+        <div style="background: #f8d7da; border-radius: 12px; padding: 15px; text-align: center;">
+            <div style="font-size: 24px; font-weight: 800; color: #dc3545;" id="rejectedRequestsCount">0</div>
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">Отклонено</div>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <button onclick="filterUnbanRequests('all')" id="filterAll" class="filter-btn active" style="flex: 1; padding: 10px; border: 2px solid var(--blue); background: var(--blue); color: white; border-radius: 8px; cursor: pointer; font-weight: 600;">
+            Все
+        </button>
+        <button onclick="filterUnbanRequests('pending')" id="filterPending" class="filter-btn" style="flex: 1; padding: 10px; border: 2px solid #ff9500; background: white; color: #ff9500; border-radius: 8px; cursor: pointer; font-weight: 600;">
+            Ожидают
+        </button>
+        <button onclick="filterUnbanRequests('approved')" id="filterApproved" class="filter-btn" style="flex: 1; padding: 10px; border: 2px solid #28a745; background: white; color: #28a745; border-radius: 8px; cursor: pointer; font-weight: 600;">
+            Одобрено
+        </button>
+        <button onclick="filterUnbanRequests('rejected')" id="filterRejected" class="filter-btn" style="flex: 1; padding: 10px; border: 2px solid #dc3545; background: white; color: #dc3545; border-radius: 8px; cursor: pointer; font-weight: 600;">
+            Отклонено
+        </button>
+    </div>
+
+    <!-- Таблица запросов -->
+    <div style="overflow-x: auto;">
+        <table class="admin-table" id="unbanRequestsTable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Пользователь</th>
+                    <th>User ID</th>
+                    <th>Дата запроса</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody id="unbanRequestsBody">
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 20px; color: var(--gray);">
+                        Загрузка...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Модальное окно для рассмотрения запроса -->
+<div id="reviewUnbanModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>🔍 Рассмотрение запроса на разбан</h3>
+            <button class="modal-close" onclick="closeReviewUnbanModal()">×</button>
+        </div>
+
+        <div id="reviewUnbanContent">
+            <!-- Информация о запросе -->
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
+                <div style="margin-bottom: 10px;">
+                    <strong>Пользователь:</strong> <span id="reviewUsername">-</span>
                 </div>
-
-                <!-- Статистика -->
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
-                    <div style="background: #fff3cd; border-radius: 12px; padding: 15px; text-align: center;">
-                        <div style="font-size: 24px; font-weight: 800; color: #ff9500;" id="pendingRequestsCount">0</div>
-                        <div style="font-size: 12px; color: #666; margin-top: 5px;">Ожидают</div>
-                    </div>
-                    <div style="background: #d4edda; border-radius: 12px; padding: 15px; text-align: center;">
-                        <div style="font-size: 24px; font-weight: 800; color: #28a745;" id="approvedRequestsCount">0</div>
-                        <div style="font-size: 12px; color: #666; margin-top: 5px;">Одобрено</div>
-                    </div>
-                    <div style="background: #f8d7da; border-radius: 12px; padding: 15px; text-align: center;">
-                        <div style="font-size: 24px; font-weight: 800; color: #dc3545;" id="rejectedRequestsCount">0</div>
-                        <div style="font-size: 12px; color: #666; margin-top: 5px;">Отклонено</div>
-                    </div>
+                <div style="margin-bottom: 10px;">
+                    <strong>User ID:</strong> <span id="reviewUserId">-</span>
                 </div>
-
-                <!-- Фильтры -->
-                <div style="display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <button onclick="filterUnbanRequests('all')" id="filterAll" class="filter-btn active" style="flex: 1; padding: 10px; border: 2px solid var(--blue); background: var(--blue); color: white; border-radius: 8px; cursor: pointer; font-weight: 600; min-width: 70px;">
-                        Все
-                    </button>
-                    <button onclick="filterUnbanRequests('pending')" id="filterPending" class="filter-btn" style="flex: 1; padding: 10px; border: 2px solid #ff9500; background: white; color: #ff9500; border-radius: 8px; cursor: pointer; font-weight: 600; min-width: 70px;">
-                        Ожидают
-                    </button>
-                    <button onclick="filterUnbanRequests('approved')" id="filterApproved" class="filter-btn" style="flex: 1; padding: 10px; border: 2px solid #28a745; background: white; color: #28a745; border-radius: 8px; cursor: pointer; font-weight: 600; min-width: 70px;">
-                        Одобрено
-                    </button>
-                    <button onclick="filterUnbanRequests('rejected')" id="filterRejected" class="filter-btn" style="flex: 1; padding: 10px; border: 2px solid #dc3545; background: white; color: #dc3545; border-radius: 8px; cursor: pointer; font-weight: 600; min-width: 70px;">
-                        Отклонено
-                    </button>
+                <div style="margin-bottom: 10px;">
+                    <strong>Дата запроса:</strong> <span id="reviewCreatedAt">-</span>
                 </div>
-
-                <!-- Таблица запросов -->
-                <div style="overflow-x: auto; max-height: 400px; overflow-y: auto;">
-                    <table class="admin-table" id="unbanRequestsTable">
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Пользователь</th>
-                                <th>User ID</th>
-                                <th>Дата запроса</th>
-                                <th>Статус</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody id="unbanRequestsBody">
-                            <tr>
-                                <td colspan="6" style="text-align: center; padding: 20px; color: var(--gray);">
-                                    Загрузка...
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div>
+                    <strong>Информация о бане:</strong> <span id="reviewBanInfo">-</span>
                 </div>
             </div>
-            
+
+            <!-- Комментарий -->
+            <div style="margin-bottom: 20px;">
+                <label style="display: block; margin-bottom: 8px; font-weight: 600;">Комментарий модератора:</label>
+                <textarea id="reviewComment" 
+                    style="width: 100%; min-height: 100px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-family: inherit; font-size: 14px; resize: vertical;"
+                    placeholder="Опишите причину решения..."></textarea>
+            </div>
+
+            <!-- Кнопки действий -->
+            <div style="display: flex; gap: 10px;">
+                <button onclick="approveUnbanRequest()" 
+                    style="flex: 1; background: #28a745; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer;">
+                    ✅ Одобрить и снять бан
+                </button>
+                <button onclick="rejectUnbanRequest()" 
+                    style="flex: 1; background: #dc3545; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer;">
+                    ❌ Отклонить запрос
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
             <button class="main-btn" onclick="closeAdminModal()" style="margin-top: 20px;">Закрыть</button>
         </div>
     </div>
     
-    <!-- Модальное окно для рассмотрения запроса на разбан -->
-    <div id="reviewUnbanModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>🔍 Рассмотрение запроса на разбан</h3>
-                <button class="modal-close" onclick="closeReviewUnbanModal()">×</button>
-            </div>
-
-            <div id="reviewUnbanContent">
-                <!-- Информация о запросе -->
-                <div style="background: #f0f0f5; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-                    <div style="margin-bottom: 10px;">
-                        <strong>Пользователь:</strong> <span id="reviewUsername">-</span>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <strong>User ID:</strong> <span id="reviewUserId">-</span>
-                    </div>
-                    <div style="margin-bottom: 10px;">
-                        <strong>Дата запроса:</strong> <span id="reviewCreatedAt">-</span>
-                    </div>
-                    <div>
-                        <strong>Информация о бане:</strong> <span id="reviewBanInfo">-</span>
-                    </div>
-                </div>
-
-                <!-- Комментарий -->
-                <div style="margin-bottom: 20px;">
-                    <label style="display: block; margin-bottom: 8px; font-weight: 600;">Комментарий модератора:</label>
-                    <textarea id="reviewComment" 
-                        style="width: 100%; min-height: 100px; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-family: inherit; font-size: 14px; resize: vertical;"
-                        placeholder="Опишите причину решения..."></textarea>
-                </div>
-
-                <!-- Кнопки действий -->
-                <div style="display: flex; gap: 10px;">
-                    <button onclick="approveUnbanRequest()" 
-                        style="flex: 1; background: #28a745; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer;">
-                        ✅ Одобрить и снять бан
-                    </button>
-                    <button onclick="rejectUnbanRequest()" 
-                        style="flex: 1; background: #dc3545; color: white; border: none; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer;">
-                        ❌ Отклонить запрос
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-
     <!-- Модальное окно для регистрации (только данные об авто) -->
     <div id="registrationModal" class="modal">
         <div class="modal-content">
@@ -2123,10 +2111,11 @@
             typeFilter.addEventListener('change', filterMarkersTable);
         }
 
+        await loadUnbanRequests();
+
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
         document.getElementById('adminModal').classList.add('active');
-        await loadUnbanRequests();
     }
 
     // Функция рендеринга таблицы водителей
@@ -2271,6 +2260,271 @@
         if (target) target.style.visibility = 'visible';
         document.getElementById('adminModal').classList.remove('active');
     }
+
+    // ============================================
+    // JAVASCRIPT КОД ДЛЯ УПРАВЛЕНИЯ ЗАПРОСАМИ НА РАЗБАН
+    // ============================================
+
+    let currentFilter = 'all';
+    let currentReviewRequestId = null;
+    let allUnbanRequests = [];
+
+    // Загрузка запросов на разбан
+    async function loadUnbanRequests() {
+        try {
+            const { data, error } = await _sb
+                .from('unban_requests')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            allUnbanRequests = data || [];
+            updateUnbanRequestsStats();
+            displayUnbanRequests();
+
+        } catch (error) {
+            console.error('Ошибка загрузки запросов:', error);
+            document.getElementById('unbanRequestsBody').innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 20px; color: #dc3545;">
+                        ❌ Ошибка загрузки запросов
+                    </td>
+                </tr>
+            `;
+        }
+    }
+
+    // Обновление статистики
+    function updateUnbanRequestsStats() {
+        const pending = allUnbanRequests.filter(r => r.status === 'pending').length;
+        const approved = allUnbanRequests.filter(r => r.status === 'approved').length;
+        const rejected = allUnbanRequests.filter(r => r.status === 'rejected').length;
+
+        document.getElementById('pendingRequestsCount').textContent = pending;
+        document.getElementById('approvedRequestsCount').textContent = approved;
+        document.getElementById('rejectedRequestsCount').textContent = rejected;
+    }
+
+    // Отображение запросов с учетом фильтра
+    function displayUnbanRequests() {
+        const tbody = document.getElementById('unbanRequestsBody');
+        
+        let filteredRequests = allUnbanRequests;
+        if (currentFilter !== 'all') {
+            filteredRequests = allUnbanRequests.filter(r => r.status === currentFilter);
+        }
+
+        if (filteredRequests.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 20px; color: var(--gray);">
+                        Запросов не найдено
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = filteredRequests.map(request => {
+            const createdAt = new Date(request.created_at).toLocaleString('ru-RU');
+            
+            let statusBadge;
+            if (request.status === 'pending') {
+                statusBadge = '<span style="background: #fff3cd; color: #856404; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;">⏳ Ожидает</span>';
+            } else if (request.status === 'approved') {
+                statusBadge = '<span style="background: #d4edda; color: #155724; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;">✅ Одобрено</span>';
+            } else {
+                statusBadge = '<span style="background: #f8d7da; color: #721c24; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;">❌ Отклонено</span>';
+            }
+
+            let actions;
+            if (request.status === 'pending') {
+                actions = `
+                    <button onclick="openReviewUnbanModal(${request.id})" 
+                        class="delete-btn" 
+                        style="background: var(--blue); padding: 6px 12px;">
+                        🔍 Рассмотреть
+                    </button>
+                `;
+            } else {
+                const reviewedAt = request.reviewed_at ? new Date(request.reviewed_at).toLocaleString('ru-RU') : '-';
+                actions = `<small style="color: var(--gray);">Рассмотрено: ${reviewedAt}</small>`;
+            }
+
+            return `
+                <tr>
+                    <td>#${request.id}</td>
+                    <td><strong>${request.username || 'Неизвестно'}</strong></td>
+                    <td><code>${request.user_id}</code></td>
+                    <td>${createdAt}</td>
+                    <td>${statusBadge}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // Фильтрация запросов
+    function filterUnbanRequests(filter) {
+        currentFilter = filter;
+        
+        // Обновляем кнопки
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+            btn.style.background = 'white';
+            const color = btn.style.borderColor;
+            btn.style.color = color || 'var(--blue)';
+        });
+        
+        const filterMap = {
+            'all': 'filterAll',
+            'pending': 'filterPending',
+            'approved': 'filterApproved',
+            'rejected': 'filterRejected'
+        };
+        
+        const activeBtn = document.getElementById(filterMap[filter]);
+        if (activeBtn) {
+            activeBtn.classList.add('active');
+            const borderColor = activeBtn.style.borderColor;
+            activeBtn.style.background = borderColor;
+            activeBtn.style.color = 'white';
+        }
+        
+        displayUnbanRequests();
+    }
+
+    // Обновить список запросов
+    async function refreshUnbanRequests() {
+        await loadUnbanRequests();
+    }
+
+    // Открыть модальное окно рассмотрения
+    async function openReviewUnbanModal(requestId) {
+        currentReviewRequestId = requestId;
+        
+        const request = allUnbanRequests.find(r => r.id === requestId);
+        if (!request) return;
+
+        document.getElementById('reviewUsername').textContent = request.username || 'Неизвестно';
+        document.getElementById('reviewUserId').textContent = request.user_id;
+        document.getElementById('reviewCreatedAt').textContent = new Date(request.created_at).toLocaleString('ru-RU');
+        document.getElementById('reviewComment').value = '';
+
+        // Получаем информацию о бане
+        try {
+            const { data: banData } = await _sb
+                .from('bans')
+                .select('*')
+                .eq('user_id', request.user_id)
+                .maybeSingle();
+
+            if (banData) {
+                const bannedUntil = new Date(banData.banned_until);
+                const isPermanent = bannedUntil.getFullYear() > 2050;
+                const banInfo = isPermanent 
+                    ? '🚫 Постоянный бан' 
+                    : `⏰ До ${bannedUntil.toLocaleString('ru-RU')}`;
+                document.getElementById('reviewBanInfo').innerHTML = `<span style="color: #dc3545; font-weight: 600;">${banInfo}</span>`;
+            } else {
+                document.getElementById('reviewBanInfo').innerHTML = '<span style="color: #28a745;">✅ Бан уже снят</span>';
+            }
+        } catch (error) {
+            document.getElementById('reviewBanInfo').textContent = 'Ошибка загрузки информации';
+        }
+
+        document.getElementById('reviewUnbanModal').classList.add('active');
+    }
+
+    // Закрыть модальное окно рассмотрения
+    function closeReviewUnbanModal() {
+        document.getElementById('reviewUnbanModal').classList.remove('active');
+        currentReviewRequestId = null;
+    }
+
+    // Одобрить запрос
+    async function approveUnbanRequest() {
+        if (!currentReviewRequestId) return;
+
+        const comment = document.getElementById('reviewComment').value.trim();
+        
+        if (!confirm('Вы уверены, что хотите одобрить этот запрос? Бан будет автоматически снят.')) {
+            return;
+        }
+
+        try {
+            const adminIdString = String(uid);
+
+            // Обновляем статус запроса (триггер автоматически снимет бан)
+            const { error } = await _sb
+                .from('unban_requests')
+                .update({
+                    status: 'approved',
+                    reviewed_at: new Date().toISOString(),
+                    reviewed_by: adminIdString,
+                    reviewer_comment: comment || 'Запрос одобрен'
+                })
+                .eq('id', currentReviewRequestId);
+
+            if (error) throw error;
+
+            alert('✅ Запрос одобрен! Бан автоматически снят.');
+            closeReviewUnbanModal();
+            await loadUnbanRequests();
+
+        } catch (error) {
+            console.error('Ошибка одобрения запроса:', error);
+            alert('❌ Ошибка при одобрении запроса: ' + (error.message || 'Неизвестная ошибка'));
+        }
+    }
+
+    // Отклонить запрос
+    async function rejectUnbanRequest() {
+        if (!currentReviewRequestId) return;
+
+        const comment = document.getElementById('reviewComment').value.trim();
+        
+        if (!comment) {
+            alert('❗ Пожалуйста, укажите причину отклонения в комментарии');
+            return;
+        }
+
+        if (!confirm('Вы уверены, что хотите отклонить этот запрос?')) {
+            return;
+        }
+
+        try {
+            const adminIdString = String(uid);
+
+            const { error } = await _sb
+                .from('unban_requests')
+                .update({
+                    status: 'rejected',
+                    reviewed_at: new Date().toISOString(),
+                    reviewed_by: adminIdString,
+                    reviewer_comment: comment
+                })
+                .eq('id', currentReviewRequestId);
+
+            if (error) throw error;
+
+            alert('❌ Запрос отклонен');
+            closeReviewUnbanModal();
+            await loadUnbanRequests();
+
+        } catch (error) {
+            console.error('Ошибка отклонения запроса:', error);
+            alert('❌ Ошибка при отклонении запроса: ' + (error.message || 'Неизвестная ошибка'));
+        }
+    }
+
+    // Закрытие модального окна при клике вне его
+    document.getElementById('reviewUnbanModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeReviewUnbanModal();
+        }
+    });
 
     // Функция для администратора: установить время истечения метки
     async function setMarkerExpiry(markerId) {
@@ -4025,269 +4279,7 @@
             }
         }
 
-
-        // ============================================
-        // УПРАВЛЕНИЕ ЗАПРОСАМИ НА РАЗБАН
-        // ============================================
-
-        let currentFilter = 'all';
-        let currentReviewRequestId = null;
-        let allUnbanRequests = [];
-
-        // Загрузка запросов на разбан
-        async function loadUnbanRequests() {
-            try {
-                const { data, error } = await _sb
-                    .from('unban_requests')
-                    .select('*')
-                    .order('created_at', { ascending: false });
-
-                if (error) throw error;
-
-                allUnbanRequests = data || [];
-                updateUnbanRequestsStats();
-                displayUnbanRequests();
-
-            } catch (error) {
-                console.error('Ошибка загрузки запросов:', error);
-                document.getElementById('unbanRequestsBody').innerHTML = `
-                    <tr>
-                        <td colspan="6" style="text-align: center; padding: 20px; color: #dc3545;">
-                            ❌ Ошибка загрузки запросов
-                        </td>
-                    </tr>
-                `;
-            }
-        }
-
-        // Обновление статистики
-        function updateUnbanRequestsStats() {
-            const pending = allUnbanRequests.filter(r => r.status === 'pending').length;
-            const approved = allUnbanRequests.filter(r => r.status === 'approved').length;
-            const rejected = allUnbanRequests.filter(r => r.status === 'rejected').length;
-
-            document.getElementById('pendingRequestsCount').textContent = pending;
-            document.getElementById('approvedRequestsCount').textContent = approved;
-            document.getElementById('rejectedRequestsCount').textContent = rejected;
-        }
-
-        // Отображение запросов с учетом фильтра
-        function displayUnbanRequests() {
-            const tbody = document.getElementById('unbanRequestsBody');
-            
-            let filteredRequests = allUnbanRequests;
-            if (currentFilter !== 'all') {
-                filteredRequests = allUnbanRequests.filter(r => r.status === currentFilter);
-            }
-
-            if (filteredRequests.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" style="text-align: center; padding: 20px; color: var(--gray);">
-                            Запросов не найдено
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-
-            tbody.innerHTML = filteredRequests.map(request => {
-                const createdAt = new Date(request.created_at).toLocaleString('ru-RU');
-                
-                let statusBadge;
-                if (request.status === 'pending') {
-                    statusBadge = '<span style="background: #fff3cd; color: #856404; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;">⏳ Ожидает</span>';
-                } else if (request.status === 'approved') {
-                    statusBadge = '<span style="background: #d4edda; color: #155724; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;">✅ Одобрено</span>';
-                } else {
-                    statusBadge = '<span style="background: #f8d7da; color: #721c24; padding: 4px 12px; border-radius: 12px; font-size: 11px; font-weight: 700;">❌ Отклонено</span>';
-                }
-
-                let actions;
-                if (request.status === 'pending') {
-                    actions = `
-                        <button onclick="openReviewUnbanModal(${request.id})" 
-                            class="delete-btn" 
-                            style="background: var(--blue); padding: 6px 12px;">
-                            🔍 Рассмотреть
-                        </button>
-                    `;
-                } else {
-                    const reviewedAt = request.reviewed_at ? new Date(request.reviewed_at).toLocaleString('ru-RU') : '-';
-                    actions = `<small style="color: var(--gray);">Рассмотрено: ${reviewedAt}</small>`;
-                }
-
-                return `
-                    <tr>
-                        <td>#${request.id}</td>
-                        <td><strong>${request.username || 'Неизвестно'}</strong></td>
-                        <td><code>${request.user_id}</code></td>
-                        <td>${createdAt}</td>
-                        <td>${statusBadge}</td>
-                        <td>${actions}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // Фильтрация запросов
-        function filterUnbanRequests(filter) {
-            currentFilter = filter;
-            
-            // Обновляем кнопки
-            document.querySelectorAll('.filter-btn').forEach(btn => {
-                btn.classList.remove('active');
-                const borderColor = btn.style.borderColor;
-                btn.style.background = 'white';
-                btn.style.color = borderColor;
-            });
-            
-            const activeBtn = document.getElementById(`filter${filter.charAt(0).toUpperCase() + filter.slice(1)}`);
-            if (activeBtn) {
-                activeBtn.classList.add('active');
-                const borderColor = activeBtn.style.borderColor;
-                activeBtn.style.background = borderColor;
-                activeBtn.style.color = 'white';
-            }
-            
-            displayUnbanRequests();
-        }
-
-        // Обновить список запросов
-        async function refreshUnbanRequests() {
-            await loadUnbanRequests();
-        }
-
-        // Открыть модальное окно рассмотрения
-        async function openReviewUnbanModal(requestId) {
-            currentReviewRequestId = requestId;
-            
-            const request = allUnbanRequests.find(r => r.id === requestId);
-            if (!request) return;
-
-            document.getElementById('reviewUsername').textContent = request.username || 'Неизвестно';
-            document.getElementById('reviewUserId').textContent = request.user_id;
-            document.getElementById('reviewCreatedAt').textContent = new Date(request.created_at).toLocaleString('ru-RU');
-            document.getElementById('reviewComment').value = '';
-
-            // Получаем информацию о бане
-            try {
-                const { data: banData } = await _sb
-                    .from('bans')
-                    .select('*')
-                    .eq('user_id', request.user_id)
-                    .maybeSingle();
-
-                if (banData) {
-                    const bannedUntil = new Date(banData.banned_until);
-                    const isPermanent = bannedUntil.getFullYear() > 2050;
-                    const banInfo = isPermanent 
-                        ? '🚫 Постоянный бан' 
-                        : `⏰ До ${bannedUntil.toLocaleString('ru-RU')}`;
-                    document.getElementById('reviewBanInfo').innerHTML = `<span style="color: #dc3545; font-weight: 600;">${banInfo}</span>`;
-                } else {
-                    document.getElementById('reviewBanInfo').innerHTML = '<span style="color: #28a745;">✅ Бан уже снят</span>';
-                }
-            } catch (error) {
-                document.getElementById('reviewBanInfo').textContent = 'Ошибка загрузки информации';
-            }
-
-            document.getElementById('reviewUnbanModal').classList.add('active');
-        }
-
-        // Закрыть модальное окно рассмотрения
-        function closeReviewUnbanModal() {
-            document.getElementById('reviewUnbanModal').classList.remove('active');
-            currentReviewRequestId = null;
-        }
-
-        // Одобрить запрос
-        async function approveUnbanRequest() {
-            if (!currentReviewRequestId) return;
-
-            const comment = document.getElementById('reviewComment').value.trim();
-            
-            if (!confirm('Вы уверены, что хотите одобрить этот запрос? Бан будет автоматически снят.')) {
-                return;
-            }
-
-            try {
-                const adminIdString = String(uid);
-
-                // Обновляем статус запроса (триггер автоматически снимет бан)
-                const { error } = await _sb
-                    .from('unban_requests')
-                    .update({
-                        status: 'approved',
-                        reviewed_at: new Date().toISOString(),
-                        reviewed_by: adminIdString,
-                        reviewer_comment: comment || 'Запрос одобрен'
-                    })
-                    .eq('id', currentReviewRequestId);
-
-                if (error) throw error;
-
-                alert('✅ Запрос одобрен! Бан автоматически снят.');
-                closeReviewUnbanModal();
-                await loadUnbanRequests();
-
-            } catch (error) {
-                console.error('Ошибка одобрения запроса:', error);
-                alert('❌ Ошибка при одобрении запроса: ' + (error.message || 'Неизвестная ошибка'));
-            }
-        }
-
-        // Отклонить запрос
-        async function rejectUnbanRequest() {
-            if (!currentReviewRequestId) return;
-
-            const comment = document.getElementById('reviewComment').value.trim();
-            
-            if (!comment) {
-                alert('❗ Пожалуйста, укажите причину отклонения в комментарии');
-                return;
-            }
-
-            if (!confirm('Вы уверены, что хотите отклонить этот запрос?')) {
-                return;
-            }
-
-            try {
-                const adminIdString = String(uid);
-
-                const { error } = await _sb
-                    .from('unban_requests')
-                    .update({
-                        status: 'rejected',
-                        reviewed_at: new Date().toISOString(),
-                        reviewed_by: adminIdString,
-                        reviewer_comment: comment
-                    })
-                    .eq('id', currentReviewRequestId);
-
-                if (error) throw error;
-
-                alert('❌ Запрос отклонен');
-                closeReviewUnbanModal();
-                await loadUnbanRequests();
-
-            } catch (error) {
-                console.error('Ошибка отклонения запроса:', error);
-                alert('❌ Ошибка при отклонении запроса: ' + (error.message || 'Неизвестная ошибка'));
-            }
-        }
-
-        // Обработчик закрытия модального окна при клике вне его
-        if (document.getElementById('reviewUnbanModal')) {
-            document.getElementById('reviewUnbanModal').addEventListener('click', function(e) {
-                if (e.target === this) {
-                    closeReviewUnbanModal();
-                }
-            });
-        }
-
-
-                // Закрытие модального окна при клике вне его области
+        // Закрытие модального окна при клике вне его области
         document.getElementById('moderatorModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeModerationModal();
@@ -4320,10 +4312,15 @@
 
             splashScreen.classList.remove('hidden');
 
-            // Скрываем экран через 3 секунды
+            // Скрываем экран через 1 секунду (вместо 3)
             setTimeout(() => {
                 splashScreen.classList.add('hidden');
-            }, 3000);
+            }, 1000);
+        }
+        
+        // Функция для скрытия экрана загрузки немедленно
+        function hideSplashScreenImmediately() {
+            document.getElementById('splashScreen').classList.add('hidden');
         }
 
         // ============= ПРОВЕРКА БАНА =============
