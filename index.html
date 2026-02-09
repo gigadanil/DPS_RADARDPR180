@@ -759,6 +759,32 @@
                     </table>
                 </div>
             </div>
+
+            <!-- ============= МАССОВАЯ ВЫДАЧА АЧИВОК (АДМИН) ============= -->
+            <div style="margin-top: 20px; padding: 16px; background: #fff; border-radius: 12px; border: 1px solid #e8e8e8;">
+                <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700;">🏷️ Массовая выдача ачивки `beta_tester`</h4>
+                <div style="display:flex; gap:8px; margin-bottom:8px;">
+                    <input id="bulkBetaIds" placeholder="Введите user_id через запятую или пробел" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:8px; font-size:13px;">
+                    <button onclick="grantBetaFromInput()" style="padding:8px 12px; background:#ff9500; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">🎖️ Выдать</button>
+                </div>
+                <div id="bulkBetaStatus" style="font-size:13px; color:#666; min-height:18px;"></div>
+            </div>
+
+            <!-- ============= Генератор тестовой озвучки ============= -->
+            <div style="margin-top:20px; padding:16px; background:#f7fff7; border-radius:12px; border:1px solid #dff0d8;">
+                <h4 style="margin:0 0 8px 0; font-size:14px; font-weight:700;">🔊 Генератор тестовых аудиофайлов (плейсхолдеры)</h4>
+                <div style="font-size:13px; color:#444; margin-bottom:8px;">Создает простые WAV-файлы-заглушки с разными тонами. Скачайте и загрузите в папку <strong>/audio/</strong> для тестирования.</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                    <button onclick="generatePlaceholderAudios()" style="padding:10px 14px; background:#28a745; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">⬇️ Сгенерировать и скачать всё</button>
+                    <button onclick="downloadSinglePlaceholders()" style="padding:10px 14px; background:#007aff; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">⬇️ Скачать по одному</button>
+                    <button onclick="uploadPlaceholdersToStorage()" style="padding:10px 14px; background:#ff9500; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">🔼 Загрузить в Supabase Storage</button>
+                    <button onclick="listAudioStorageFiles()" style="padding:10px 14px; background:#6f42c1; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">📂 Обновить список в Storage</button>
+                </div>
+                <div style="margin-top:8px;">
+                    <div id="storageFilesList" style="max-height:140px; overflow:auto; border:1px dashed #e0e0e0; padding:8px; border-radius:8px; background:#fff;"></div>
+                </div>
+                <div id="audioGenStatus" style="font-size:13px; color:#666; min-height:18px;"></div>
+            </div>
             
             <!-- Вкладка для управления запросами на разбан -->
 <div id="unbanRequestsSection" style="margin-top: 30px;">
@@ -1415,13 +1441,33 @@
      * @param {Array} userCoords - координаты пользователя [lat, lon]
      */
     function checkMarkerDistance(marker, userCoords) {
-        if (!userCoords || userCoords.length < 2) return;
-        if (!marker.latitude || !marker.longitude) return;
-        
-        const distance = calculateDistance(
-            userCoords[0], userCoords[1],
-            marker.latitude, marker.longitude
-        );
+            if (!userCoords || userCoords.length < 2) return;
+
+            // Поддерживаем разные форматы координат маркера: coords: [lat,lon] или latitude/longitude
+            let mLat = null, mLon = null;
+            if (marker.coords && Array.isArray(marker.coords) && marker.coords.length >= 2) {
+                // Некоторые маркеры хранят координаты в виде [lon, lat] или [lat, lon] — попробуем угадать.
+                // Если значение похоже на долготу в первом элементе (|value| > 90), меняем порядок.
+                const a = Number(marker.coords[0]);
+                const b = Number(marker.coords[1]);
+                if (Math.abs(a) <= 90 && Math.abs(b) <= 180) {
+                    // считаем coords = [lat, lon]
+                    mLat = a; mLon = b;
+                } else if (Math.abs(a) <= 180 && Math.abs(b) <= 90) {
+                    // возможно coords = [lon, lat]
+                    mLat = b; mLon = a;
+                } else {
+                    // fallback: используем второй как долготу
+                    mLat = a; mLon = b;
+                }
+            } else if (typeof marker.latitude === 'number' && typeof marker.longitude === 'number') {
+                mLat = marker.latitude; mLon = marker.longitude;
+            } else if (marker.lat && marker.lon) {
+                mLat = Number(marker.lat); mLon = Number(marker.lon);
+            }
+            if (mLat === null || mLon === null) return;
+
+            const distance = calculateDistance(userCoords[0], userCoords[1], mLat, mLon);
         
         const markerId = marker.id;
         const currentNotification = distanceNotifications.get(markerId);
@@ -4755,7 +4801,7 @@
     // Функция загрузки достижений в профиль
     async function loadAchievements() {
         // Получаем количество меток и лайков пользователя
-        const { data: markers } = await _sb.from('markers').select('votes_up').eq('author_id', uid);
+        const { data: markers } = await _sb.from('markers').select('votes_up, votes_down, ts, type, exp').eq('author_id', uid);
         
         let markersCount = 0;
         let totalLikes = 0;
@@ -4769,28 +4815,297 @@
             });
         }
         
-        // Определяем достижения
+        // Базовые достижения (по статистике маркеров)
         const achievements = [];
-        
-        if (markersCount >= 1) achievements.push({ icon: '🚗', title: 'Первая метка', desc: markersCount });
+        if (markersCount >= 1) achievements.push({ icon: '🚗', title: 'Первая метка', desc: 'Вы поставили свою первую метку' });
         if (markersCount >= 10) achievements.push({ icon: '🔟', title: 'Десяток', desc: '10 меток' });
         if (markersCount >= 50) achievements.push({ icon: '🏅', title: 'Половина сотни', desc: '50 меток' });
         if (markersCount >= 100) achievements.push({ icon: '💯', title: 'Сотня', desc: '100 меток' });
-        
+
         if (totalLikes >= 10) achievements.push({ icon: '👍', title: 'Полезно', desc: '10 лайков' });
         if (totalLikes >= 50) achievements.push({ icon: '⭐', title: 'Звезда', desc: '50 лайков' });
         if (totalLikes >= 100) achievements.push({ icon: '🏆', title: 'Легенда', desc: '100 лайков' });
-        
+
         if (totalVotes >= 50) achievements.push({ icon: '📊', title: 'Голоса', desc: '50 голосов' });
         if (totalVotes >= 200) achievements.push({ icon: '🎯', title: 'Авторитет', desc: '200 голосов' });
-        
+
+        // Дополнительно: загружаем серверные ачивки из таблицы user_achievements
+        try {
+            const { data: serverAchs } = await _sb.from('user_achievements').select('key,created_at').eq('user_id', uid);
+            if (serverAchs && serverAchs.length > 0) {
+                // Считаем повторы по ключу
+                const counts = {};
+                serverAchs.forEach(r => { counts[r.key] = (counts[r.key] || 0) + 1; });
+
+                // Примеры серверных ключей и их отображение
+                if (counts['beta_tester']) achievements.push({ icon: '🎖️', title: 'Первопроходец (Beta-Tester)', desc: 'Тестировщик приложения (особая иконка)' });
+                if (counts['bug_report']) {
+                    achievements.push({ icon: '🐞', title: 'Охотник за багами', desc: `Подтверждено: ${counts['bug_report']}` });
+                    if (counts['bug_report'] >= 5) {
+                        achievements.push({ icon: '🔊', title: 'Награда: дерзкий голос', desc: 'За 5 подтвержденных багов — дерзкий голос' });
+                        // Открываем дерзкий стиль локально
+                        try { localStorage.setItem('cheekyUnlocked', 'true'); } catch(e){}
+                    }
+                }
+                if (counts['ghost_catcher']) achievements.push({ icon: '👻', title: 'Ловец призраков', desc: `Подтверждений: ${counts['ghost_catcher']}` });
+                if (counts['night_patrol']) achievements.push({ icon: '🌙', title: 'Ночной патруль', desc: 'Активность с 00:00 до 05:00' });
+                if (counts['suitolog']) achievements.push({ icon: '🕒', title: 'Суетолог', desc: '10 меток за час' });
+                if (counts['premium_voice']) achievements.push({ icon: '💳', title: 'Сын Жириновского', desc: 'Установлена премиум-озвучка' });
+                if (counts['phantom_racer']) achievements.push({ icon: '💨', title: 'Призрачный гонщик', desc: 'Успешно затормозил после голосового уведомления' });
+            }
+        } catch (e) {
+            console.warn('Не удалось загрузить серверные ачивки:', e?.message || e);
+        }
+
         // Определяем "звание"
         let title = 'Новичок';
         if (markersCount >= 50) title = 'Опытный водитель';
         if (markersCount >= 100) title = 'Навигатор-профи';
         if (totalLikes >= 50) title = 'Шериф дорог';
-        
-        return { achievements, title, markersCount, totalLikes, totalVotes };
+
+        // Убираем дубликаты по заголовку
+        const uniq = [];
+        const seen = new Set();
+        achievements.forEach(a => { if (!seen.has(a.title)) { uniq.push(a); seen.add(a.title); } });
+
+        return { achievements: uniq, title, markersCount, totalLikes, totalVotes };
+    }
+
+    // Утилита: гарантированно присвоить одну ачивку пользователю (если ещё нет)
+    async function ensureUserAchievement(userId, key) {
+        if (!userId || !key) return;
+        try {
+            const { data: exists } = await _sb.from('user_achievements').select('id').eq('user_id', String(userId)).eq('key', key).maybeSingle();
+            if (!exists) {
+                await _sb.from('user_achievements').insert([{ user_id: String(userId), key }]);
+                console.log(`🏅 Присвоена ачивка ${key} пользователю ${userId}`);
+            }
+        } catch (e) {
+            console.warn('ensureUserAchievement error:', e?.message || e);
+        }
+    }
+
+    // Админ-функция: присвоить ачивку множеству пользователей (batch)
+    async function grantAchievementToUsers(key, userIds = []) {
+        if (!window.isAdmin) { console.warn('Недостаточно прав (isAdmin=false)'); return; }
+        if (!key || !Array.isArray(userIds) || userIds.length === 0) return;
+        try {
+            const rows = userIds.map(id => ({ user_id: String(id), key }));
+            await _sb.from('user_achievements').insert(rows);
+            console.log(`🏅 Ачивка ${key} присвоена ${userIds.length} пользователям`);
+        } catch (e) {
+            console.warn('grantAchievementToUsers error:', e?.message || e);
+        }
+    }
+
+    // Удобная обёртка для присвоения beta_tester через консоль или админку
+    window.grantBetaToIds = function(ids) { return grantAchievementToUsers('beta_tester', ids); };
+
+    // UI: массовая выдача из поля в админ-панели
+    async function grantBetaFromInput() {
+        const el = document.getElementById('bulkBetaIds');
+        const status = document.getElementById('bulkBetaStatus');
+        if (!el) return;
+        let raw = (el.value || '').trim();
+        if (!raw) { status.textContent = 'Введите хотя бы один user_id.'; return; }
+        // Разделители: запятая или пробел или перенос
+        const ids = raw.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+        if (ids.length === 0) { status.textContent = 'Неверный формат ID.'; return; }
+        status.textContent = `⏳ Выдаём ачивку ${ids.length} пользователям...`;
+        try {
+            await grantAchievementToUsers('beta_tester', ids);
+            status.textContent = `✅ Ачивка выдана ${ids.length} пользователям.`;
+        } catch (e) {
+            console.warn(e);
+            status.textContent = '❌ Ошибка при выдаче (см. консоль).';
+        }
+    }
+
+    // Генерация простого WAV (моно) с синусоидой
+    function createSineWav(freq = 440, durationSec = 1, volume = 0.5) {
+        const sampleRate = 44100;
+        const length = sampleRate * durationSec;
+        const buffer = new ArrayBuffer(44 + length * 2);
+        const view = new DataView(buffer);
+
+        function writeString(view, offset, string) {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        }
+
+        // RIFF header
+        writeString(view, 0, 'RIFF');
+        view.setUint32(4, 36 + length * 2, true);
+        writeString(view, 8, 'WAVE');
+        writeString(view, 12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeString(view, 36, 'data');
+        view.setUint32(40, length * 2, true);
+
+        // samples
+        let offset = 44;
+        for (let i = 0; i < length; i++) {
+            const t = i / sampleRate;
+            const sample = Math.max(-1, Math.min(1, volume * Math.sin(2 * Math.PI * freq * t)));
+            view.setInt16(offset, sample * 0x7fff, true);
+            offset += 2;
+        }
+
+        return new Blob([view], { type: 'audio/wav' });
+    }
+
+    // Список файлов для генерации (имена соответствуют ожидаемым в /audio/)
+    const PLACEHOLDER_AUDIO_FILES = [
+        { name: 'warning_standard_dps_500.mp3', freq: 600, dur: 1.2 },
+        { name: 'warning_standard_dps_200.mp3', freq: 800, dur: 0.9 },
+        { name: 'warning_standard_cam_500.mp3', freq: 620, dur: 1.2 },
+        { name: 'warning_standard_cam_200.mp3', freq: 820, dur: 0.9 },
+        { name: 'warning_cheeky_500.mp3', freq: 540, dur: 1.3 },
+        { name: 'warning_cheeky_200.mp3', freq: 760, dur: 1.0 }
+    ];
+
+    // Генерирует и скачивает все плейсхолдеры
+    function generatePlaceholderAudios() {
+        const status = document.getElementById('audioGenStatus');
+        status.textContent = '⏳ Генерация файлов...';
+        setTimeout(() => {
+            try {
+                PLACEHOLDER_AUDIO_FILES.forEach(f => {
+                    const wav = createSineWav(f.freq, f.dur, 0.5);
+                    const url = URL.createObjectURL(wav);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = f.name.replace('.mp3', '.wav');
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    URL.revokeObjectURL(url);
+                });
+                status.textContent = '✅ Файлы сгенерированы и начался загрузка. Переименуйте в .mp3 при необходимости и загрузите в /audio/';
+            } catch (e) {
+                console.warn(e);
+                status.textContent = '❌ Ошибка при генерации аудио.';
+            }
+        }, 50);
+    }
+
+    // Позволяет скачать файлы по одному с пользовательским именем
+    function downloadSinglePlaceholders() {
+        const status = document.getElementById('audioGenStatus');
+        status.textContent = '';
+        PLACEHOLDER_AUDIO_FILES.forEach(f => {
+            const wav = createSineWav(f.freq, f.dur, 0.5);
+            const url = URL.createObjectURL(wav);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = f.name.replace('.mp3', '.wav');
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        });
+        document.getElementById('audioGenStatus').textContent = '✅ Скачивание стартовало.';
+    }
+
+    // Загрузка сгенерированных плейсхолдеров в Supabase Storage (bucket: 'audio')
+    async function uploadPlaceholdersToStorage() {
+        const status = document.getElementById('audioGenStatus');
+        status.textContent = '⏳ Загружаем файлы в Supabase Storage...';
+        if (typeof _sb === 'undefined' || !_sb.storage) {
+            status.textContent = '❌ Supabase client не найден (переменная _sb).';
+            return;
+        }
+        const bucket = 'audio';
+        let success = 0;
+        for (const f of PLACEHOLDER_AUDIO_FILES) {
+            try {
+                const wav = createSineWav(f.freq, f.dur, 0.5);
+                const fileName = f.name.replace('.mp3', '.wav');
+                // Загружаем
+                const { data, error } = await _sb.storage.from(bucket).upload(fileName, wav, { upsert: true, contentType: 'audio/wav' });
+                if (error) {
+                    console.warn('Upload error', fileName, error.message || error);
+                    status.textContent = `❌ Ошибка загрузки ${fileName}: ${error.message || error}`;
+                    // Продолжаем остальные файлы
+                    continue;
+                }
+                success++;
+            } catch (e) {
+                console.warn('Ошибка при загрузке файла:', e);
+                status.textContent = `❌ Ошибка при загрузке: ${e.message || e}`;
+            }
+        }
+        if (success > 0) {
+            status.textContent = `✅ Загружено ${success}/${PLACEHOLDER_AUDIO_FILES.length} файлы в bucket "${bucket}".`;
+        }
+    }
+
+    // Получить список файлов из Supabase Storage (bucket: 'audio')
+    async function listAudioStorageFiles() {
+        const listEl = document.getElementById('storageFilesList');
+        const status = document.getElementById('audioGenStatus');
+        listEl.innerHTML = '⏳ Получаем список...';
+        if (typeof _sb === 'undefined' || !_sb.storage) {
+            listEl.innerHTML = '❌ Supabase client не найден (переменная _sb).';
+            return;
+        }
+        const bucket = 'audio';
+        try {
+            const { data, error } = await _sb.storage.from(bucket).list('', { limit: 200, offset: 0, sortBy: { column: 'name', order: 'asc' } });
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                listEl.innerHTML = '<div style="color: #666;">Пусто</div>';
+                return;
+            }
+            let html = '<ul style="list-style:none;padding:0;margin:0;">';
+            data.forEach(item => {
+                html += `<li style="display:flex;justify-content:space-between;align-items:center;padding:6px 4px;border-bottom:1px dashed #f0f0f0;">` +
+                        `<span style="font-size:13px;">${item.name}</span>` +
+                        `<span style="display:flex;gap:8px;">` +
+                        `<button onclick="downloadAudioFromStorage('${item.name.replace(/'/g, "\\'")}')" style="padding:6px 8px;background:#007aff;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;">⬇️</button>` +
+                        `</span></li>`;
+            });
+            html += '</ul>';
+            listEl.innerHTML = html;
+            status.textContent = `✅ Получено ${data.length} файлов из bucket "${bucket}".`;
+        } catch (e) {
+            console.warn('listAudioStorageFiles error:', e);
+            listEl.innerHTML = '❌ Ошибка при получении списка (возможно, нет прав у anon ключа).';
+        }
+    }
+
+    // Скачивание одного файла из Supabase Storage
+    async function downloadAudioFromStorage(name) {
+        const status = document.getElementById('audioGenStatus');
+        status.textContent = `⏳ Скачиваем ${name}...`;
+        if (typeof _sb === 'undefined' || !_sb.storage) {
+            status.textContent = '❌ Supabase client не найден (переменная _sb).';
+            return;
+        }
+        const bucket = 'audio';
+        try {
+            const { data, error } = await _sb.storage.from(bucket).download(name);
+            if (error) throw error;
+            const url = URL.createObjectURL(data);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            status.textContent = `✅ Скачан ${name}`;
+        } catch (e) {
+            console.warn('downloadAudioFromStorage error:', e);
+            status.textContent = '❌ Ошибка при скачивании (возможно, нет прав).';
+        }
     }
 
     // Инициализация карты Яндекс.Карты
