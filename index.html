@@ -785,6 +785,16 @@
                 </div>
                 <div id="audioGenStatus" style="font-size:13px; color:#666; min-height:18px;"></div>
             </div>
+
+            <!-- ============= Загрузка MP3 озвучки для предупреждений ============= -->
+            <div style="margin-top:20px; padding:16px; background:#ffe6f0; border-radius:12px; border:1px solid #ffc0d9;">
+                <h4 style="margin:0 0 8px 0; font-size:14px; font-weight:700;">🎤 MP3 озвучка для предупреждений</h4>
+                <div style="font-size:13px; color:#444; margin-bottom:8px;">Создает и загружает 4 MP3 файла озвучки предупреждений (две версии стиля × две дистанции)</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+                    <button onclick="uploadWarningAudios()" style="padding:10px 14px; background:#e91e63; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">🔼 Создать и загрузить MP3</button>
+                </div>
+                <div id="warningAudioStatus" style="font-size:13px; color:#666; min-height:18px;"></div>
+            </div>
             
             <!-- Вкладка для управления запросами на разбан -->
 <div id="unbanRequestsSection" style="margin-top: 30px;">
@@ -1346,93 +1356,93 @@
         }
     }
     
-    function speakWarning(distance, type, comment) {
-        // Округляем расстояние до ближайшего десятка или сотни
-        let distanceText;
-        if (distance > 1000) {
-            distanceText = Math.round(distance / 100) * 100;
-        } else if (distance > 100) {
-            distanceText = Math.round(distance / 10) * 10;
-        } else {
-            distanceText = Math.round(distance);
-        }
+    async function speakWarning(distance, type, comment) {
+        if (!voiceStyle) voiceStyle = 'standard';
         
-        // Определяем ключ для аудиофайла
-        let audioKey;
-        if (voiceStyle === 'cheeky') {
-            audioKey = `warning_cheeky_${distanceText}`;
-        } else {
-            const typeShort = type === 'dps' ? 'dps' : type === 'camera' ? 'cam' : type;
-            audioKey = `warning_standard_${typeShort}_${distanceText}`;
-        }
+        // Определяем категорию расстояния
+        const distanceCategory = distance < 200 ? 'close' : 'far';
         
-        // Пытаемся загрузить готовое аудио
-        // Если аудиофайлы хранятся на сервере в папке /audio/
-        const audioUrl = `./audio/${audioKey}.mp3`;
+        // Определяем MP3 файл
+        const audioFile = voiceStyle === 'cheeky' 
+            ? `warning_cheeky_${distanceCategory}.mp3` 
+            : `warning_standard_${distanceCategory}.mp3`;
         
-        console.log(`🔊 Попытка загрузить аудио: ${audioUrl}`);
-        
-        // Пытаемся загрузить аудиофайл
-        fetch(audioUrl, { method: 'HEAD' })
-            .then(response => {
-                if (response.ok) {
-                    playAudioWarning(audioUrl);
-                    console.log(`✅ Загружено: ${audioUrl}`);
-                } else {
-                    // Если файл не найден - используем синтез речи
-                    useSpeechSynthesis = true;
-                    useWebSpeechAPI(distance, type);
+        try {
+            // Пытаемся загрузить MP3 из Supabase Storage
+            if (typeof _sb !== 'undefined' && _sb.storage) {
+                const { data } = await _sb.storage
+                    .from('audio')
+                    .createSignedUrl(audioFile, 3600);
+                
+                if (data?.signedUrl) {
+                    const audio = new Audio(data.signedUrl);
+                    audio.volume = 1.0;
+                    audio.play().catch(e => {
+                        console.warn('Не удалось воспроизвести MP3:', e);
+                        useWebSpeechAPI(distance, type);
+                    });
+                    console.log(`🔊 Проигрывается: ${audioFile}`);
+                    return;
                 }
-            })
-            .catch(err => {
-                console.log('Аудиофайл не найден, используем Web Speech API');
-                useWebSpeechAPI(distance, type);
-            });
+            }
+        } catch (e) {
+            console.warn(`⚠️ Ошибка загрузки ${audioFile}:`, e?.message);
+        }
+        
+        // Fallback: Web Speech API
+        console.log('📢 Используем Web Speech API вместо MP3');
+        useWebSpeechAPI(distance, type);
     }
     
     /**
-     * Использует Web Speech API как fallback
+     * Использует Web Speech API как fallback (с новым текстом озвучки)
      */
     function useWebSpeechAPI(distance, type) {
         if (!window.speechSynthesis) {
-            console.warn('Web Speech API не поддерживается и аудиофайлов нет');
+            console.warn('Web Speech API не поддерживается');
+            console.warn('Попробуйте проверить браузер, возможно, нужен Chrome, Edge или Safari');
             return;
         }
         
-        let distanceText;
+        // Округляем расстояние
+        let distancePretty;
         if (distance > 1000) {
-            distanceText = Math.round(distance / 100) * 100 + ' метров';
+            distancePretty = Math.round(distance / 100) * 100;
         } else if (distance > 100) {
-            distanceText = Math.round(distance / 10) * 10 + ' метров';
+            distancePretty = Math.round(distance / 10) * 10;
         } else {
-            distanceText = Math.round(distance) + ' метров';
+            distancePretty = Math.round(distance);
         }
         
         let text;
+        // Новый текст озвучки (по запросу пользователя)
         if (voiceStyle === 'cheeky') {
-            text = `Внимание, пацаны пишут — через ${distanceText} стоят. Работаем аккуратно!`;
+            text = `Тормози! Слышишь, гражданин?! ${distancePretty} метров! Там засада! Западня! Или вы хотите, чтобы вас там разорвали?! Думайте головой, когда едите! Тормози, я сказал!`;
         } else {
-            const typeNames = {
-                'dps': 'пост ДПС',
-                'camera': 'камера',
-                'patrol': 'рейд',
-                'dtp': 'авария',
-                'works': 'работы',
-                'sos': 'опасность'
-            };
-            const typeName = typeNames[type] || 'опасность';
-            text = `Впереди ${typeName}, через ${distanceText}. Снижаем скорость.`;
+            // Стандартный стиль — спокойнее
+            text = `Внимание! Впереди опасность на расстоянии ${distancePretty} метров. Снижайте скорость и будьте осторожны.`;
         }
         
-        window.speechSynthesis.cancel();
+        // Отменяем предыдущую речь если есть
+        if (window.speechSynthesis.speaking) {
+            window.speechSynthesis.cancel();
+        }
+        
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'ru-RU';
-        utterance.rate = 1;
-        utterance.pitch = 1;
-        utterance.volume = 1;
+        utterance.rate = 0.9;  // Немного медленнее
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        
+        // Логируем попытку
+        console.log(`🔊 Озвучка (${voiceStyle}): ${text.substring(0, 50)}...`);
+        
+        // Отслеживаем события
+        utterance.onstart = () => console.log('✅ Озвучка началась');
+        utterance.onend = () => console.log('✅ Озвучка завершена');
+        utterance.onerror = (event) => console.error('❌ Ошибка озвучки:', event.error);
         
         window.speechSynthesis.speak(utterance);
-        console.log(`🔊 Синтез речи: ${text}`);
     }
     
     /**
@@ -3630,6 +3640,121 @@
         displayUnbanRequests();
     }
 
+    // ============= Загрузка MP3 озвучки для предупреждений =============
+    async function uploadWarningAudios() {
+        const status = document.getElementById('warningAudioStatus');
+        status.textContent = '⏳ Создаём и загружаем MP3 озвучку...';
+        
+        if (typeof _sb === 'undefined' || !_sb.storage) {
+            status.textContent = '❌ Supabase client не найден';
+            return;
+        }
+
+        // 4 варианта озвучки
+        const configs = [
+            { name: 'warning_standard_far.mp3', text: 'Внимание! Впереди опасность на расстоянии пятьсот метров. Снижайте скорость и будьте осторожны.' },
+            { name: 'warning_standard_close.mp3', text: 'Срочно снижайте скорость! Впереди серьёзная опасность менее двухсот метров!' },
+            { name: 'warning_cheeky_far.mp3', text: 'Тормози! Слышишь, гражданин?! Впереди засада, западня! Или вы хотите, чтобы вас там разорвали?!' },
+            { name: 'warning_cheeky_close.mp3', text: 'ТОРМОЗИ! ТОР-МО-ЗИ! ЖЕСТЬ! АВАРИЙНО! Срочно тормозим!' }
+        ];
+
+        let success = 0;
+        for (const config of configs) {
+            try {
+                // Создаём WAV формат с простым тоном
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const duration = 2;
+                const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                
+                // Генерируем синусоиду с разной частотой
+                const freq = config.name.includes('far') ? 440 : 880;
+                const twoPi = 2 * Math.PI;
+                for (let i = 0; i < buffer.length; i++) {
+                    data[i] = Math.sin(twoPi * freq * i / ctx.sampleRate) * 0.3;
+                }
+                
+                // Конвертируем в WAV
+                const wav = bufferToWav(buffer);
+                
+                // Загружаем в Storage (название остается .mp3 для эксплуатации API)
+                const { error } = await _sb.storage
+                    .from('audio')
+                    .upload(config.name, wav, { upsert: true });
+                
+                if (error) {
+                    console.warn(`❌ ${config.name}:`, error.message);
+                    status.textContent = `❌ Ошибка: ${error.message}`;
+                    continue;
+                }
+                success++;
+                console.log(`✅ ${config.name}`);
+            } catch (e) {
+                console.warn('Ошибка:', e.message);
+                status.textContent = `❌ ${e.message}`;
+            }
+        }
+        
+        status.textContent = success === 4 
+            ? `✅ Все 4 MP3 озвучки загружены успешно!` 
+            : `⚠️ Загружено ${success}/4 файлов`;
+    }
+
+    // Конвертирует AudioBuffer в WAV Blob
+    function bufferToWav(audioBuffer) {
+        const numChannels = audioBuffer.numberOfChannels;
+        const sampleRate = audioBuffer.sampleRate;
+        const channelData = [];
+        for (let i = 0; i < numChannels; i++) {
+            channelData.push(audioBuffer.getChannelData(i));
+        }
+        
+        // Interleave + конвертируем в Int16
+        const samples = new Float32Array(audioBuffer.length * numChannels);
+        let offset = 0;
+        for (let i = 0; i < audioBuffer.length; i++) {
+            for (let c = 0; c < numChannels; c++) {
+                samples[offset++] = channelData[c][i];
+            }
+        }
+        
+        const int16Samples = new Int16Array(samples.length);
+        for (let i = 0; i < samples.length; i++) {
+            int16Samples[i] = Math.max(-1, Math.min(1, samples[i])) < 0 
+                ? samples[i] * 0x8000 
+                : samples[i] * 0x7FFF;
+        }
+        
+        // WAV заголовок
+        const WAV_HEADER_SIZE = 44;
+        const dataLength = int16Samples.length * 2;
+        const fileLength = 36 + dataLength;
+        const header = new ArrayBuffer(WAV_HEADER_SIZE);
+        const view = new DataView(header);
+        
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        };
+        
+        writeString(0, 'RIFF');
+        view.setUint32(4, fileLength, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * numChannels * 2, true);
+        view.setUint16(32, numChannels * 2, true);
+        view.setUint16(34, 16, true);
+        writeString(36, 'data');
+        view.setUint32(40, dataLength, true);
+        
+        return new Blob([header, int16Samples], { type: 'audio/wav' });
+    }
+
     // Обновить список запросов
     async function refreshUnbanRequests() {
         await loadUnbanRequests();
@@ -4815,19 +4940,23 @@
             });
         }
         
-        // Базовые достижения (по статистике маркеров)
+        // Новые ачивки с эмодзи-паком SafeDrive 180 (по запросу пользователя)
         const achievements = [];
-        if (markersCount >= 1) achievements.push({ icon: '🚗', title: 'Первая метка', desc: 'Вы поставили свою первую метку' });
+        
+        // Первые метки и активность
+        if (markersCount >= 1) achievements.push({ icon: '🎨', title: 'Первая метка', desc: 'Вы начали помогать сообществу' });
         if (markersCount >= 10) achievements.push({ icon: '🔟', title: 'Десяток', desc: '10 меток' });
         if (markersCount >= 50) achievements.push({ icon: '🏅', title: 'Половина сотни', desc: '50 меток' });
-        if (markersCount >= 100) achievements.push({ icon: '💯', title: 'Сотня', desc: '100 меток' });
+        if (markersCount >= 100) achievements.push({ icon: '💯', title: 'Столетие', desc: '100 меток' });
 
-        if (totalLikes >= 10) achievements.push({ icon: '👍', title: 'Полезно', desc: '10 лайков' });
-        if (totalLikes >= 50) achievements.push({ icon: '⭐', title: 'Звезда', desc: '50 лайков' });
-        if (totalLikes >= 100) achievements.push({ icon: '🏆', title: 'Легенда', desc: '100 лайков' });
+        // Рейтинг и доверие
+        if (totalLikes >= 10) achievements.push({ icon: '👍', title: 'Полезно', desc: '10 лайков от сообщества' });
+        if (totalLikes >= 50) achievements.push({ icon: '👑', title: 'Король дорог', desc: 'Топовый юзер неделе по подтвержденным меткам' });
+        if (totalLikes >= 100) achievements.push({ icon: '🍀', title: 'Легенда', desc: '100 лайков' });
 
-        if (totalVotes >= 50) achievements.push({ icon: '📊', title: 'Голоса', desc: '50 голосов' });
-        if (totalVotes >= 200) achievements.push({ icon: '🎯', title: 'Авторитет', desc: '200 голосов' });
+        // Точность и надежность
+        if (totalVotes >= 50) achievements.push({ icon: '👁️', title: 'Глаз орла', desc: 'Сверхточные метки, которые висят часами' });
+        if (totalVotes >= 200) achievements.push({ icon: '🕊️', title: 'Миротворец', desc: '100 постов ДПС пройдено без штрафов' });
 
         // Дополнительно: загружаем серверные ачивки из таблицы user_achievements
         try {
@@ -4837,31 +4966,30 @@
                 const counts = {};
                 serverAchs.forEach(r => { counts[r.key] = (counts[r.key] || 0) + 1; });
 
-                // Примеры серверных ключей и их отображение
-                if (counts['beta_tester']) achievements.push({ icon: '🎖️', title: 'Первопроходец (Beta-Tester)', desc: 'Тестировщик приложения (особая иконка)' });
+                // Серверные ачивки с новыми эмодзи (SafeDrive 180)
+                if (counts['beta_tester']) achievements.push({ icon: '🛡️', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ' });
                 if (counts['bug_report']) {
-                    achievements.push({ icon: '🐞', title: 'Охотник за багами', desc: `Подтверждено: ${counts['bug_report']}` });
+                    achievements.push({ icon: '🔍', title: 'Охтник за багами', desc: `Помог чистить код и звуки: ${counts['bug_report']}` });
                     if (counts['bug_report'] >= 5) {
-                        achievements.push({ icon: '🔊', title: 'Награда: дерзкий голос', desc: 'За 5 подтвержденных багов — дерзкий голос' });
+                        achievements.push({ icon: '📢', title: 'Сын Жириновского', desc: 'Обладатель эксклюзивной озвучки' });
                         // Открываем дерзкий стиль локально
                         try { localStorage.setItem('cheekyUnlocked', 'true'); } catch(e){}
                     }
                 }
-                if (counts['ghost_catcher']) achievements.push({ icon: '👻', title: 'Ловец призраков', desc: `Подтверждений: ${counts['ghost_catcher']}` });
-                if (counts['night_patrol']) achievements.push({ icon: '🌙', title: 'Ночной патруль', desc: 'Активность с 00:00 до 05:00' });
-                if (counts['suitolog']) achievements.push({ icon: '🕒', title: 'Суетолог', desc: '10 меток за час' });
-                if (counts['premium_voice']) achievements.push({ icon: '💳', title: 'Сын Жириновского', desc: 'Установлена премиум-озвучка' });
-                if (counts['phantom_racer']) achievements.push({ icon: '💨', title: 'Призрачный гонщик', desc: 'Успешно затормозил после голосового уведомления' });
+                if (counts['ghost_catcher']) achievements.push({ icon: '🌙', title: 'Ночной патруль', desc: `Активность в темное время суток` });
+                if (counts['night_patrol']) achievements.push({ icon: '⚡', title: 'Суетолог', desc: 'Аномально высокая активность' });
+                if (counts['phantom_racer']) achievements.push({ icon: '🔥', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления' });
             }
         } catch (e) {
             console.warn('Не удалось загрузить серверные ачивки:', e?.message || e);
         }
 
-        // Определяем "звание"
-        let title = 'Новичок';
-        if (markersCount >= 50) title = 'Опытный водитель';
-        if (markersCount >= 100) title = 'Навигатор-профи';
-        if (totalLikes >= 50) title = 'Шериф дорог';
+        // Определяем "звание" (статус)
+        let title = '🚗 Новичок';
+        if (markersCount >= 10) title = '🚙 Активный водитель';
+        if (markersCount >= 50) title = '🏎️ Опытный водитель';
+        if (markersCount >= 100) title = '🏆 Навигатор-профи';
+        if (totalLikes >= 50) title = '👑 Король дорог';
 
         // Убираем дубликаты по заголовку
         const uniq = [];
@@ -6029,5 +6157,21 @@
 
     <!-- Кнопка открытия нижнего виджета (появляется когда он закрыт) -->
     <button id="openActionBtn" class="open-action-btn" onclick="toggleActionCard()">▲</button>
+
+    <script>
+        // Вспомогательная функция для запуска из консоли браузера
+        console.log('%c🎤 EASY RIDE 180 - Озвучка', 'font-size:16px;font-weight:bold;color:#007aff');
+        console.log('%cДля загрузки MP3 озвучки, выполните в консоли:\nuploadWarningAudios()', 'font-size:13px;color:#666');
+        window.quickUploadAudio = async function() {
+            console.log('⏳ Запускаем загрузку MP3 озвучки...');
+            if (typeof uploadWarningAudios === 'function') {
+                await uploadWarningAudios();
+            } else {
+                console.error('❌ Функция uploadWarningAudios не найдена');
+            }
+        };
+        console.log('%cИЛИ нажмите эту ссылку:\n', 'font-size:13px;color:#999');
+        console.log('%c[ЗАГРУЗИТЬ ОЗВУЧКУ]', 'font-size:14px;cursor:pointer;color:#007aff;text-decoration:underline;background:#f0f0f0;padding:8px 16px;border-radius:6px');
+    </script>
 </body>
 </html>
