@@ -1242,6 +1242,12 @@
     let gpsWatchId = null;
     // Маркер текущего местоположения на карте
     let userLocationMarker = null;
+    // Для вычисления скорости: предыдущая позиция и время
+    let lastUserPositionCoords = null; // [lat, lon]
+    let lastUserPositionTime = null; // ms
+    let userSpeedKmh = 0; // скорость в км/ч
+    // Текущие серверные ачивки (ключ -> count)
+    let currentAchievementCounts = {};
     // Коллекция для маркеров (чтобы не удалять служебные geoObjects при обновлении)
     let markersCollection = null;
     // Флаг автоследования: если true — карта центрируется на пользователе при обновлении GPS
@@ -1532,6 +1538,8 @@
         } catch (e) {
             console.warn('Не удалось сохранить стиль озвучки:', e);
         }
+        // Обновляем внешний вид маркера сразу
+        try { updateUserLocationMarker(); } catch(e){}
         
         console.log(`🔊 Стиль озвучки изменен на: ${style}`);
     }
@@ -1563,71 +1571,155 @@
             maximumAge: 5000           // Кэшируем GPS данные на 5 сек
         };
         
-        // Начинаем отслеживание местоположения
-        gpsWatchId = navigator.geolocation.watchPosition(
-            (position) => {
-                // Успешное получение координат
-                const { latitude, longitude, accuracy } = position.coords;
-                userLocation = [latitude, longitude];
-                
-                // Обновляем маркер на карте
-                updateUserLocationMarker();
-                // Если автоследование включено — центрируем карту на пользователе (если не отключено вручную)
-                if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                    try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
-                }
-                // Сбрасываем флаг после одного использования
-                if (disableAutoFollowOnce) disableAutoFollowOnce = false;
-                console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м)`);
-            },
-            (error) => {
-                // Ошибка получения координат
-                console.warn('Ошибка GPS:', error.message);
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        console.warn('Разрешение на доступ к GPS отклонено');
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        console.warn('Информация о местоположении недоступна');
-                        break;
-                    case error.TIMEOUT:
-                        console.warn('Истекло время ожидания GPS');
-                        break;
-                }
-            },
-            options
-        );
+        // Начинаем отслеживание местоположения с вычислением скорости
+        try {
+            // Если доступна Permissions API — логируем состояние (полезно для iOS/Android в WebView)
+            if (navigator.permissions && navigator.permissions.query) {
+                try {
+                    navigator.permissions.query({ name: 'geolocation' }).then(p => {
+                        console.log('GPS permission state:', p.state);
+                        p.onchange = () => console.log('GPS permission changed:', p.state);
+                    }).catch(()=>{});
+                } catch(e){}
+            }
+
+            gpsWatchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    // Успешное получение координат
+                    const { latitude, longitude, accuracy } = position.coords;
+                    const now = Date.now();
+
+                    // Вычисляем скорость на основе предыдущей позиции (м/c -> км/ч)
+                    if (lastUserPositionCoords && lastUserPositionTime) {
+                        const prev = lastUserPositionCoords;
+                        const dt = (now - lastUserPositionTime) / 1000; // сек
+                        if (dt > 0) {
+                            const dist = calculateDistance(prev[0], prev[1], latitude, longitude); // метры
+                            const speedMs = dist / dt; // м/с
+                            userSpeedKmh = Math.round(speedMs * 3.6);
+                        }
+                    }
+                    lastUserPositionCoords = [latitude, longitude];
+                    lastUserPositionTime = now;
+
+                    userLocation = [latitude, longitude];
+
+                    // Обновляем маркер на карте (включая визуализацию скорости/ачивок/стиля)
+                    updateUserLocationMarker();
+
+                    // Центрируем карту если автоследование включено
+                    if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
+                        try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
+                    }
+                    if (disableAutoFollowOnce) disableAutoFollowOnce = false;
+                    console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
+                },
+                (error) => {
+                    // Ошибка получения координат
+                    console.warn('Ошибка GPS:', error.message);
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            console.warn('Разрешение на доступ к GPS отклонено');
+                            // Для мобильных WebView полезно показать инструкцию
+                            if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                                console.warn('iOS: откройте настройки приложения и разрешите доступ к местоположению.');
+                            }
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            console.warn('Информация о местоположении недоступна — пробую один раз получить позицию');
+                            // однократная попытка
+                            navigator.geolocation.getCurrentPosition((pos) => {
+                                const { latitude, longitude } = pos.coords;
+                                userLocation = [latitude, longitude];
+                                lastUserPositionCoords = [latitude, longitude];
+                                lastUserPositionTime = Date.now();
+                                updateUserLocationMarker();
+                            }, ()=>{}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+                            break;
+                        case error.TIMEOUT:
+                            console.warn('Истекло время ожидания GPS — попробуйте ещё раз');
+                            break;
+                    }
+                },
+                options
+            );
+        } catch (e) {
+            console.warn('watchPosition failed:', e);
+        }
     }
     
     // Функция обновления маркера текущего местоположения на карте
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
-        
+
         // Удаляем старый маркер если он есть
         if (userLocationMarker) {
-            myMap.geoObjects.remove(userLocationMarker);
+            try { myMap.geoObjects.remove(userLocationMarker); } catch(e){}
         }
-        
-        // Создаем новый маркер (синий круг с пульсацией)
-        userLocationMarker = new ymaps.Placemark(userLocation, 
-            { 
+
+        // Параметры внешнего вида
+        const isCheeky = voiceStyle === 'cheeky';
+        const speed = userSpeedKmh || 0; // km/h
+        const size = Math.max(32, Math.min(64, 32 + Math.floor(speed / 2))); // растёт с скоростью
+
+        // Цвет и базовая форма по стилю озвучки
+        const baseColor = isCheeky ? '#ff3b30' : '#007aff';
+        const glowColor = isCheeky ? '#ff8a80' : '#9ad1ff';
+
+        // Элементы ачивок
+        const hasBeta = currentAchievementCounts && currentAchievementCounts['beta_tester'];
+        const hasSuitolog = currentAchievementCounts && (currentAchievementCounts['suitolog'] || currentAchievementCounts['suetolog'] || false);
+        const hasPhantom = currentAchievementCounts && currentAchievementCounts['phantom_racer'];
+
+        // Формируем SVG для иконки
+        const crownSvg = hasBeta ? `<g transform="translate(${size/2 - 10},-8)"><path d="M2 12 L6 4 L10 12 L14 4 L18 12 L2 12 Z" fill="#ffd700" stroke="#b8860b" stroke-width="0.6"/></g>` : '';
+
+        // Пламя для быстрого движения/суетолога
+        const flameSvg = (speed >= 40 || hasSuitolog || hasPhantom) ? `<g transform="translate(${size - 6},${size/2 - 6})"><path d=\"M0 8 C2 4,6 2,8 0 C6 4,6 8,2 10 C0 8,0 8,0 8 Z\" fill=\"#ff6a00\" opacity=\"0.9\"/></g>` : '';
+
+        let shapeSvg = '';
+        if (isCheeky) {
+            // Спорткар/стрела
+            shapeSvg = `<polygon points=\"${size*0.1},${size*0.5} ${size*0.6},${size*0.1} ${size*0.9},${size*0.5} ${size*0.6},${size*0.9}\" fill=\"${baseColor}\" stroke=\"#fff\" stroke-width=\"1\" opacity=\"0.95\"/>`;
+        } else {
+            // Круг с градиентом
+            shapeSvg = `<circle cx=\"${size/2}\" cy=\"${size/2}\" r=\"${size*0.28}\" fill=\"url(#g)\" stroke=\"#fff\" stroke-width=\"2\"/>`;
+        }
+
+        const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <defs>
+    <radialGradient id="g" cx="50%" cy="40%" r="60%"><stop offset="0%" stop-color="${baseColor}" stop-opacity="1"/><stop offset="100%" stop-color="${glowColor}" stop-opacity="0.6"/></radialGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="transparent"/>
+  ${shapeSvg}
+  ${flameSvg}
+  ${crownSvg}
+  <!-- небольшой контур для читаемости на разных фонах -->
+  <circle cx="${size/2}" cy="${size/2}" r="${size*0.49}" fill="none" stroke="rgba(0,0,0,0.04)" stroke-width="1"/>
+</svg>`;
+
+        const svgUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+
+        userLocationMarker = new ymaps.Placemark(userLocation,
+            {
                 hintContent: 'Вы здесь',
-                balloonContent: '📍 Ваше текущее местоположение'
+                balloonContent: `📍 Ваше текущее местоположение<br>Скорость: ${speed} км/ч`
             },
             {
                 iconLayout: 'default#image',
-                iconImageHref: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSI4IiBmaWxsPSIjMDA3YWZmIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=',
-                iconImageSize: [32, 32],
-                iconImageOffset: [-16, -16],
+                iconImageHref: svgUrl,
+                iconImageSize: [size, size],
+                iconImageOffset: [-(size/2), -(size/2)],
                 zIndex: 1000
             }
         );
-        
+
         myMap.geoObjects.add(userLocationMarker);
-        
+
         // Центрируем карту на текущем местоположении (если это первый раз)
         if (!myMap.lastUserLocationUpdate) {
-            myMap.setCenter(userLocation, 17);
+            try { myMap.setCenter(userLocation, 17); } catch(e){}
             myMap.lastUserLocationUpdate = true;
         }
     }
@@ -4961,9 +5053,9 @@
         // Дополнительно: загружаем серверные ачивки из таблицы user_achievements
         try {
             const { data: serverAchs } = await _sb.from('user_achievements').select('key,created_at').eq('user_id', uid);
+            // Считаем повторы по ключу
+            const counts = {};
             if (serverAchs && serverAchs.length > 0) {
-                // Считаем повторы по ключу
-                const counts = {};
                 serverAchs.forEach(r => { counts[r.key] = (counts[r.key] || 0) + 1; });
 
                 // Серверные ачивки с новыми эмодзи (SafeDrive 180)
@@ -4980,6 +5072,8 @@
                 if (counts['night_patrol']) achievements.push({ icon: '⚡', title: 'Суетолог', desc: 'Аномально высокая активность' });
                 if (counts['phantom_racer']) achievements.push({ icon: '🔥', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления' });
             }
+            // Сохраняем глобально для визуализации метки
+            try { currentAchievementCounts = counts; } catch(e){}
         } catch (e) {
             console.warn('Не удалось загрузить серверные ачивки:', e?.message || e);
         }
