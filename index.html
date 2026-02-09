@@ -1029,6 +1029,23 @@
             </div>
             
             <button class="main-btn" onclick="openRatingsModal()" style="margin-bottom: 10px; background: #34c759;">ГЛОБАЛЬНЫЙ РЕЙТИНГ</button>
+            
+            <!-- Настройки озвучки уведомлений -->
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">🔊 Стиль озвучки уведомлений</div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="setVoiceStyle('standard')" id="voiceStyleStandard" class="main-btn" style="flex: 1; background: #34c759; padding: 10px; font-size: 12px; border-radius: 8px;">
+                        📢 Стандартный
+                    </button>
+                    <button onclick="setVoiceStyle('cheeky')" id="voiceStyleCheeky" class="main-btn" style="flex: 1; background: #9c9c9c; padding: 10px; font-size: 12px; border-radius: 8px;">
+                        😎 Дерзкий
+                    </button>
+                </div>
+                <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
+                    <span id="voiceStyleDescription">Выбран: Стандартный стиль</span>
+                </div>
+            </div>
+            
             <button class="main-btn" onclick="logout()">ВЫЙТИ</button>
         </div>
     </div>
@@ -1209,6 +1226,10 @@
     let selectedChatPhoto = null;
     // Множество для отслеживания уже воспроизведенных уведомлений (чтобы не спамить звук)
     let notifiedMarkers = new Set();
+    // Отслеживание уведомлений по расстоянию (marker_id -> уровень уведомления: 'far' или 'near')
+    let distanceNotifications = new Map(); // { markerId: 'far'|'near' }
+    // Стиль озвучки: 'standard' (стандартный) или 'cheeky' (дерзкий)
+    let voiceStyle = 'standard';
     // Флаг видимости нижнего виджета
     let actionCardVisible = true;
     // Флаг для отключения автосцентрирования GPS после размещения метки
@@ -1253,6 +1274,226 @@
     
     // Оптимизированный дебаунс для loadMarkers (750ms вместо 500ms)
     const loadMarkersDebounced = debounce(() => loadMarkers(), 750);
+    
+    // ============= ФУНКЦИИ ДЛЯ УВЕДОМЛЕНИЙ О РАССТОЯНИИ И ОЗВУЧКИ =============
+    
+    /**
+     * Вычисляет расстояние между двумя GPS-координатами (формула Хаверсина)
+     * @param {number} lat1 - широта первой точки
+     * @param {number} lon1 - долгота первой точки
+     * @param {number} lat2 - широта второй точки
+     * @param {number} lon2 - долгота второй точки
+     * @returns {number} расстояние в метрах
+     */
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371000; // Радиус земли в метрах
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+    
+    /**
+     * Озвучивает предупреждение о посте ДПС
+     * @param {number} distance - расстояние в метрах
+     * @param {string} type - тип метки (dps, camera, etc.)
+     * @param {string} comment - комментарий к метке
+     */
+    /**
+     * Воспроизводит готовое аудио предупреждение
+     * @param {string} audioUrl - URL аудиофайла
+     */
+    function playAudioWarning(audioUrl) {
+        try {
+            const audio = new Audio(audioUrl);
+            audio.volume = 1;
+            audio.play().catch(err => {
+                console.warn('Ошибка воспроизведения аудио:', err);
+                // Если аудио не работает, пытаемся синтез речи
+                useSpeechSynthesis = true;
+            });
+        } catch (e) {
+            console.warn('Не удалось загрузить аудио:', e);
+        }
+    }
+    
+    function speakWarning(distance, type, comment) {
+        // Округляем расстояние до ближайшего десятка или сотни
+        let distanceText;
+        if (distance > 1000) {
+            distanceText = Math.round(distance / 100) * 100;
+        } else if (distance > 100) {
+            distanceText = Math.round(distance / 10) * 10;
+        } else {
+            distanceText = Math.round(distance);
+        }
+        
+        // Определяем ключ для аудиофайла
+        let audioKey;
+        if (voiceStyle === 'cheeky') {
+            audioKey = `warning_cheeky_${distanceText}`;
+        } else {
+            const typeShort = type === 'dps' ? 'dps' : type === 'camera' ? 'cam' : type;
+            audioKey = `warning_standard_${typeShort}_${distanceText}`;
+        }
+        
+        // Пытаемся загрузить готовое аудио
+        // Если аудиофайлы хранятся на сервере в папке /audio/
+        const audioUrl = `./audio/${audioKey}.mp3`;
+        
+        console.log(`🔊 Попытка загрузить аудио: ${audioUrl}`);
+        
+        // Пытаемся загрузить аудиофайл
+        fetch(audioUrl, { method: 'HEAD' })
+            .then(response => {
+                if (response.ok) {
+                    playAudioWarning(audioUrl);
+                    console.log(`✅ Загружено: ${audioUrl}`);
+                } else {
+                    // Если файл не найден - используем синтез речи
+                    useSpeechSynthesis = true;
+                    useWebSpeechAPI(distance, type);
+                }
+            })
+            .catch(err => {
+                console.log('Аудиофайл не найден, используем Web Speech API');
+                useWebSpeechAPI(distance, type);
+            });
+    }
+    
+    /**
+     * Использует Web Speech API как fallback
+     */
+    function useWebSpeechAPI(distance, type) {
+        if (!window.speechSynthesis) {
+            console.warn('Web Speech API не поддерживается и аудиофайлов нет');
+            return;
+        }
+        
+        let distanceText;
+        if (distance > 1000) {
+            distanceText = Math.round(distance / 100) * 100 + ' метров';
+        } else if (distance > 100) {
+            distanceText = Math.round(distance / 10) * 10 + ' метров';
+        } else {
+            distanceText = Math.round(distance) + ' метров';
+        }
+        
+        let text;
+        if (voiceStyle === 'cheeky') {
+            text = `Внимание, пацаны пишут — через ${distanceText} стоят. Работаем аккуратно!`;
+        } else {
+            const typeNames = {
+                'dps': 'пост ДПС',
+                'camera': 'камера',
+                'patrol': 'рейд',
+                'dtp': 'авария',
+                'works': 'работы',
+                'sos': 'опасность'
+            };
+            const typeName = typeNames[type] || 'опасность';
+            text = `Впереди ${typeName}, через ${distanceText}. Снижаем скорость.`;
+        }
+        
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ru-RU';
+        utterance.rate = 1;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+        
+        window.speechSynthesis.speak(utterance);
+        console.log(`🔊 Синтез речи: ${text}`);
+    }
+    
+    /**
+     * Проверяет расстояние до маркера и выдает уведомление если нужно
+     * @param {Object} marker - объект маркера из БД
+     * @param {Array} userCoords - координаты пользователя [lat, lon]
+     */
+    function checkMarkerDistance(marker, userCoords) {
+        if (!userCoords || userCoords.length < 2) return;
+        if (!marker.latitude || !marker.longitude) return;
+        
+        const distance = calculateDistance(
+            userCoords[0], userCoords[1],
+            marker.latitude, marker.longitude
+        );
+        
+        const markerId = marker.id;
+        const currentNotification = distanceNotifications.get(markerId);
+        
+        // Первое уведомление: 500-800 метров
+        if (distance >= 500 && distance <= 800 && currentNotification !== 'far') {
+            speakWarning(distance, marker.type, marker.comment);
+            distanceNotifications.set(markerId, 'far');
+            console.log(`📍 Первое уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
+        }
+        // Второе уведомление: 200 метров
+        else if (distance < 200 && currentNotification !== 'near') {
+            speakWarning(distance, marker.type, marker.comment);
+            distanceNotifications.set(markerId, 'near');
+            console.log(`📍 Второе уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
+        }
+        // Очищаем уведомление если маркер слишком далеко
+        else if (distance > 800 && currentNotification) {
+            distanceNotifications.delete(markerId);
+        }
+    }
+
+    /**
+     * Устанавливает стиль озвучки уведомлений о расстоянии
+     * @param {string} style - 'standard' или 'cheeky'
+     */
+    function setVoiceStyle(style) {
+        voiceStyle = style;
+        
+        // Обновляем визуальное состояние кнопок
+        const standardBtn = document.getElementById('voiceStyleStandard');
+        const cheekyBtn = document.getElementById('voiceStyleCheeky');
+        const descriptionEl = document.getElementById('voiceStyleDescription');
+        
+        if (style === 'standard') {
+            standardBtn.style.background = '#34c759';
+            standardBtn.style.color = 'white';
+            cheekyBtn.style.background = '#9c9c9c';
+            cheekyBtn.style.color = 'white';
+            descriptionEl.textContent = '✨ Выбран: Стандартный стиль озвучки';
+        } else if (style === 'cheeky') {
+            standardBtn.style.background = '#9c9c9c';
+            standardBtn.style.color = 'white';
+            cheekyBtn.style.background = '#34c759';
+            cheekyBtn.style.color = 'white';
+            descriptionEl.textContent = '😎 Выбран: Дерзкий стиль озвучки';
+        }
+        
+        // Сохраняем выбор в localStorage
+        try {
+            localStorage.setItem('voiceStyle', style);
+        } catch (e) {
+            console.warn('Не удалось сохранить стиль озвучки:', e);
+        }
+        
+        console.log(`🔊 Стиль озвучки изменен на: ${style}`);
+    }
+    
+    /**
+     * Загружает сохраненный стиль озвучки при инициализации
+     */
+    function loadVoiceStyle() {
+        try {
+            const savedStyle = localStorage.getItem('voiceStyle');
+            if (savedStyle === 'cheeky' || savedStyle === 'standard') {
+                voiceStyle = savedStyle;
+            }
+        } catch (e) {
+            console.warn('Не удалось загрузить стиль озвучки:', e);
+        }
+    }
+
     function initGPS() {
         if (!navigator.geolocation) {
             console.warn('Geolocation не поддерживается браузером');
@@ -1374,7 +1615,7 @@
     // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
     // coords1 и coords2 - массивы [широта, долгота]
     // Возвращает расстояние в метрах
-    function calculateDistance(coords1, coords2) {
+    function calculateDistanceFromArrays(coords1, coords2) {
         const R = 6371000; // Радиус Земли в метрах
         const lat1 = coords1[0] * Math.PI / 180;
         const lat2 = coords2[0] * Math.PI / 180;
@@ -1563,6 +1804,9 @@
         } catch (e) {
             console.warn('Не удалось запустить heartbeat/online count:', e?.message || e);
         }
+
+        // Загружаем сохраненный стиль озвучки
+        loadVoiceStyle();
 
         // Инициализация завершена
         initAppInProgress = false;
@@ -1879,6 +2123,17 @@
 
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
+        
+        // Обновляем состояние кнопок стиля озвучки в профиле
+        document.getElementById('voiceStyleStandard').style.background = voiceStyle === 'standard' ? '#34c759' : '#9c9c9c';
+        document.getElementById('voiceStyleCheeky').style.background = voiceStyle === 'cheeky' ? '#34c759' : '#9c9c9c';
+        const descEl = document.getElementById('voiceStyleDescription');
+        if (voiceStyle === 'cheeky') {
+            descEl.textContent = '😎 Выбран: Дерзкий стиль озвучки';
+        } else {
+            descEl.textContent = '✨ Выбран: Стандартный стиль озвучки';
+        }
+        
         document.getElementById('profileModal').classList.add('active');
     }
 
@@ -4911,23 +5166,14 @@
             // Добавляем маркер в коллекцию
             if (markersCollection) markersCollection.add(p);
             
-            // Проверяем расстояние до опасных маркеров (камеры и ДПС)
-            if ((m.type === 'camera' || m.type === 'dps') && m.coords && Array.isArray(m.coords)) {
-                const distance = calculateDistance(userCoords, m.coords);
-                
-                // Если расстояние меньше 500 метров и это первый раз, издаем звук
-                if (distance < 500 && !notifiedMarkers.has(m.id)) {
-                    notifiedMarkers.add(m.id);
-                    playAlertSound();
-                    console.log(`⚠️ Внимание! ${m.type === 'camera' ? 'Камера' : 'ДПС'} на расстоянии ${distance.toFixed(0)}м`);
-                }
-            }
+            // Проверяем расстояние до маркера и выдаем уведомление если нужно
+            checkMarkerDistance(m, userCoords);
             
-            // Очищаем уведомления для маркеров которые уже далеко (более 1000м)
-            if (notifiedMarkers.has(m.id)) {
-                const distance = calculateDistance(userCoords, m.coords);
-                if (distance > 1000) {
-                    notifiedMarkers.delete(m.id);
+            // Очищаем уведомления для маркеров которые уже далеко (более 800м)
+            if (distanceNotifications.has(m.id)) {
+                const distance = calculateDistance(userCoords[0], userCoords[1], m.latitude, m.longitude);
+                if (distance > 800) {
+                    distanceNotifications.delete(m.id);
                 }
             }
         });
