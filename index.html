@@ -828,28 +828,40 @@
                 <div id="bulkBetaStatus" style="font-size:13px; color:#666; min-height:18px;"></div>
             </div>
 
-            <!-- ============= Генератор тестовой озвучки ============= -->
-            <div style="margin-top:20px; padding:16px; background:#f7fff7; border-radius:12px; border:1px solid #dff0d8;">
-                <h4 style="margin:0 0 8px 0; font-size:14px; font-weight:700;">🔊 Генератор тестовых аудиофайлов (плейсхолдеры)</h4>
-                <div style="font-size:13px; color:#444; margin-bottom:8px;">Создает простые WAV-файлы-заглушки с разными тонами. Скачайте и загрузите в папку <strong>/audio/</strong> для тестирования.</div>
+            <!-- ============= Загрузка MP3 озвучки для предупреждений ============= -->
+            <div style="margin-top:20px; padding:16px; background:#fff8e6; border-radius:12px; border:1px solid #ffe0a3;">
+                <h4 style="margin:0 0 8px 0; font-size:14px; font-weight:700;">🎤 Загрузка своей озвучки (MP3)</h4>
+                <div style="font-size:13px; color:#444; margin-bottom:10px;">Загрузите 4 файла в bucket <strong>/audio/</strong> с точными именами:</div>
+                <div style="font-size:12px; color:#666; margin-bottom:10px; line-height:1.5;">
+                    • warning_standard_far.mp3<br>
+                    • warning_standard_close.mp3<br>
+                    • warning_cheeky_far.mp3<br>
+                    • warning_cheeky_close.mp3
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:12px;">
+                    <div>
+                        <div style="font-size:12px; font-weight:700; margin-bottom:6px;">Стандартный (далеко)</div>
+                        <input type="file" id="audioStandardFar" accept="audio/mpeg,audio/mp3" style="width:100%;">
+                    </div>
+                    <div>
+                        <div style="font-size:12px; font-weight:700; margin-bottom:6px;">Стандартный (близко)</div>
+                        <input type="file" id="audioStandardClose" accept="audio/mpeg,audio/mp3" style="width:100%;">
+                    </div>
+                    <div>
+                        <div style="font-size:12px; font-weight:700; margin-bottom:6px;">Дерзкий (далеко)</div>
+                        <input type="file" id="audioCheekyFar" accept="audio/mpeg,audio/mp3" style="width:100%;">
+                    </div>
+                    <div>
+                        <div style="font-size:12px; font-weight:700; margin-bottom:6px;">Дерзкий (близко)</div>
+                        <input type="file" id="audioCheekyClose" accept="audio/mpeg,audio/mp3" style="width:100%;">
+                    </div>
+                </div>
                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-                    <button onclick="generatePlaceholderAudios()" style="padding:10px 14px; background:#28a745; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">⬇️ Сгенерировать и скачать всё</button>
-                    <button onclick="downloadSinglePlaceholders()" style="padding:10px 14px; background:#007aff; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">⬇️ Скачать по одному</button>
-                    <button onclick="uploadPlaceholdersToStorage()" style="padding:10px 14px; background:#ff9500; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">🔼 Загрузить в Supabase Storage</button>
-                    <button onclick="listAudioStorageFiles()" style="padding:10px 14px; background:#6f42c1; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">📂 Обновить список в Storage</button>
+                    <button onclick="uploadCustomWarningAudios()" style="padding:10px 14px; background:#111; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">⬆️ Загрузить файлы</button>
+                    <button onclick="listAudioStorageFiles()" style="padding:10px 14px; background:#6f42c1; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">📂 Проверить Storage</button>
                 </div>
                 <div style="margin-top:8px;">
                     <div id="storageFilesList" style="max-height:140px; overflow:auto; border:1px dashed #e0e0e0; padding:8px; border-radius:8px; background:#fff;"></div>
-                </div>
-                <div id="audioGenStatus" style="font-size:13px; color:#666; min-height:18px;"></div>
-            </div>
-
-            <!-- ============= Загрузка MP3 озвучки для предупреждений ============= -->
-            <div style="margin-top:20px; padding:16px; background:#ffe6f0; border-radius:12px; border:1px solid #ffc0d9;">
-                <h4 style="margin:0 0 8px 0; font-size:14px; font-weight:700;">🎤 MP3 озвучка для предупреждений</h4>
-                <div style="font-size:13px; color:#444; margin-bottom:8px;">Создает и загружает 4 MP3 файла озвучки предупреждений (две версии стиля × две дистанции)</div>
-                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
-                    <button onclick="uploadWarningAudios()" style="padding:10px 14px; background:#e91e63; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">🔼 Создать и загрузить MP3</button>
                 </div>
                 <div id="warningAudioStatus" style="font-size:13px; color:#666; min-height:18px;"></div>
             </div>
@@ -1177,6 +1189,19 @@
                     <span id="proximityModeDescription">Выбран: Всегда</span>
                 </div>
             </div>
+
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 8px;">🧭 Дистанция предупреждения</div>
+                <div style="font-size: 11px; color: var(--gray); margin-bottom: 8px; text-align: center;">
+                    <span id="warningDistanceLabel">800 м</span>
+                </div>
+                <input id="warningDistanceRange" type="range" min="300" max="2000" step="100" value="800"
+                    oninput="setWarningDistance(this.value)"
+                    style="width: 100%;">
+                <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--gray); margin-top: 6px;">
+                    <span>300 м</span><span>2.0 км</span>
+                </div>
+            </div>
             
             <button class="main-btn" onclick="logout()">ВЫЙТИ</button>
         </div>
@@ -1379,6 +1404,8 @@
     let voiceStyle = 'standard';
     // Оповещения по расстоянию только при автослежении
     let proximityRequiresFollow = false;
+    // Дистанция предупреждения (в метрах)
+    let warningDistanceMeters = 800;
     // Флаг видимости нижнего виджета
     let actionCardVisible = true;
     // Флаг для отключения автосцентрирования GPS после размещения метки
@@ -1652,20 +1679,24 @@
         const markerId = marker.id;
         const currentNotification = distanceNotifications.get(markerId);
         
-        // Первое уведомление: 500-800 метров
-        if (distance >= 500 && distance <= 800 && currentNotification !== 'far') {
+        const warningMax = Math.max(300, Number(warningDistanceMeters) || 800);
+        const warningMin = Math.max(200, Math.round(warningMax * 0.6));
+        const nearThreshold = Math.max(120, Math.round(warningMax * 0.25));
+
+        // Первое уведомление: зона предупреждения
+        if (distance >= warningMin && distance <= warningMax && currentNotification !== 'far') {
             speakWarning(distance, marker.type, marker.comment);
             distanceNotifications.set(markerId, 'far');
             console.log(`📍 Первое уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
         }
-        // Второе уведомление: 200 метров
-        else if (distance < 200 && currentNotification !== 'near') {
+        // Второе уведомление: ближняя зона
+        else if (distance < nearThreshold && currentNotification !== 'near') {
             speakWarning(distance, marker.type, marker.comment);
             distanceNotifications.set(markerId, 'near');
             console.log(`📍 Второе уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
         }
         // Очищаем уведомление если маркер слишком далеко
-        else if (distance > 800 && currentNotification) {
+        else if (distance > warningMax && currentNotification) {
             distanceNotifications.delete(markerId);
         }
     }
@@ -1720,6 +1751,39 @@
         } catch (e) {
             console.warn('Не удалось загрузить стиль озвучки:', e);
         }
+    }
+
+    function updateWarningDistanceUI() {
+        const label = document.getElementById('warningDistanceLabel');
+        const range = document.getElementById('warningDistanceRange');
+        const meters = Math.max(300, Number(warningDistanceMeters) || 800);
+        if (label) {
+            label.textContent = meters >= 1000 ? `${(meters / 1000).toFixed(1)} км` : `${meters} м`;
+        }
+        if (range && String(range.value) !== String(meters)) {
+            range.value = meters;
+        }
+    }
+
+    function setWarningDistance(value) {
+        warningDistanceMeters = Math.max(300, Math.min(2000, Number(value) || 800));
+        updateWarningDistanceUI();
+        distanceNotifications.clear();
+        try {
+            localStorage.setItem('warningDistanceMeters', String(warningDistanceMeters));
+        } catch (e) {
+            console.warn('Не удалось сохранить дистанцию предупреждения:', e);
+        }
+    }
+
+    function loadWarningDistance() {
+        try {
+            const saved = localStorage.getItem('warningDistanceMeters');
+            if (saved) warningDistanceMeters = Number(saved) || warningDistanceMeters;
+        } catch (e) {
+            console.warn('Не удалось загрузить дистанцию предупреждения:', e);
+        }
+        updateWarningDistanceUI();
     }
 
     function setProximityMode(requireFollow) {
@@ -2193,6 +2257,7 @@
         // Загружаем сохраненный стиль озвучки
         loadVoiceStyle();
         loadProximityMode();
+        loadWarningDistance();
         loadSpeedometerPreference();
         updateSpeedometerUI(userSpeedKmh);
 
@@ -4168,63 +4233,53 @@
     }
 
     // ============= Загрузка MP3 озвучки для предупреждений =============
-    async function uploadWarningAudios() {
+    async function uploadCustomWarningAudios() {
         const status = document.getElementById('warningAudioStatus');
-        status.textContent = '⏳ Создаём и загружаем MP3 озвучку...';
-        
+        if (!status) return;
+
         if (typeof _sb === 'undefined' || !_sb.storage) {
             status.textContent = '❌ Supabase client не найден';
             return;
         }
 
-        // 4 варианта озвучки
-        const configs = [
-            { name: 'warning_standard_far.mp3', text: 'Внимание! Впереди опасность на расстоянии пятьсот метров. Снижайте скорость и будьте осторожны.' },
-            { name: 'warning_standard_close.mp3', text: 'Срочно снижайте скорость! Впереди серьёзная опасность менее двухсот метров!' },
-            { name: 'warning_cheeky_far.mp3', text: 'Тормози! Слышишь, гражданин?! Впереди засада, западня! Или вы хотите, чтобы вас там разорвали?!' },
-            { name: 'warning_cheeky_close.mp3', text: 'ТОРМОЗИ! ТОР-МО-ЗИ! ЖЕСТЬ! АВАРИЙНО! Срочно тормозим!' }
+        const files = [
+            { id: 'audioStandardFar', name: 'warning_standard_far.mp3' },
+            { id: 'audioStandardClose', name: 'warning_standard_close.mp3' },
+            { id: 'audioCheekyFar', name: 'warning_cheeky_far.mp3' },
+            { id: 'audioCheekyClose', name: 'warning_cheeky_close.mp3' }
         ];
 
-        let success = 0;
-        for (const config of configs) {
-            try {
-                // Создаём WAV формат с простым тоном
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const duration = 2;
-                const buffer = ctx.createBuffer(1, ctx.sampleRate * duration, ctx.sampleRate);
-                const data = buffer.getChannelData(0);
-                
-                // Генерируем синусоиду с разной частотой
-                const freq = config.name.includes('far') ? 440 : 880;
-                const twoPi = 2 * Math.PI;
-                for (let i = 0; i < buffer.length; i++) {
-                    data[i] = Math.sin(twoPi * freq * i / ctx.sampleRate) * 0.3;
-                }
-                
-                // Конвертируем в WAV
-                const wav = bufferToWav(buffer);
-                
-                // Загружаем в Storage (название остается .mp3 для эксплуатации API)
-                const { error } = await _sb.storage
-                    .from('audio')
-                    .upload(config.name, wav, { upsert: true });
-                
-                if (error) {
-                    console.warn(`❌ ${config.name}:`, error.message);
-                    status.textContent = `❌ Ошибка: ${error.message}`;
-                    continue;
-                }
-                success++;
-                console.log(`✅ ${config.name}`);
-            } catch (e) {
-                console.warn('Ошибка:', e.message);
-                status.textContent = `❌ ${e.message}`;
-            }
+        const selected = files.map(item => {
+            const input = document.getElementById(item.id);
+            return { file: input?.files?.[0] || null, name: item.name };
+        });
+
+        const missing = selected.filter(item => !item.file).map(item => item.name);
+        if (missing.length) {
+            status.textContent = `❌ Не выбраны файлы: ${missing.join(', ')}`;
+            return;
         }
-        
-        status.textContent = success === 4 
-            ? `✅ Все 4 MP3 озвучки загружены успешно!` 
-            : `⚠️ Загружено ${success}/4 файлов`;
+
+        status.textContent = '⏳ Загружаем MP3 в Storage...';
+
+        try {
+            const bucket = 'audio';
+            let success = 0;
+            for (const item of selected) {
+                const { error } = await _sb.storage
+                    .from(bucket)
+                    .upload(item.name, item.file, {
+                        upsert: true,
+                        contentType: item.file.type || 'audio/mpeg'
+                    });
+                if (error) throw error;
+                success++;
+            }
+
+            status.textContent = `✅ Загружено ${success}/4 файла. Готово!`;
+        } catch (e) {
+            status.textContent = '❌ Ошибка загрузки: ' + (e?.message || e);
+        }
     }
 
     // Конвертирует AudioBuffer в WAV Blob
@@ -5737,7 +5792,7 @@
     // Получить список файлов из Supabase Storage (bucket: 'audio')
     async function listAudioStorageFiles() {
         const listEl = document.getElementById('storageFilesList');
-        const status = document.getElementById('audioGenStatus');
+        const status = document.getElementById('warningAudioStatus');
         listEl.innerHTML = '⏳ Получаем список...';
         if (typeof _sb === 'undefined' || !_sb.storage) {
             listEl.innerHTML = '❌ Supabase client не найден (переменная _sb).';
@@ -5761,7 +5816,7 @@
             });
             html += '</ul>';
             listEl.innerHTML = html;
-            status.textContent = `✅ Получено ${data.length} файлов из bucket "${bucket}".`;
+            if (status) status.textContent = `✅ Получено ${data.length} файлов из bucket "${bucket}".`;
         } catch (e) {
             console.warn('listAudioStorageFiles error:', e);
             listEl.innerHTML = '❌ Ошибка при получении списка (возможно, нет прав у anon ключа).';
@@ -5770,10 +5825,10 @@
 
     // Скачивание одного файла из Supabase Storage
     async function downloadAudioFromStorage(name) {
-        const status = document.getElementById('audioGenStatus');
-        status.textContent = `⏳ Скачиваем ${name}...`;
+        const status = document.getElementById('warningAudioStatus');
+        if (status) status.textContent = `⏳ Скачиваем ${name}...`;
         if (typeof _sb === 'undefined' || !_sb.storage) {
-            status.textContent = '❌ Supabase client не найден (переменная _sb).';
+            if (status) status.textContent = '❌ Supabase client не найден (переменная _sb).';
             return;
         }
         const bucket = 'audio';
@@ -5788,10 +5843,10 @@
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
-            status.textContent = `✅ Скачан ${name}`;
+            if (status) status.textContent = `✅ Скачан ${name}`;
         } catch (e) {
             console.warn('downloadAudioFromStorage error:', e);
-            status.textContent = '❌ Ошибка при скачивании (возможно, нет прав).';
+            if (status) status.textContent = '❌ Ошибка при скачивании (возможно, нет прав).';
         }
     }
 
@@ -6742,13 +6797,13 @@
     <script>
         // Вспомогательная функция для запуска из консоли браузера
         console.log('%c🎤 EASY RIDE 180 - Озвучка', 'font-size:16px;font-weight:bold;color:#007aff');
-        console.log('%cДля загрузки MP3 озвучки, выполните в консоли:\nuploadWarningAudios()', 'font-size:13px;color:#666');
+        console.log('%cДля загрузки MP3 озвучки, выполните в консоли:\nuploadCustomWarningAudios()', 'font-size:13px;color:#666');
         window.quickUploadAudio = async function() {
             console.log('⏳ Запускаем загрузку MP3 озвучки...');
-            if (typeof uploadWarningAudios === 'function') {
-                await uploadWarningAudios();
+            if (typeof uploadCustomWarningAudios === 'function') {
+                await uploadCustomWarningAudios();
             } else {
-                console.error('❌ Функция uploadWarningAudios не найдена');
+                console.error('❌ Функция uploadCustomWarningAudios не найдена');
             }
         };
         console.log('%cИЛИ нажмите эту ссылку:\n', 'font-size:13px;color:#999');
