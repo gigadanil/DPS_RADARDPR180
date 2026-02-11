@@ -421,6 +421,20 @@
         .achievement { display: inline-block; text-align: center; padding: 8px; margin: 4px; background: #f9f9f9; border-radius: 10px; border: 1px solid #e0e0e0; font-size: 11px; min-width: 70px; }
         .achievement-icon { font-size: 24px; margin-bottom: 4px; }
         .achievement-title { font-weight: 700; color: var(--blue); }
+        .achievement-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+        .achievement-progress { font-size: 10px; color: var(--gray); margin-top: 2px; }
+        .achievement.done { border-color: #34c759; background: #f2fff6; }
+        .achievement.locked { opacity: 0.6; }
+
+        /* Спидометр */
+        .speedometer { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; background: rgba(255,255,255,0.95); border-radius: 16px; padding: 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); display: none; align-items: center; gap: 10px; min-width: 120px; }
+        .speedometer.visible { display: flex; }
+        .speedometer-value { font-size: 22px; font-weight: 800; color: #000; line-height: 1; }
+        .speedometer-unit { font-size: 11px; color: var(--gray); margin-left: 4px; font-weight: 700; }
+        .speedometer-label { font-size: 10px; color: var(--gray); font-weight: 600; }
+        .speedometer-toggle { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; border: none; background: #ff3b30; color: white; font-size: 14px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+        .speedometer-open-btn { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; width: 40px; height: 40px; border-radius: 50%; background: white; border: 2px solid var(--blue); display: none; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); cursor: pointer; }
+        .speedometer-open-btn.visible { display: flex; }
         
         /* Overlay ограничения доступа */
         #tgAuthOverlay {
@@ -532,6 +546,16 @@
     <!-- Онлайн-счётчик пользователей -->
     <div id="onlineCountBadge" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 1600; background: white; padding: 6px 10px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); font-weight:700; display: none;">Онлайн: —</div>
     <div id="map"></div>
+
+    <!-- Спидометр -->
+    <div id="speedometer" class="speedometer">
+        <div>
+            <div class="speedometer-value"><span id="speedValue">0</span><span class="speedometer-unit">км/ч</span></div>
+            <div class="speedometer-label">Скорость</div>
+        </div>
+        <button class="speedometer-toggle" onclick="toggleSpeedometer(false)" title="Скрыть">✕</button>
+    </div>
+    <button class="speedometer-open-btn" id="speedometerOpenBtn" onclick="toggleSpeedometer(true)" title="Показать спидометр">🧭</button>
     
     <!-- Кнопка чата -->
     <button class="chat-btn" onclick="openChatModal()">💬</button>
@@ -1264,6 +1288,8 @@
     let isAdmin = false;
     // Флаг инициализации приложения (чтобы не вызывать initApp повторно)
     let initAppInProgress = false;
+    // Спидометр: видимость
+    let speedometerEnabled = true;
     // Переменная для хранения выбранной фотографии
     let selectedChatPhoto = null;
     // Множество для отслеживания уже воспроизведенных уведомлений (чтобы не спамить звук)
@@ -1295,6 +1321,46 @@
             card.classList.add('hidden');
             if (openBtn) openBtn.classList.add('visible');
         }
+    }
+
+    // Спидометр: загрузка и применение настроек
+    function loadSpeedometerPreference() {
+        try {
+            const saved = localStorage.getItem('speedometerEnabled');
+            speedometerEnabled = saved !== 'false';
+        } catch (e) {
+            speedometerEnabled = true;
+        }
+        applySpeedometerVisibility();
+    }
+
+    function applySpeedometerVisibility() {
+        const el = document.getElementById('speedometer');
+        const openBtn = document.getElementById('speedometerOpenBtn');
+        if (!el || !openBtn) return;
+        if (speedometerEnabled) {
+            el.classList.add('visible');
+            openBtn.classList.remove('visible');
+        } else {
+            el.classList.remove('visible');
+            openBtn.classList.add('visible');
+        }
+    }
+
+    function toggleSpeedometer(forceOn) {
+        if (typeof forceOn === 'boolean') {
+            speedometerEnabled = forceOn;
+        } else {
+            speedometerEnabled = !speedometerEnabled;
+        }
+        try { localStorage.setItem('speedometerEnabled', speedometerEnabled ? 'true' : 'false'); } catch(e) {}
+        applySpeedometerVisibility();
+    }
+
+    function updateSpeedometerUI(speedKmh) {
+        const valueEl = document.getElementById('speedValue');
+        if (!valueEl) return;
+        valueEl.textContent = Math.max(0, Math.round(speedKmh || 0));
     }
 
     // Границы Донецкой области ДНР (примерные координаты)
@@ -1606,6 +1672,7 @@
 
                     // Обновляем маркер на карте (включая визуализацию скорости/ачивок/стиля)
                     updateUserLocationMarker();
+                    updateSpeedometerUI(userSpeedKmh);
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
@@ -1955,6 +2022,8 @@
 
         // Загружаем сохраненный стиль озвучки
         loadVoiceStyle();
+        loadSpeedometerPreference();
+        updateSpeedometerUI(userSpeedKmh);
 
         // Инициализация завершена
         initAppInProgress = false;
@@ -2236,22 +2305,25 @@
             const ach = await loadAchievements();
             const profileNameEl = document.getElementById('profile-name-text');
             profileNameEl.title = `Статус: ${ach.title}`;
-            
-            // Создаем блок достижений
-            let achievementsHTML = '<div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">';
-            achievementsHTML += `<div style="font-size: 13px; font-weight: 700; margin-bottom: 10px; color: var(--blue);">🏅 Статус: ${ach.title}</div>`;
-            achievementsHTML += '<div style="display: flex; flex-wrap: wrap; gap: 4px;">';
-            
-            if (ach.achievements.length > 0) {
-                ach.achievements.forEach(a => {
-                    achievementsHTML += `<div class="achievement" title="${a.desc}"><div class="achievement-icon">${a.icon}</div><div class="achievement-title">${a.title}</div></div>`;
-                });
-            } else {
-                achievementsHTML += '<div style="color: var(--gray); font-size: 11px;">Начните ставить метки для получения достижений</div>';
-            }
-            
+
+            // Удаляем предыдущий блок достижений, если есть
+            const existingAchBlock = document.getElementById('profile-achievements-block');
+            if (existingAchBlock) existingAchBlock.remove();
+
+            // Создаем блок достижений с прогрессом
+            let achievementsHTML = '<div id="profile-achievements-block" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">';
+            achievementsHTML += `<div style="font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--blue);">🏅 Статус: ${ach.title}</div>`;
+            achievementsHTML += `<div style="font-size: 12px; color: var(--gray); margin-bottom: 10px;">Выполнено: ${ach.completedCount}/${ach.totalCount}</div>`;
+            achievementsHTML += '<div class="achievement-grid">';
+
+            ach.allAchievements.forEach(a => {
+                const cls = a.completed ? 'achievement done' : 'achievement locked';
+                const progressText = `${Math.min(a.progress, a.required)}/${a.required}${a.metric ? ' ' + a.metric : ''}`;
+                achievementsHTML += `<div class="${cls}" title="${a.desc}"><div class="achievement-icon">${a.icon}</div><div class="achievement-title">${a.title}</div><div class="achievement-progress">${progressText}</div></div>`;
+            });
+
             achievementsHTML += '</div></div>';
-            
+
             // Вставляем достижения перед блоком доверия
             const trustBlock = document.getElementById('profile-trust-status').parentElement;
             trustBlock.insertAdjacentHTML('afterend', achievementsHTML);
@@ -5051,29 +5123,29 @@
         if (totalVotes >= 200) achievements.push({ icon: '🕊️', title: 'Миротворец', desc: '100 постов ДПС пройдено без штрафов' });
 
         // Дополнительно: загружаем серверные ачивки из таблицы user_achievements
+        const serverCounts = {};
         try {
             const { data: serverAchs } = await _sb.from('user_achievements').select('key,created_at').eq('user_id', uid);
             // Считаем повторы по ключу
-            const counts = {};
             if (serverAchs && serverAchs.length > 0) {
-                serverAchs.forEach(r => { counts[r.key] = (counts[r.key] || 0) + 1; });
+                serverAchs.forEach(r => { serverCounts[r.key] = (serverCounts[r.key] || 0) + 1; });
 
                 // Серверные ачивки с новыми эмодзи (SafeDrive 180)
-                if (counts['beta_tester']) achievements.push({ icon: '🛡️', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ' });
-                if (counts['bug_report']) {
-                    achievements.push({ icon: '🔍', title: 'Охтник за багами', desc: `Помог чистить код и звуки: ${counts['bug_report']}` });
-                    if (counts['bug_report'] >= 5) {
+                if (serverCounts['beta_tester']) achievements.push({ icon: '🛡️', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ' });
+                if (serverCounts['bug_report']) {
+                    achievements.push({ icon: '🔍', title: 'Охтник за багами', desc: `Помог чистить код и звуки: ${serverCounts['bug_report']}` });
+                    if (serverCounts['bug_report'] >= 5) {
                         achievements.push({ icon: '📢', title: 'Сын Жириновского', desc: 'Обладатель эксклюзивной озвучки' });
                         // Открываем дерзкий стиль локально
                         try { localStorage.setItem('cheekyUnlocked', 'true'); } catch(e){}
                     }
                 }
-                if (counts['ghost_catcher']) achievements.push({ icon: '🌙', title: 'Ночной патруль', desc: `Активность в темное время суток` });
-                if (counts['night_patrol']) achievements.push({ icon: '⚡', title: 'Суетолог', desc: 'Аномально высокая активность' });
-                if (counts['phantom_racer']) achievements.push({ icon: '🔥', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления' });
+                if (serverCounts['ghost_catcher']) achievements.push({ icon: '🌙', title: 'Ночной патруль', desc: `Активность в темное время суток` });
+                if (serverCounts['night_patrol']) achievements.push({ icon: '⚡', title: 'Суетолог', desc: 'Аномально высокая активность' });
+                if (serverCounts['phantom_racer']) achievements.push({ icon: '🔥', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления' });
             }
             // Сохраняем глобально для визуализации метки
-            try { currentAchievementCounts = counts; } catch(e){}
+            try { currentAchievementCounts = serverCounts; } catch(e){}
         } catch (e) {
             console.warn('Не удалось загрузить серверные ачивки:', e?.message || e);
         }
@@ -5090,7 +5162,30 @@
         const seen = new Set();
         achievements.forEach(a => { if (!seen.has(a.title)) { uniq.push(a); seen.add(a.title); } });
 
-        return { achievements: uniq, title, markersCount, totalLikes, totalVotes };
+        // Полный список достижений с прогрессом
+        const allAchievements = [
+            { key: 'markers_1', icon: '🎨', title: 'Первая метка', desc: 'Вы начали помогать сообществу', required: 1, progress: markersCount, metric: 'меток' },
+            { key: 'markers_10', icon: '🔟', title: 'Десяток', desc: '10 меток', required: 10, progress: markersCount, metric: 'меток' },
+            { key: 'markers_50', icon: '🏅', title: 'Половина сотни', desc: '50 меток', required: 50, progress: markersCount, metric: 'меток' },
+            { key: 'markers_100', icon: '💯', title: 'Столетие', desc: '100 меток', required: 100, progress: markersCount, metric: 'меток' },
+            { key: 'likes_10', icon: '👍', title: 'Полезно', desc: '10 лайков от сообщества', required: 10, progress: totalLikes, metric: 'лайков' },
+            { key: 'likes_50', icon: '👑', title: 'Король дорог', desc: 'Топовый юзер неделе по подтвержденным меткам', required: 50, progress: totalLikes, metric: 'лайков' },
+            { key: 'likes_100', icon: '🍀', title: 'Легенда', desc: '100 лайков', required: 100, progress: totalLikes, metric: 'лайков' },
+            { key: 'votes_50', icon: '👁️', title: 'Глаз орла', desc: 'Сверхточные метки, которые висят часами', required: 50, progress: totalVotes, metric: 'голосов' },
+            { key: 'votes_200', icon: '🕊️', title: 'Миротворец', desc: '100 постов ДПС пройдено без штрафов', required: 200, progress: totalVotes, metric: 'голосов' },
+            { key: 'beta_tester', icon: '🛡️', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ', required: 1, progress: serverCounts['beta_tester'] || 0, metric: 'раз' },
+            { key: 'bug_report_1', icon: '🔍', title: 'Охтник за багами', desc: 'Помог чистить код и звуки', required: 1, progress: serverCounts['bug_report'] || 0, metric: 'отчетов' },
+            { key: 'bug_report_5', icon: '📢', title: 'Сын Жириновского', desc: 'Обладатель эксклюзивной озвучки', required: 5, progress: serverCounts['bug_report'] || 0, metric: 'отчетов' },
+            { key: 'ghost_catcher', icon: '🌙', title: 'Ночной патруль', desc: 'Активность в темное время суток', required: 1, progress: serverCounts['ghost_catcher'] || 0, metric: 'раз' },
+            { key: 'night_patrol', icon: '⚡', title: 'Суетолог', desc: 'Аномально высокая активность', required: 1, progress: serverCounts['night_patrol'] || 0, metric: 'раз' },
+            { key: 'phantom_racer', icon: '🔥', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления', required: 1, progress: serverCounts['phantom_racer'] || 0, metric: 'раз' }
+        ];
+
+        allAchievements.forEach(a => { a.completed = a.progress >= a.required; });
+        const completedCount = allAchievements.filter(a => a.completed).length;
+        const totalCount = allAchievements.length;
+
+        return { achievements: uniq, title, markersCount, totalLikes, totalVotes, allAchievements, completedCount, totalCount };
     }
 
     // Утилита: гарантированно присвоить одну ачивку пользователю (если ещё нет)
