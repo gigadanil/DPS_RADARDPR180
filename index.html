@@ -264,6 +264,8 @@
         .follow-toggle { position: absolute; top: calc(15px + var(--safe-area-inset-top)); right: calc(180px + var(--safe-area-inset-right)); z-index: 1500; width: 40px; height: 40px; border-radius: 50%; background: white; border: 2px solid #34c759; cursor: pointer; font-size: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
         .follow-toggle.inactive { background: #fff; border-color: #ccc; color: #888; }
         .follow-toggle.active { background: #34c759; color: white; border-color: #34c759; }
+        .follow-icon { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+        .follow-badge { position: absolute; bottom: -2px; right: -2px; width: 16px; height: 16px; border-radius: 50%; background: #111; color: #fff; font-size: 9px; font-weight: 800; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.25); }
         
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2500; overflow-y: auto; }
         .modal.active { display: block; }
@@ -435,6 +437,35 @@
         .speedometer-toggle { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; border: none; background: #ff3b30; color: white; font-size: 14px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
         .speedometer-open-btn { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; width: 40px; height: 40px; border-radius: 50%; background: white; border: 2px solid var(--blue); display: none; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); cursor: pointer; }
         .speedometer-open-btn.visible { display: flex; }
+
+        /* Админский маркер и имя */
+        .admin-marker { background: #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 2px solid #d4af37; font-size: 18px; position: relative; box-shadow: 0 0 12px rgba(212, 175, 55, 0.55); }
+        .admin-marker::before { content: ''; position: absolute; inset: -10px; border-radius: 50%; background: radial-gradient(circle, rgba(212,175,55,0.35) 0%, rgba(212,175,55,0.0) 70%); }
+        .admin-marker::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid rgba(212, 175, 55, 0.5); animation: adminPulse 1.8s ease-out infinite; }
+        .admin-marker--map { width: 34px; height: 34px; font-size: 18px; }
+        .admin-marker--self { width: 36px; height: 36px; font-size: 19px; }
+        .admin-marker-badge { position: absolute; top: -8px; right: -8px; font-size: 12px; }
+        .admin-siren { position: absolute; top: -6px; width: 10px; height: 6px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); animation: adminSiren 1.2s ease-in-out infinite; }
+        .admin-siren-left { left: -2px; background: #ff3b30; }
+        .admin-siren-right { right: -2px; background: #007aff; animation-delay: 0.6s; }
+        .admin-confirm { margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: linear-gradient(135deg, #f5d76e 0%, #d4af37 100%); color: #111; font-size: 11px; font-weight: 800; text-align: center; }
+        .admin-name { background: linear-gradient(90deg, #f5d76e 0%, #d4af37 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; font-weight: 800; }
+        .admin-rank { font-size: 11px; color: #d4af37; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+        .admin-online { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #34c759; font-weight: 700; }
+        .admin-online-dot { width: 6px; height: 6px; border-radius: 50%; background: #34c759; box-shadow: 0 0 6px rgba(52, 199, 89, 0.9); }
+        @keyframes adminPulse {
+            0% { transform: scale(0.85); opacity: 0.8; }
+            70% { transform: scale(1.2); opacity: 0; }
+            100% { transform: scale(1.2); opacity: 0; }
+        }
+        @keyframes adminSiren {
+            0%, 100% { opacity: 0.35; transform: scaleX(0.9); }
+            50% { opacity: 1; transform: scaleX(1.1); }
+        }
+
+        /* Баннер админ-уведомлений */
+        .broadcast-banner { position: fixed; top: calc(12px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 3000; background: linear-gradient(135deg, #111 0%, #333 100%); color: #fff; padding: 12px 16px; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); display: none; max-width: 90%; text-align: center; font-weight: 700; }
+        .broadcast-banner.visible { display: block; }
         
         /* Overlay ограничения доступа */
         #tgAuthOverlay {
@@ -546,6 +577,9 @@
     <!-- Онлайн-счётчик пользователей -->
     <div id="onlineCountBadge" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 1600; background: white; padding: 6px 10px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); font-weight:700; display: none;">Онлайн: —</div>
     <div id="map"></div>
+
+    <!-- Баннер админ-уведомлений -->
+    <div id="broadcastBanner" class="broadcast-banner"></div>
 
     <!-- Спидометр -->
     <div id="speedometer" class="speedometer">
@@ -955,6 +989,25 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Админ: массовое уведомление и режим невидимки -->
+            <div id="adminBroadcastSection" style="margin-top: 30px; padding: 20px; background: #fff; border-radius: 12px; border: 2px solid #d4af37;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">👑 Админ-центр</h3>
+                    <div class="admin-rank">Admin SafeDrive</div>
+                </div>
+                <div style="font-size: 13px; color: #666; margin-bottom: 10px;">Массовое уведомление для всех онлайн пользователей:</div>
+                <textarea id="adminBroadcastText" placeholder="Например: Внимание! Очередь на КПП выросла до 5 часов!" style="width: 100%; min-height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; box-sizing: border-box; margin-bottom: 10px;"></textarea>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button onclick="sendAdminBroadcast(false)" style="flex: 1; background: #111; color: #fff; border: none; padding: 10px 12px; border-radius: 8px; font-weight: 700; cursor: pointer;">📣 Отправить текст</button>
+                    <button onclick="sendAdminBroadcast(true)" style="flex: 1; background: #ff9500; color: #fff; border: none; padding: 10px 12px; border-radius: 8px; font-weight: 700; cursor: pointer;">🔊 Текст + сигнал</button>
+                </div>
+                <div id="adminBroadcastStatus" style="margin-top: 8px; font-size: 12px; color: #666; min-height: 16px;"></div>
+                <div style="margin-top: 15px; padding-top: 12px; border-top: 1px dashed #e0e0e0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                    <div style="font-size: 13px; font-weight: 700;">🕵️ Режим невидимки</div>
+                    <button id="adminInvisibleToggle" onclick="toggleAdminInvisible()" style="background: #f0f0f5; color: #333; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 700; cursor: pointer;">ВЫКЛ</button>
+                </div>
+            </div>
     
     <button class="main-btn" onclick="closeAdminModal()" style="margin-top: 20px;">Закрыть</button>
         </div>
@@ -1046,6 +1099,10 @@
                 <button class="main-btn" onclick="document.getElementById('profile-photo-input').click()" style="margin-top: 10px; font-size: 12px; padding: 8px; background: #34c759;">📸 Загрузить фото аватара</button>
                 <input type="file" id="profile-photo-input" style="display: none;" accept="image/*">
                 <div class="profile-name" id="profile-name-text">Загрузка...</div>
+                <div id="profile-admin-badges" style="display: none; margin-top: 6px; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <div class="admin-rank" id="profile-admin-rank">Admin SafeDrive</div>
+                    <div class="admin-online"><span class="admin-online-dot"></span><span id="profile-admin-online">На связи</span></div>
+                </div>
                 <div style="margin-top: 15px; border: 1px solid #ddd; border-radius: 10px; padding: 10px; background: #f9f9f9;">
                     <div class="form-group">
                         <label style="font-size: 12px; color: var(--gray);">Модель автомобиля:</label>
@@ -1103,6 +1160,21 @@
                 </div>
                 <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
                     <span id="voiceStyleDescription">Выбран: Стандартный стиль</span>
+                </div>
+            </div>
+
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">📍 Оповещения по расстоянию</div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="setProximityMode(false)" id="proximityModeAlways" class="main-btn" style="flex: 1; background: #34c759; padding: 10px; font-size: 12px; border-radius: 8px;">
+                        Всегда
+                    </button>
+                    <button onclick="setProximityMode(true)" id="proximityModeFollow" class="main-btn" style="flex: 1; background: #9c9c9c; padding: 10px; font-size: 12px; border-radius: 8px;">
+                        Только при автослежении
+                    </button>
+                </div>
+                <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
+                    <span id="proximityModeDescription">Выбран: Всегда</span>
                 </div>
             </div>
             
@@ -1280,12 +1352,19 @@
     let currentDriver = null;
     // ID администратора (измените на свой ID Telegram)
     const ADMIN_ID = "5118431735";
+    const ADMIN_RANK_LABEL = 'Admin SafeDrive';
+    const ADMIN_TITLE_LABEL = 'Основатель';
     // Порог лайков для статуса "Проверенный водитель"
     const TRUST_LIKES_THRESHOLD = 20; // можно менять по необходимости
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
     let isAdmin = false;
+    // Флаг режима невидимости админа (глобально для всех клиентов)
+    let adminInvisible = false;
+    // Realtime-канал для админ-уведомлений и статусов
+    let adminBroadcastChannel = null;
+    let adminInvisibleIntervalId = null;
     // Флаг инициализации приложения (чтобы не вызывать initApp повторно)
     let initAppInProgress = false;
     // Спидометр: видимость
@@ -1298,6 +1377,8 @@
     let distanceNotifications = new Map(); // { markerId: 'far'|'near' }
     // Стиль озвучки: 'standard' (стандартный) или 'cheeky' (дерзкий)
     let voiceStyle = 'standard';
+    // Оповещения по расстоянию только при автослежении
+    let proximityRequiresFollow = false;
     // Флаг видимости нижнего виджета
     let actionCardVisible = true;
     // Флаг для отключения автосцентрирования GPS после размещения метки
@@ -1308,6 +1389,22 @@
     const CACHE_DURATION = 300000; // Кэширование на 5 минут
     // Таймер для дебаунса loadMarkers
     let loadMarkersTimeout = null;
+
+    function isAdminUserId(userId) {
+        return String(userId) === String(ADMIN_ID);
+    }
+
+    function updateProfileAdminBadges(isAdminProfile) {
+        const badges = document.getElementById('profile-admin-badges');
+        const rankEl = document.getElementById('profile-admin-rank');
+        if (!badges) return;
+        if (isAdminProfile) {
+            badges.style.display = 'flex';
+            if (rankEl) rankEl.textContent = ADMIN_RANK_LABEL;
+        } else {
+            badges.style.display = 'none';
+        }
+    }
 
     // Функция для переключения видимости нижнего виджета
     function toggleActionCard() {
@@ -1524,6 +1621,7 @@
      */
     function checkMarkerDistance(marker, userCoords) {
             if (!userCoords || userCoords.length < 2) return;
+            if (proximityRequiresFollow && !autoFollow) return;
 
             // Поддерживаем разные форматы координат маркера: coords: [lat,lon] или latitude/longitude
             let mLat = null, mLon = null;
@@ -1624,6 +1722,43 @@
         }
     }
 
+    function setProximityMode(requireFollow) {
+        proximityRequiresFollow = !!requireFollow;
+        const alwaysBtn = document.getElementById('proximityModeAlways');
+        const followBtn = document.getElementById('proximityModeFollow');
+        const descriptionEl = document.getElementById('proximityModeDescription');
+
+        if (proximityRequiresFollow) {
+            if (alwaysBtn) { alwaysBtn.style.background = '#9c9c9c'; alwaysBtn.style.color = 'white'; }
+            if (followBtn) { followBtn.style.background = '#34c759'; followBtn.style.color = 'white'; }
+            if (descriptionEl) descriptionEl.textContent = 'Выбран: Только при автослежении';
+        } else {
+            if (alwaysBtn) { alwaysBtn.style.background = '#34c759'; alwaysBtn.style.color = 'white'; }
+            if (followBtn) { followBtn.style.background = '#9c9c9c'; followBtn.style.color = 'white'; }
+            if (descriptionEl) descriptionEl.textContent = 'Выбран: Всегда';
+        }
+
+        try {
+            localStorage.setItem('proximityRequiresFollow', proximityRequiresFollow ? 'true' : 'false');
+        } catch (e) {
+            console.warn('Не удалось сохранить режим оповещений:', e);
+        }
+
+        updateFollowButton();
+    }
+
+    function loadProximityMode() {
+        try {
+            const saved = localStorage.getItem('proximityRequiresFollow');
+            if (saved === 'true' || saved === 'false') {
+                proximityRequiresFollow = (saved === 'true');
+            }
+        } catch (e) {
+            console.warn('Не удалось загрузить режим оповещений:', e);
+        }
+        setProximityMode(proximityRequiresFollow);
+    }
+
     function initGPS() {
         if (!navigator.geolocation) {
             console.warn('Geolocation не поддерживается браузером');
@@ -1719,6 +1854,14 @@
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
+        if (isAdmin && adminInvisible) {
+            if (userLocationMarker) {
+                try { myMap.geoObjects.remove(userLocationMarker); } catch(e) {}
+                userLocationMarker = null;
+            }
+            return;
+        }
+
         // Удаляем старый маркер если он есть
         if (userLocationMarker) {
             try { myMap.geoObjects.remove(userLocationMarker); } catch(e){}
@@ -1766,21 +1909,46 @@
   <circle cx="${size/2}" cy="${size/2}" r="${size*0.49}" fill="none" stroke="rgba(0,0,0,0.04)" stroke-width="1"/>
 </svg>`;
 
-        const svgUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+        if (isAdmin) {
+            const adminSize = 36;
+            const adminIconHtml = `
+                <div class="admin-marker admin-marker--self">
+                    <span class="admin-siren admin-siren-left"></span>
+                    <span class="admin-siren admin-siren-right"></span>
+                    🚗
+                    <span class="admin-marker-badge">👑</span>
+                </div>
+            `;
+            userLocationMarker = new ymaps.Placemark(userLocation,
+                {
+                    hintContent: 'Вы здесь (Админ)',
+                    balloonContent: `👑 Админ на связи<br>Скорость: ${speed} км/ч`
+                },
+                {
+                    iconLayout: 'default#imageWithContent',
+                    iconContent: adminIconHtml,
+                    iconImageSize: [adminSize, adminSize],
+                    iconImageOffset: [-(adminSize/2), -(adminSize/2)],
+                    zIndex: 1100
+                }
+            );
+        } else {
+            const svgUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 
-        userLocationMarker = new ymaps.Placemark(userLocation,
-            {
-                hintContent: 'Вы здесь',
-                balloonContent: `📍 Ваше текущее местоположение<br>Скорость: ${speed} км/ч`
-            },
-            {
-                iconLayout: 'default#image',
-                iconImageHref: svgUrl,
-                iconImageSize: [size, size],
-                iconImageOffset: [-(size/2), -(size/2)],
-                zIndex: 1000
-            }
-        );
+            userLocationMarker = new ymaps.Placemark(userLocation,
+                {
+                    hintContent: 'Вы здесь',
+                    balloonContent: `📍 Ваше текущее местоположение<br>Скорость: ${speed} км/ч`
+                },
+                {
+                    iconLayout: 'default#image',
+                    iconImageHref: svgUrl,
+                    iconImageSize: [size, size],
+                    iconImageOffset: [-(size/2), -(size/2)],
+                    zIndex: 1000
+                }
+            );
+        }
 
         myMap.geoObjects.add(userLocationMarker);
 
@@ -1814,17 +1982,19 @@
     function updateFollowButton() {
         const btn = document.getElementById('followToggleBtn');
         if (!btn) return;
+        const modeText = proximityRequiresFollow ? 'Оповещения: только при автослежении' : 'Оповещения: всегда';
         if (autoFollow) {
             btn.classList.remove('inactive');
             btn.classList.add('active');
-            btn.title = 'Я на карте (автослежение ВКЛ)';
-            btn.textContent = '👁️';
+            btn.title = `Я на карте (автослежение ВКЛ)\n${modeText}`;
         } else {
             btn.classList.remove('active');
             btn.classList.add('inactive');
-            btn.title = 'Я не на карте (автослежение ВЫКЛ)';
-            btn.textContent = '🚫';
+            btn.title = `Я не на карте (автослежение ВЫКЛ)\n${modeText}`;
         }
+        const icon = autoFollow ? '👁️' : '🚫';
+        const badge = proximityRequiresFollow ? '<span class="follow-badge">P</span>' : '';
+        btn.innerHTML = `<span class="follow-icon">${icon}</span>${badge}`;
     }
     
     // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
@@ -2022,8 +2192,18 @@
 
         // Загружаем сохраненный стиль озвучки
         loadVoiceStyle();
+        loadProximityMode();
         loadSpeedometerPreference();
         updateSpeedometerUI(userSpeedKmh);
+
+        // Инициализируем админ-канал и статус невидимки
+        initAdminBroadcastChannel();
+        await refreshAdminInvisibleStatus();
+        if (!adminInvisibleIntervalId) {
+            adminInvisibleIntervalId = setInterval(() => {
+                refreshAdminInvisibleStatus().catch(()=>{});
+            }, 30000);
+        }
 
         // Инициализация завершена
         initAppInProgress = false;
@@ -2280,9 +2460,18 @@
         
         // Определяем, является ли пользователь "Проверенным водителем"
         const isTrusted = (likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20));
+        const isAdminProfile = isAdminUserId(uid);
         const profileNameEl = document.getElementById('profile-name-text');
-        profileNameEl.textContent = (isTrusted ? '⭐ ' : '') + displayName;
-        if (isTrusted) profileNameEl.classList.add('trusted'); else profileNameEl.classList.remove('trusted');
+        if (isAdminProfile) {
+            profileNameEl.textContent = displayName;
+            profileNameEl.classList.add('admin-name');
+            profileNameEl.classList.remove('trusted');
+        } else {
+            profileNameEl.textContent = (isTrusted ? '⭐ ' : '') + displayName;
+            if (isTrusted) profileNameEl.classList.add('trusted'); else profileNameEl.classList.remove('trusted');
+            profileNameEl.classList.remove('admin-name');
+        }
+        updateProfileAdminBadges(isAdminProfile);
         const rating = marks_count ? ((likes - dislikes) / marks_count) : 0;
         document.getElementById('profile-rating').textContent = rating.toFixed(1);
         document.getElementById('profile-marks-count').textContent = marks_count;
@@ -2292,7 +2481,10 @@
         
         // Отображаем статус доверия
         const trustStatusEl = document.getElementById('profile-trust-status');
-        if (isTrusted) {
+        if (isAdminProfile) {
+            trustStatusEl.innerHTML = `👑 ${ADMIN_TITLE_LABEL}`;
+            trustStatusEl.style.color = '#d4af37';
+        } else if (isTrusted) {
             trustStatusEl.innerHTML = '⭐ Проверенный водитель';
             trustStatusEl.style.color = '#b8860b';
         } else {
@@ -2383,6 +2575,10 @@
         // Удаляем секцию модерации
         const adminSection = document.getElementById('profile-admin-section');
         if (adminSection) adminSection.remove();
+
+        const profileNameEl = document.getElementById('profile-name-text');
+        if (profileNameEl) profileNameEl.classList.remove('admin-name');
+        updateProfileAdminBadges(false);
         
         // Удаляем информацию об авто других пользователей
         const carInfoEl = document.getElementById('other-user-car-info');
@@ -2441,9 +2637,18 @@
             
             // Определяем, является ли пользователь "Проверенным водителем"
             const isTrusted = (likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20));
+            const isAdminProfile = isAdminUserId(userId);
             const profileNameEl = document.getElementById('profile-name-text');
-            profileNameEl.textContent = (isTrusted ? '⭐ ' : '') + (driver.name || 'Аноним');
-            if (isTrusted) profileNameEl.classList.add('trusted'); else profileNameEl.classList.remove('trusted');
+            if (isAdminProfile) {
+                profileNameEl.textContent = (driver.name || 'Admin');
+                profileNameEl.classList.add('admin-name');
+                profileNameEl.classList.remove('trusted');
+            } else {
+                profileNameEl.textContent = (isTrusted ? '⭐ ' : '') + (driver.name || 'Аноним');
+                if (isTrusted) profileNameEl.classList.add('trusted'); else profileNameEl.classList.remove('trusted');
+                profileNameEl.classList.remove('admin-name');
+            }
+            updateProfileAdminBadges(isAdminProfile);
             
             // Обновляем рейтинг и статистику
             const rating = marks_count ? ((likes - dislikes) / marks_count) : 0;
@@ -2455,7 +2660,10 @@
             
             // Отображаем статус доверия
             const trustStatusEl = document.getElementById('profile-trust-status');
-            if (isTrusted) {
+            if (isAdminProfile) {
+                trustStatusEl.innerHTML = `👑 ${ADMIN_TITLE_LABEL}`;
+                trustStatusEl.style.color = '#d4af37';
+            } else if (isTrusted) {
                 trustStatusEl.innerHTML = '⭐ Проверенный водитель';
                 trustStatusEl.style.color = '#b8860b';
             } else {
@@ -2585,10 +2793,14 @@
             driverStats.forEach((driver, idx) => {
                 const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
                 const trustBadge = driver.is_trusted ? ' ⭐' : '';
+                const isAdminProfile = isAdminUserId(driver.user_id);
+                const displayNameHtml = isAdminProfile
+                    ? `<span class="admin-name">${driver.name}</span> <span class="admin-rank">${ADMIN_RANK_LABEL}</span>`
+                    : `${driver.name}${trustBadge}`;
                 html += `
                     <div style="padding: 12px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#f9f9f9'; this.style.transform='translateX(4px)'" onmouseout="this.style.background=''; this.style.transform='translateX(0)'" onclick="openProfileModal(${driver.user_id}); closeRatingsModal();">
                         <div style="flex: 1;">
-                            <div style="font-weight: 700; color: #000; font-size: 14px;">${medal} ${driver.name}${trustBadge}</div>
+                            <div style="font-weight: 700; color: #000; font-size: 14px;">${medal} ${displayNameHtml}</div>
                             <div style="font-size: 11px; color: var(--gray);">${driver.car_model}</div>
                         </div>
                         <div style="text-align: right;">
@@ -3661,6 +3873,157 @@
             const latest = document.getElementById('maintenanceOverlay');
             if (latest) checkMaintenanceStatus(isUserAdmin);
         }, 10000);
+    }
+
+    function initAdminBroadcastChannel() {
+        if (!_sb || adminBroadcastChannel) return;
+        adminBroadcastChannel = _sb.channel('admin-broadcast', {
+            config: { broadcast: { self: true } }
+        });
+
+        adminBroadcastChannel.on('broadcast', { event: 'admin-message' }, ({ payload }) => {
+            if (!payload || !payload.text) return;
+            showBroadcastBanner(payload.text, !!payload.withSignal);
+        });
+
+        adminBroadcastChannel.on('broadcast', { event: 'admin-visibility' }, ({ payload }) => {
+            if (!payload || typeof payload.active !== 'boolean') return;
+            const nextState = !!payload.active;
+            if (adminInvisible !== nextState) {
+                adminInvisible = nextState;
+                updateAdminInvisibleButton();
+                loadMarkersDebounced();
+                if (isAdmin) updateUserLocationMarker();
+            }
+        });
+
+        adminBroadcastChannel.subscribe();
+    }
+
+    function showBroadcastBanner(text, withSignal) {
+        const banner = document.getElementById('broadcastBanner');
+        if (!banner) return;
+        banner.textContent = `👑 ${text}`;
+        banner.classList.add('visible');
+        clearTimeout(banner._hideTimer);
+        banner._hideTimer = setTimeout(() => {
+            banner.classList.remove('visible');
+        }, 8000);
+        if (withSignal) playAdminSignal();
+    }
+
+    function playAdminSignal() {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = 880;
+            gain.gain.value = 0.0001;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            gain.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+            osc.stop(ctx.currentTime + 0.55);
+            osc.onended = () => ctx.close();
+        } catch (e) {
+            console.warn('Не удалось воспроизвести сигнал:', e?.message || e);
+        }
+    }
+
+    async function sendAdminBroadcast(withSignal) {
+        if (!isAdmin) {
+            alert('Только администратор может отправлять уведомления');
+            return;
+        }
+        const input = document.getElementById('adminBroadcastText');
+        const statusEl = document.getElementById('adminBroadcastStatus');
+        const text = (input?.value || '').trim();
+        if (!text) {
+            if (statusEl) statusEl.textContent = '❌ Введите текст уведомления';
+            return;
+        }
+        if (statusEl) statusEl.textContent = '⏳ Отправляем...';
+        try {
+            initAdminBroadcastChannel();
+            const res = await adminBroadcastChannel.send({
+                type: 'broadcast',
+                event: 'admin-message',
+                payload: { text, withSignal: !!withSignal, ts: Date.now(), by: String(uid || '') }
+            });
+            if (res !== 'ok' && res?.status !== 'ok') throw new Error('Broadcast failed');
+            if (statusEl) statusEl.textContent = '✅ Уведомление отправлено';
+            input.value = '';
+        } catch (e) {
+            if (statusEl) statusEl.textContent = '❌ Ошибка отправки';
+        }
+    }
+
+    function updateAdminInvisibleButton() {
+        const toggle = document.getElementById('adminInvisibleToggle');
+        if (!toggle) return;
+        if (adminInvisible) {
+            toggle.textContent = 'ВКЛ';
+            toggle.style.background = '#111';
+            toggle.style.color = '#fff';
+        } else {
+            toggle.textContent = 'ВЫКЛ';
+            toggle.style.background = '#f0f0f5';
+            toggle.style.color = '#333';
+        }
+    }
+
+    async function refreshAdminInvisibleStatus() {
+        let nextState = false;
+        try {
+            const { data } = await _sb
+                .from('app_maintenance')
+                .select('value')
+                .eq('key', 'admin_invisible')
+                .single();
+            if (data && data.value) {
+                const settings = JSON.parse(data.value);
+                nextState = !!settings.active;
+            }
+        } catch (err) {
+            nextState = false;
+        }
+        if (adminInvisible !== nextState) {
+            adminInvisible = nextState;
+            updateAdminInvisibleButton();
+            loadMarkersDebounced();
+            if (isAdmin) updateUserLocationMarker();
+        }
+    }
+
+    async function toggleAdminInvisible() {
+        if (!isAdmin) return;
+        const nextState = !adminInvisible;
+        try {
+            initAdminBroadcastChannel();
+            if (nextState) {
+                await _sb.from('app_maintenance').upsert({
+                    key: 'admin_invisible',
+                    value: JSON.stringify({ active: true, by: String(uid || ''), timestamp: Date.now() })
+                }, { onConflict: 'key' });
+            } else {
+                await _sb.from('app_maintenance').delete().eq('key', 'admin_invisible');
+            }
+            adminInvisible = nextState;
+            updateAdminInvisibleButton();
+            loadMarkersDebounced();
+            if (isAdmin) updateUserLocationMarker();
+            if (adminBroadcastChannel) {
+                await adminBroadcastChannel.send({
+                    type: 'broadcast',
+                    event: 'admin-visibility',
+                    payload: { active: adminInvisible, ts: Date.now() }
+                });
+            }
+        } catch (e) {
+            alert('❌ Ошибка переключения режима невидимки');
+        }
     }
 
     // Функция закрытия админ-панели
@@ -4925,6 +5288,13 @@
         }
 
         try {
+            const { data: markerInfo } = await _sb.from('markers').select('author_id').eq('id', markerId).maybeSingle();
+            const isAdminMarker = markerInfo && isAdminUserId(markerInfo.author_id);
+            if (isAdminMarker && status === 'leave') {
+                alert('Эта метка подтверждена администрацией и не удаляется голосами.');
+                return;
+            }
+
             // Проверяем, не голосовал ли уже этот пользователь за эту метку
             const { data: existing } = await _sb.from('marker_confirmations')
                 .select('id').eq('marker_id', markerId).eq('user_id', uid).maybeSingle();
@@ -5699,8 +6069,8 @@
         
         // Удаляем только маркеры, которые мы рендерим (не трогаем userLocationMarker и служебные объекты)
         if (markersCollection) markersCollection.removeAll();
-        // Получаем текущее местоположение карты (центр)
-        const userCoords = myMap.getCenter();
+        // Используем GPS координаты пользователя, иначе центр карты
+        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : myMap.getCenter();
 
         // Подготовим данные об авторах (имя, likes_sum, is_trusted)
         const authorIds = Array.from(new Set(markers.map(m => String(m.author_id))));
@@ -5758,6 +6128,8 @@
             
             // HTML контент для всплывающего окна маркера
             const authorInfo = authorsInfoMap[authorId] || { name: 'Аноним', likes_sum: 0, is_trusted: false };
+            const isAdminMarker = isAdminUserId(authorId);
+            const showAdminStyle = isAdminMarker && !adminInvisible;
             // Переводим likes_sum в 0..5 звёзд
             function likesToStarsLocal(likes) {
                 const n = Number(likes) || 0;
@@ -5773,8 +6145,25 @@
             for (let i = 0; i < 5; i++) starsHTMLLocal += (i < starsCountLocal) ? '★' : '☆';
             const starsBadgeLocal = `<span style="margin-left:8px; color: ${authorInfo.is_trusted ? '#b8860b' : '#f5c542'}; font-weight:700;">${starsHTMLLocal}</span>`;
 
+            const authorNameHtml = showAdminStyle
+                ? `<span class="admin-name">${authorInfo.name || 'Admin'}</span>`
+                : `<strong>${authorInfo.name || 'Аноним'}</strong>`;
+            const authorBadgesHtml = showAdminStyle
+                ? `<span class="admin-rank">${ADMIN_RANK_LABEL}</span>`
+                : `${authorInfo.is_trusted ? '<span style="color:#b8860b; font-weight:800; margin-left:6px;">⭐</span>' : ''} ${starsBadgeLocal}`;
+            const adminOnlineHtml = showAdminStyle
+                ? `<div class="admin-online" style="margin-bottom:6px;"><span class="admin-online-dot"></span>На связи</div>`
+                : '';
+            const adminConfirmHtml = showAdminStyle
+                ? `<div class="admin-confirm">✅ Подтверждено администрацией</div>`
+                : '';
+            const reportButtonHtml = showAdminStyle
+                ? adminConfirmHtml
+                : `<button class="b-del" style="background: #ff9500; color:white;" onclick="window.reportUser(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')" title="Пожаловаться на автора метки">⚠️ Пожаловаться</button>`;
+
             const bHtml = `<div class="b-cont">
-                <div style="font-size:13px; margin-bottom:6px; color:#222; cursor: ${window.isAdmin ? 'pointer' : 'default'}; padding: 4px; border-radius: 4px; transition: all 0.2s;" onmouseover="${window.isAdmin ? `this.style.background='#f0f0f5'; this.style.transform='scale(1.02)'` : ''}" onmouseout="${window.isAdmin ? `this.style.background=''; this.style.transform='scale(1)'` : ''}" onclick="${window.isAdmin ? `window.showUserModeratorMenuFromMarker(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')` : ''}"><strong>${authorInfo.name || 'Аноним'}</strong> ${authorInfo.is_trusted ? '<span style="color:#b8860b; font-weight:800; margin-left:6px;">⭐</span>' : ''} ${starsBadgeLocal}</div>
+                <div style="font-size:13px; margin-bottom:6px; color:#222; cursor: ${window.isAdmin ? 'pointer' : 'default'}; padding: 4px; border-radius: 4px; transition: all 0.2s;" onmouseover="${window.isAdmin ? `this.style.background='#f0f0f5'; this.style.transform='scale(1.02)'` : ''}" onmouseout="${window.isAdmin ? `this.style.background=''; this.style.transform='scale(1)'` : ''}" onclick="${window.isAdmin ? `window.showUserModeratorMenuFromMarker(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')` : ''}">${authorNameHtml} ${authorBadgesHtml}</div>
+                ${adminOnlineHtml}
                 <strong>${m.comment || 'Метка'}</strong>
                 ${m.photo_url ? `<div style="margin-top: 8px; margin-bottom: 8px;"><img src="${m.photo_url}" style="max-width: 100%; border-radius: 8px; cursor: pointer; max-height: 250px;" onclick="openPhotoViewer('${m.photo_url}')" title="Нажмите для увеличения"></div>` : ''}
                 <div class="b-poll">
@@ -5787,14 +6176,17 @@
                 </div>
                 ${confirmationBar}
                 ${isOwner ? `<button class="b-del" onclick="window.delMarker(${m.id})">Удалить</button>` : ''}
-                <button class="b-del" style="background: #ff9500; color:white;" onclick="window.reportUser(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')" title="Пожаловаться на автора метки">⚠️ Пожаловаться</button>
+                ${reportButtonHtml}
             </div>`;
             // Определяем доверие автора и добавляем звездочку к иконке, если он проверен
             const isTrustedAuthor = authorInfo.is_trusted;
-            const iconInner = `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`;
+            const iconInner = showAdminStyle
+                ? `<div class="admin-marker admin-marker--map"><span class="admin-siren admin-siren-left"></span><span class="admin-siren admin-siren-right"></span>${MAP_ICONS[m.type]}<span class="admin-marker-badge">👑</span></div>`
+                : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`;
             // Создаем маркер с иконкой и балуном
+            const iconSize = showAdminStyle ? 34 : 30;
             const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: iconInner }, 
-            { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [30, 30], iconImageOffset: [-15, -15] });
+            { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
             // Добавляем маркер в коллекцию
             if (markersCollection) markersCollection.add(p);
             
