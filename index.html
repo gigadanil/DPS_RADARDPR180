@@ -7,6 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#007aff">
+    <link rel="manifest" href="manifest.json">
     <title>EASY RIDE — RELIABLE</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -466,6 +467,18 @@
         /* Баннер админ-уведомлений */
         .broadcast-banner { position: fixed; top: calc(12px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 3000; background: linear-gradient(135deg, #111 0%, #333 100%); color: #fff; padding: 12px 16px; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); display: none; max-width: 90%; text-align: center; font-weight: 700; }
         .broadcast-banner.visible { display: block; }
+        .proximity-banner { position: fixed; top: calc(52px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 2500; background: #1c1c1e; color: #fff; padding: 10px 14px; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.28); display: none; min-width: 220px; text-align: center; font-weight: 800; letter-spacing: 0.2px; }
+        .proximity-banner.visible { display: block; }
+        .proximity-banner--yellow { background: #ffd60a; color: #1a1a1a; }
+        .proximity-banner--orange { background: #ff9f0a; color: #1a1a1a; }
+        .proximity-banner--red { background: #ff3b30; color: #fff; }
+        .proximity-banner--blink { animation: proximityBlink 0.8s ease-in-out infinite; }
+        .proximity-banner-title { font-size: 12px; font-weight: 700; opacity: 0.9; }
+        .proximity-banner-distance { font-size: 18px; font-weight: 900; margin-left: 6px; }
+        @keyframes proximityBlink {
+            0%, 100% { box-shadow: 0 10px 30px rgba(255,59,48,0.35); }
+            50% { box-shadow: 0 0 0 6px rgba(255,59,48,0.28); }
+        }
         
         /* Overlay ограничения доступа */
         #tgAuthOverlay {
@@ -580,6 +593,8 @@
 
     <!-- Баннер админ-уведомлений -->
     <div id="broadcastBanner" class="broadcast-banner"></div>
+    <!-- Динамический баннер приближения -->
+    <div id="proximityBanner" class="proximity-banner"></div>
 
     <!-- Спидометр -->
     <div id="speedometer" class="speedometer">
@@ -1323,7 +1338,52 @@
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     const BOT_USERNAME = 'DPSRADARDPR180bot';
     // Клиент Supabase для работы с БД
-    const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    function setSupabaseAuth(token) {
+        if (!token) return;
+        _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            global: { headers: { Authorization: `Bearer ${token}` } }
+        });
+    }
+
+    async function ensureSupabaseAuth() {
+        const initData = window.Telegram?.WebApp?.initData;
+        if (!initData) return;
+
+        try {
+            const cachedToken = localStorage.getItem('sb_jwt');
+            const cachedExp = Number(localStorage.getItem('sb_jwt_exp') || 0);
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (cachedToken && cachedExp && cachedExp - 30 > nowSec) {
+                setSupabaseAuth(cachedToken);
+                return;
+            }
+        } catch (e) {
+            // ignore storage errors
+        }
+
+        try {
+            const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ initData })
+            });
+            if (!res.ok) throw new Error('telegram-auth failed');
+            const data = await res.json();
+            if (data?.token) {
+                setSupabaseAuth(data.token);
+                try {
+                    localStorage.setItem('sb_jwt', data.token);
+                    if (data.exp) localStorage.setItem('sb_jwt_exp', String(data.exp));
+                } catch (e) {
+                    // ignore storage errors
+                }
+            }
+        } catch (e) {
+            console.warn('Supabase auth failed:', e?.message || e);
+        }
+    }
     
     // Вспомогательная функция для запросов к Supabase с таймаутом
     async function queryWithTimeout(promise, timeoutMs = 15000) {
@@ -1394,12 +1454,26 @@
     let initAppInProgress = false;
     // Спидометр: видимость
     let speedometerEnabled = true;
+    // Анти-спам для меток
+    const MARKER_RATE_LIMIT_MS = 120000;
     // Переменная для хранения выбранной фотографии
     let selectedChatPhoto = null;
     // Множество для отслеживания уже воспроизведенных уведомлений (чтобы не спамить звук)
     let notifiedMarkers = new Set();
     // Отслеживание уведомлений по расстоянию (marker_id -> уровень уведомления: 'far' или 'near')
     let distanceNotifications = new Map(); // { markerId: 'far'|'near' }
+    // Тренд расстояния до маркера (marker_id -> { lastDistance, lastTrend, lastUpdate })
+    let markerDistanceState = new Map();
+    // Состояние динамического баннера приближения
+    let proximityBannerState = {
+        markerId: null,
+        markerType: null,
+        markerCoords: null,
+        lastDistance: null,
+        lastUpdateTs: 0
+    };
+    let proximityBannerIntervalId = null;
+    let currentWarningAudio = null;
     // Стиль озвучки: 'standard' (стандартный) или 'cheeky' (дерзкий)
     let voiceStyle = 'standard';
     // Оповещения по расстоянию только при автослежении
@@ -1487,6 +1561,15 @@
         valueEl.textContent = Math.max(0, Math.round(speedKmh || 0));
     }
 
+    function registerServiceWorker() {
+        if (!('serviceWorker' in navigator)) return;
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').catch(err => {
+                console.warn('Service Worker registration failed:', err);
+            });
+        });
+    }
+
     // Границы Донецкой области ДНР (примерные координаты)
     const DONETSK_REGION = {
         north: 49.2,    // Северная граница
@@ -1527,6 +1610,160 @@
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
+
+    function getDynamicWarningMaxMeters() {
+        const base = Math.max(300, Number(warningDistanceMeters) || 800);
+        const speed = Number(userSpeedKmh) || 0;
+        if (speed > 80) return Math.max(base, 1200);
+        if (speed < 40) return Math.min(base, 600);
+        return base;
+    }
+
+    function getWarningMinMeters(maxMeters) {
+        return Math.max(200, Math.round(maxMeters * 0.6));
+    }
+
+    function getNearThresholdMeters(maxMeters) {
+        return Math.max(120, Math.round(maxMeters * 0.25));
+    }
+
+    function formatDistanceMeters(distance) {
+        if (!isFinite(distance)) return '';
+        if (distance >= 1000) return `${Math.round(distance / 10) * 10} м`;
+        if (distance >= 100) return `${Math.round(distance / 10) * 10} м`;
+        return `${Math.round(distance)} м`;
+    }
+
+    function getMarkerLabel(type) {
+        const labels = {
+            dps: 'Пост ДПС',
+            patrol: 'Рейд',
+            camera: 'Камера',
+            dtp: 'ДТП',
+            works: 'Работы',
+            sos: 'SOS'
+        };
+        return labels[type] || 'Опасность';
+    }
+
+    function getMarkerEmoji(type) {
+        const icons = {
+            dps: '👮‍♂️',
+            patrol: '🚔',
+            camera: '📸',
+            dtp: '💥',
+            works: '🚧',
+            sos: '🆘'
+        };
+        return icons[type] || '⚠️';
+    }
+
+    function updateProximityBanner(distance, type) {
+        const banner = document.getElementById('proximityBanner');
+        if (!banner) return;
+        const label = getMarkerLabel(type);
+        const emoji = getMarkerEmoji(type);
+        const distanceText = formatDistanceMeters(distance);
+
+        banner.innerHTML = `<span class="proximity-banner-title">${emoji} ${label}:</span> <span class="proximity-banner-distance">${distanceText}</span>`;
+        banner.classList.add('visible');
+
+        banner.classList.remove('proximity-banner--yellow', 'proximity-banner--orange', 'proximity-banner--red', 'proximity-banner--blink');
+        if (distance <= 200) {
+            banner.classList.add('proximity-banner--red', 'proximity-banner--blink');
+        } else if (distance <= 500) {
+            banner.classList.add('proximity-banner--orange');
+        } else if (distance <= 1000) {
+            banner.classList.add('proximity-banner--yellow');
+        }
+    }
+
+    function hideProximityBanner() {
+        const banner = document.getElementById('proximityBanner');
+        if (!banner) return;
+        banner.classList.remove('visible', 'proximity-banner--yellow', 'proximity-banner--orange', 'proximity-banner--red', 'proximity-banner--blink');
+    }
+
+    function stopWarningOutput() {
+        try {
+            if (currentWarningAudio) {
+                currentWarningAudio.pause();
+                currentWarningAudio.currentTime = 0;
+                currentWarningAudio = null;
+            }
+        } catch (e) {
+            console.warn('Не удалось остановить аудио:', e?.message || e);
+        }
+        try {
+            if (window.speechSynthesis && window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+            }
+        } catch (e) {
+            console.warn('Не удалось остановить озвучку:', e?.message || e);
+        }
+    }
+
+    function setActiveProximityMarker(markerId, markerType, markerCoords, distance) {
+        if (!markerId) return;
+        if (!markerCoords || !Array.isArray(markerCoords) || markerCoords.length < 2) return;
+
+        const currentId = proximityBannerState.markerId;
+        if (!currentId || currentId === markerId || distance < (proximityBannerState.lastDistance || Infinity)) {
+            proximityBannerState.markerId = markerId;
+            proximityBannerState.markerType = markerType;
+            proximityBannerState.markerCoords = markerCoords;
+            proximityBannerState.lastDistance = distance;
+            proximityBannerState.lastUpdateTs = Date.now();
+            updateProximityBanner(distance, markerType);
+        }
+    }
+
+    function clearActiveProximityMarker(markerId) {
+        if (proximityBannerState.markerId === markerId) {
+            proximityBannerState.markerId = null;
+            proximityBannerState.markerType = null;
+            proximityBannerState.markerCoords = null;
+            proximityBannerState.lastDistance = null;
+            proximityBannerState.lastUpdateTs = 0;
+            hideProximityBanner();
+        }
+    }
+
+    function refreshProximityBanner() {
+        if (!proximityBannerState.markerId || !proximityBannerState.markerCoords || !userLocation) return;
+        const coords = proximityBannerState.markerCoords;
+        const lat = Number(coords[0]);
+        const lon = Number(coords[1]);
+        if (!isFinite(lat) || !isFinite(lon)) return;
+
+        const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
+        const prev = proximityBannerState.lastDistance;
+        const warningMax = getDynamicWarningMaxMeters();
+
+        if (isFinite(prev) && distance > prev + 25) {
+            distanceNotifications.delete(proximityBannerState.markerId);
+            markerDistanceState.set(proximityBannerState.markerId, { lastDistance: distance, lastTrend: 'away', lastUpdate: Date.now() });
+            clearActiveProximityMarker(proximityBannerState.markerId);
+            stopWarningOutput();
+            return;
+        }
+
+        if (distance > warningMax) {
+            clearActiveProximityMarker(proximityBannerState.markerId);
+            return;
+        }
+
+        proximityBannerState.lastDistance = distance;
+        proximityBannerState.lastUpdateTs = Date.now();
+        updateProximityBanner(distance, proximityBannerState.markerType);
+    }
+
+    function startProximityBannerLoop() {
+        if (proximityBannerIntervalId) return;
+        proximityBannerIntervalId = setInterval(() => {
+            try { refreshProximityBanner(); } catch (e) { /* ignore */ }
+        }, 2500);
+    }
     
     /**
      * Озвучивает предупреждение о посте ДПС
@@ -1540,7 +1777,9 @@
      */
     function playAudioWarning(audioUrl) {
         try {
+            stopWarningOutput();
             const audio = new Audio(audioUrl);
+            currentWarningAudio = audio;
             audio.volume = 1;
             audio.play().catch(err => {
                 console.warn('Ошибка воспроизведения аудио:', err);
@@ -1554,6 +1793,7 @@
     
     async function speakWarning(distance, type, comment) {
         if (!voiceStyle) voiceStyle = 'standard';
+        stopWarningOutput();
         
         // Определяем категорию расстояния
         const distanceCategory = distance < 200 ? 'close' : 'far';
@@ -1572,6 +1812,7 @@
                 
                 if (data?.signedUrl) {
                     const audio = new Audio(data.signedUrl);
+                    currentWarningAudio = audio;
                     audio.volume = 1.0;
                     audio.play().catch(e => {
                         console.warn('Не удалось воспроизвести MP3:', e);
@@ -1678,10 +1919,34 @@
         
         const markerId = marker.id;
         const currentNotification = distanceNotifications.get(markerId);
-        
-        const warningMax = Math.max(300, Number(warningDistanceMeters) || 800);
-        const warningMin = Math.max(200, Math.round(warningMax * 0.6));
-        const nearThreshold = Math.max(120, Math.round(warningMax * 0.25));
+        const warningMax = getDynamicWarningMaxMeters();
+        const warningMin = getWarningMinMeters(warningMax);
+        const nearThreshold = getNearThresholdMeters(warningMax);
+
+        const prevState = markerDistanceState.get(markerId);
+        let trend = prevState?.lastTrend || 'approaching';
+        if (prevState && typeof prevState.lastDistance === 'number') {
+            if (distance > prevState.lastDistance + 25) trend = 'away';
+            else if (distance < prevState.lastDistance - 25) trend = 'approaching';
+        }
+        markerDistanceState.set(markerId, { lastDistance: distance, lastTrend: trend, lastUpdate: Date.now() });
+
+        if (trend === 'away') {
+            if (currentNotification) {
+                distanceNotifications.delete(markerId);
+                stopWarningOutput();
+            }
+            if (proximityBannerState.markerId === markerId) {
+                clearActiveProximityMarker(markerId);
+            }
+            return;
+        }
+
+        if (distance <= warningMax) {
+            setActiveProximityMarker(markerId, marker.type, [mLat, mLon], distance);
+        } else if (proximityBannerState.markerId === markerId) {
+            clearActiveProximityMarker(markerId);
+        }
 
         // Первое уведомление: зона предупреждения
         if (distance >= warningMin && distance <= warningMax && currentNotification !== 'far') {
@@ -2168,6 +2433,9 @@
         // Определяем админа раньше для проверки ТО
         isAdmin = String(tgUser.id) === String(ADMIN_ID);
 
+        // Переключаем Supabase на authenticated (JWT из Telegram)
+        await ensureSupabaseAuth();
+
         try {
             // Проверяем, не забанен ли пользователь (с таймаутом)
             const banInfo = await Promise.race([
@@ -2260,6 +2528,8 @@
         loadWarningDistance();
         loadSpeedometerPreference();
         updateSpeedometerUI(userSpeedKmh);
+        registerServiceWorker();
+        startProximityBannerLoop();
 
         // Инициализируем админ-канал и статус невидимки
         initAdminBroadcastChannel();
@@ -4522,6 +4792,14 @@
         }
     }
 
+    async function expireMarkerById(markerId) {
+        return _sb.from('markers').update({ exp: Date.now() }).eq('id', markerId);
+    }
+
+    async function expireMarkersByAuthor(authorId) {
+        return _sb.from('markers').update({ exp: Date.now() }).eq('author_id', authorId);
+    }
+
 
 
 
@@ -4538,7 +4816,7 @@
         if (confirm('Вы уверены? Это также удалит все метки этого водителя')) {
             try {
                 // Удаляем все метки водителя
-                await _sb.from('markers').delete().eq('author_id', driverId);
+                await expireMarkersByAuthor(driverId);
                 // Удаляем водителя
                 await _sb.from('drivers').delete().eq('user_id', driverId);
                 // Пытаемся удалить из бана (если таблица существует)
@@ -4564,7 +4842,7 @@
 
         if (confirm('Удалить эту метку?')) {
             try {
-                await _sb.from('markers').delete().eq('id', markerId);
+                await expireMarkerById(markerId);
                 alert('Метка удалена');
                 openAdminModal(); // Обновляем список
                 loadMarkers(); // Обновляем карту
@@ -4902,7 +5180,7 @@
         if (!confirm(`Удалить все метки пользователя "${userName}"? Это действие необратимо.`)) return;
 
         try {
-            const { error } = await _sb.from('markers').delete().eq('author_id', userId);
+            const { error } = await expireMarkersByAuthor(userId);
             if (error) {
                 alert('Ошибка: ' + (error?.message || 'неизвестная ошибка'));
                 return;
@@ -5377,7 +5655,7 @@
                     
                     // Если достаточно подтверждений - удаляем метку
                     if (newCount >= (typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3)) {
-                        await _sb.from('markers').delete().eq('id', markerId);
+                        await expireMarkerById(markerId);
                         alert(`✅ Метка удалена - ${newCount} человека подтвердили что объект уехал.`);
                         myMap.balloon.close();
                         loadMarkers();
@@ -5393,7 +5671,7 @@
                 
                 // Если достаточно подтверждений - удаляем метку
                 if (leaveCount >= (typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3)) {
-                    await _sb.from('markers').delete().eq('id', markerId);
+                    await expireMarkerById(markerId);
                     alert(`✅ Метка удалена - ${leaveCount} человека подтвердили что объект уехал.`);
                     myMap.balloon.close();
                     loadMarkers();
@@ -5415,7 +5693,7 @@
     // Функция удаления маркера (только для автора)
     window.delMarker = async (id) => {
         if (confirm("Удалить вашу метку?")) {
-            await _sb.from('markers').delete().eq('id', id);
+            await expireMarkerById(id);
             // Закрываем всплывающий балун
             myMap.balloon.close();
             // Обновляем список маркеров на карте
@@ -5633,10 +5911,13 @@
         if (!key || !Array.isArray(userIds) || userIds.length === 0) return;
         try {
             const rows = userIds.map(id => ({ user_id: String(id), key }));
-            await _sb.from('user_achievements').insert(rows);
+            // Используем upsert с игнорированием дубликатов
+            const { error } = await _sb.from('user_achievements').upsert(rows, { onConflict: 'user_id,key', ignoreDuplicates: true });
+            if (error) throw error;
             console.log(`🏅 Ачивка ${key} присвоена ${userIds.length} пользователям`);
         } catch (e) {
             console.warn('grantAchievementToUsers error:', e?.message || e);
+            throw e; // Пробрасываем ошибку для обработки в UI
         }
     }
 
@@ -6030,6 +6311,17 @@
             return;
         }
 
+        // Анти-спам: 1 метка в 2 минуты
+        const nowTs = Date.now();
+        const rateKey = `last_marker_ts_${uid || 'anon'}`;
+        let lastTs = 0;
+        try { lastTs = Number(localStorage.getItem(rateKey) || 0); } catch(e) { lastTs = 0; }
+        if (lastTs && (nowTs - lastTs) < MARKER_RATE_LIMIT_MS) {
+            const waitSec = Math.ceil((MARKER_RATE_LIMIT_MS - (nowTs - lastTs)) / 1000);
+            alert(`⏳ Подождите ${waitSec} сек. Можно ставить метку не чаще 1 раза в 2 минуты.`);
+            return;
+        }
+
         // Берём координаты из центра карты — так можно ставить метки в любом месте
         // Если нужно поставить метку именно по GPS, сначала центрируйте карту на своём местоположении
         const coords = myMap.getCenter();
@@ -6052,6 +6344,7 @@
             }]);
 
             if (!error) {
+                try { localStorage.setItem(rateKey, String(Date.now())); } catch(e) {}
                 // Попытаемся обновить счетчик в таблице drivers, но игнорируем ошибку, если колонка отсутствует
                 try {
                     await _sb.from('drivers').update({ markers_count: (currentDriver.markers_count || 0) + 1 }).eq('user_id', uid);
@@ -6070,7 +6363,12 @@
             }
         } catch (e) {
             console.warn('Ошибка при добавлении метки:', e?.message || e);
-            alert('Ошибка при добавлении метки: ' + (e?.message || e));
+            const msg = (e?.message || String(e));
+            if (msg.toLowerCase().includes('rate') || msg.toLowerCase().includes('limit')) {
+                alert('⏳ Слишком часто. Можно ставить метку не чаще 1 раза в 2 минуты.');
+            } else {
+                alert('Ошибка при добавлении метки: ' + msg);
+            }
         }
     }
 
