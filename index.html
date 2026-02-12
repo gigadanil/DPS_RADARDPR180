@@ -626,6 +626,8 @@
     <button class="chat-btn" onclick="openChatModal()">💬</button>
     <!-- Кнопка ленты событий -->
     <button class="chat-btn" onclick="openActivityModal()" style="bottom: 160px;">📡</button>
+    <!-- Кнопка тепловой карты -->
+    <button class="chat-btn" onclick="openActivityModal('heatmap')" style="bottom: 220px; background: #ff9f0a;" title="Тепловая карта активности">🔥</button>
     
     <!-- Модальное окно чата -->
     <div id="chatModal" class="modal">
@@ -5746,11 +5748,18 @@
     window.deleteMessage = deleteMessage;
 
     // Функция открытия ленты событий
-    async function openActivityModal() {
+    async function openActivityModal(mode) {
         const feed = document.getElementById('activityFeed');
         feed.innerHTML = '<div style="text-align: center; color: var(--gray);">⏳ Загрузка событий...</div>';
 
         initActivityHeatmapUI();
+        if (mode === 'heatmap') {
+            activityHeatmapMode = 'week';
+            const toggle = document.getElementById('heatmapToggle');
+            if (toggle) {
+                [...toggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.dataset.mode === 'week'));
+            }
+        }
         loadActivityHeatmap();
         
         try {
