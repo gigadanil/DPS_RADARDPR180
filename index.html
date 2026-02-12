@@ -419,6 +419,22 @@
         .activity-item:last-child { border-bottom: none; }
         .activity-time { font-size: 10px; color: var(--gray); margin-top: 4px; }
         .activity-icon { margin-right: 6px; }
+
+        /* Тепловая карта активности */
+        .activity-heatmap { background: #f9f9f9; border-radius: 14px; padding: 12px; border: 1px solid #e6e6ea; margin-bottom: 12px; }
+        .heatmap-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+        .heatmap-title { font-size: 13px; font-weight: 800; color: #111; }
+        .heatmap-toggle { display: inline-flex; background: #fff; border-radius: 10px; border: 1px solid #e0e0e0; overflow: hidden; }
+        .heatmap-toggle button { border: none; background: none; padding: 6px 10px; font-size: 11px; font-weight: 700; cursor: pointer; color: #666; }
+        .heatmap-toggle button.active { background: var(--blue); color: #fff; }
+        .heatmap-legend { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #666; margin-bottom: 8px; }
+        .heatmap-legend .chip { width: 14px; height: 14px; border-radius: 4px; background: #f0f0f5; border: 1px solid #e0e0e0; }
+        .heatmap-scroll { overflow-x: auto; padding-bottom: 6px; }
+        .heatmap-grid { display: grid; grid-template-columns: 40px repeat(24, 16px); gap: 4px; align-items: center; }
+        .heatmap-cell { width: 16px; height: 16px; border-radius: 4px; background: #f0f0f5; border: 1px solid #e6e6ea; }
+        .heatmap-label { font-size: 10px; color: #666; text-align: right; padding-right: 4px; white-space: nowrap; }
+        .heatmap-hour { font-size: 9px; color: #888; text-align: center; }
+        .heatmap-summary { font-size: 11px; color: #666; margin-top: 6px; text-align: right; }
         
         /* Достижения */
         .achievement { display: inline-block; text-align: center; padding: 8px; margin: 4px; background: #f9f9f9; border-radius: 10px; border: 1px solid #e0e0e0; font-size: 11px; min-width: 70px; }
@@ -1304,6 +1320,28 @@
             
             <div style="font-size: 12px; color: var(--gray); margin-bottom: 10px; text-align: center;">
                 Рабочая активность водителей в реальном времени
+            </div>
+
+            <div id="activityHeatmap" class="activity-heatmap">
+                <div class="heatmap-header">
+                    <div class="heatmap-title">🔥 Тепловая карта активности</div>
+                    <div class="heatmap-toggle" id="heatmapToggle">
+                        <button type="button" data-mode="day">День</button>
+                        <button type="button" data-mode="week" class="active">Неделя</button>
+                    </div>
+                </div>
+                <div class="heatmap-legend" id="heatmapLegend">
+                    <span>Мало</span>
+                    <span class="chip"></span>
+                    <span class="chip" style="background: rgba(0,122,255,0.35);"></span>
+                    <span class="chip" style="background: rgba(0,122,255,0.6);"></span>
+                    <span class="chip" style="background: rgba(0,122,255,0.85);"></span>
+                    <span>Много</span>
+                </div>
+                <div class="heatmap-scroll">
+                    <div id="heatmapGrid" class="heatmap-grid"></div>
+                </div>
+                <div id="heatmapSummary" class="heatmap-summary">Загрузка...</div>
             </div>
             
             <div id="activityFeed" style="max-height: 450px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 12px; padding: 10px;">
@@ -5711,6 +5749,9 @@
     async function openActivityModal() {
         const feed = document.getElementById('activityFeed');
         feed.innerHTML = '<div style="text-align: center; color: var(--gray);">⏳ Загрузка событий...</div>';
+
+        initActivityHeatmapUI();
+        loadActivityHeatmap();
         
         try {
             // Загружаем последние маркеры (события добавления)
@@ -5781,6 +5822,142 @@
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
         document.getElementById('activityModal').classList.add('active');
+    }
+
+    let activityHeatmapMode = 'week';
+    let activityHeatmapCache = null;
+    let activityHeatmapCachedAt = 0;
+
+    function initActivityHeatmapUI() {
+        const toggle = document.getElementById('heatmapToggle');
+        if (!toggle || toggle.dataset.bound) return;
+        toggle.dataset.bound = '1';
+
+        toggle.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-mode]');
+            if (!btn) return;
+            activityHeatmapMode = btn.dataset.mode;
+            [...toggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b === btn));
+            renderActivityHeatmap();
+        });
+    }
+
+    async function loadActivityHeatmap(force = false) {
+        const summaryEl = document.getElementById('heatmapSummary');
+        if (summaryEl) summaryEl.textContent = 'Загрузка...';
+
+        const now = Date.now();
+        if (!force && activityHeatmapCache && (now - activityHeatmapCachedAt) < 120000) {
+            renderActivityHeatmap();
+            return;
+        }
+
+        try {
+            const nowDate = new Date();
+            const weekStart = new Date(nowDate);
+            weekStart.setDate(nowDate.getDate() - 6);
+            weekStart.setHours(0, 0, 0, 0);
+
+            const { data: markers } = await _sb
+                .from('markers')
+                .select('ts')
+                .gte('ts', weekStart.toISOString())
+                .order('ts', { ascending: false })
+                .limit(5000);
+
+            const weekCounts = Array.from({ length: 7 }, () => Array(24).fill(0));
+            const dayCounts = Array(24).fill(0);
+
+            const dayStart = new Date(nowDate);
+            dayStart.setHours(0, 0, 0, 0);
+            const msDay = 24 * 60 * 60 * 1000;
+
+            if (markers) {
+                markers.forEach(m => {
+                    const d = new Date(m.ts);
+                    if (isNaN(d.getTime())) return;
+                    const hour = d.getHours();
+                    const dayOffset = Math.floor((d - weekStart) / msDay);
+                    if (dayOffset >= 0 && dayOffset < 7) {
+                        weekCounts[dayOffset][hour] += 1;
+                    }
+                    if (d >= dayStart) dayCounts[hour] += 1;
+                });
+            }
+
+            activityHeatmapCache = { weekCounts, dayCounts, updatedAt: nowDate };
+            activityHeatmapCachedAt = now;
+            renderActivityHeatmap();
+        } catch (e) {
+            console.warn('Ошибка при загрузке тепловой карты:', e?.message || e);
+            if (summaryEl) summaryEl.textContent = 'Ошибка загрузки';
+        }
+    }
+
+    function renderActivityHeatmap() {
+        const gridEl = document.getElementById('heatmapGrid');
+        const summaryEl = document.getElementById('heatmapSummary');
+        if (!gridEl || !summaryEl || !activityHeatmapCache) return;
+
+        const hours = Array.from({ length: 24 }, (_, i) => i);
+        const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+        const nowDate = activityHeatmapCache.updatedAt || new Date();
+        const weekStart = new Date(nowDate);
+        weekStart.setDate(nowDate.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+        const dayLabels = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(weekStart);
+            d.setDate(weekStart.getDate() + i);
+            const name = dayNames[(d.getDay() + 6) % 7];
+            const dd = String(d.getDate()).padStart(2, '0');
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            return `${name} ${dd}.${mm}`;
+        });
+
+        let max = 0;
+        if (activityHeatmapMode === 'week') {
+            activityHeatmapCache.weekCounts.forEach(row => row.forEach(v => { if (v > max) max = v; }));
+        } else {
+            activityHeatmapCache.dayCounts.forEach(v => { if (v > max) max = v; });
+        }
+
+        const colorFor = (value) => {
+            if (!value || max <= 0) return '#f0f0f5';
+            const alpha = Math.min(0.92, 0.12 + (value / max) * 0.8);
+            return `rgba(0,122,255,${alpha.toFixed(3)})`;
+        };
+
+        let html = '';
+        html += '<div></div>';
+        hours.forEach(h => {
+            html += `<div class="heatmap-hour">${h}</div>`;
+        });
+
+        if (activityHeatmapMode === 'week') {
+            activityHeatmapCache.weekCounts.forEach((row, rowIndex) => {
+                html += `<div class="heatmap-label">${dayLabels[rowIndex]}</div>`;
+                row.forEach((v, h) => {
+                    const title = `${dayLabels[rowIndex]} ${String(h).padStart(2, '0')}:00 — ${v}`;
+                    html += `<div class="heatmap-cell" title="${title}" style="background:${colorFor(v)}"></div>`;
+                });
+            });
+        } else {
+            html += '<div class="heatmap-label">Сегодня</div>';
+            activityHeatmapCache.dayCounts.forEach((v, h) => {
+                const title = `Сегодня ${String(h).padStart(2, '0')}:00 — ${v}`;
+                html += `<div class="heatmap-cell" title="${title}" style="background:${colorFor(v)}"></div>`;
+            });
+        }
+
+        gridEl.innerHTML = html;
+
+        const sumWeek = activityHeatmapCache.weekCounts.flat().reduce((a, b) => a + b, 0);
+        const sumDay = activityHeatmapCache.dayCounts.reduce((a, b) => a + b, 0);
+        if (activityHeatmapMode === 'week') {
+            summaryEl.textContent = `Всего за 7 дней: ${sumWeek}`;
+        } else {
+            summaryEl.textContent = `Всего сегодня: ${sumDay}`;
+        }
     }
 
     // Функция закрытия ленты событий
