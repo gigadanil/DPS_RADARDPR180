@@ -1377,14 +1377,42 @@
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     const BOT_USERNAME = 'DPSRADARDPR180bot';
+    function createSupabaseClient(token = null) {
+        const options = {
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false,
+                detectSessionInUrl: false
+            }
+        };
+        if (token) {
+            options.global = { headers: { Authorization: `Bearer ${token}` } };
+        }
+        return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
+    }
+
+    function clearSupabaseAuth() {
+        _sb = createSupabaseClient();
+        try {
+            localStorage.removeItem('sb_jwt');
+            localStorage.removeItem('sb_jwt_exp');
+            Object.keys(localStorage).forEach((key) => {
+                if (key.includes('-auth-token')) localStorage.removeItem(key);
+            });
+        } catch (e) {
+            // ignore storage errors
+        }
+    }
+
     // Клиент Supabase для работы с БД
-    let _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let _sb = createSupabaseClient();
 
     function setSupabaseAuth(token) {
-        if (!token) return;
-        _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-            global: { headers: { Authorization: `Bearer ${token}` } }
-        });
+        if (!token || typeof token !== 'string' || token.split('.').length !== 3) {
+            clearSupabaseAuth();
+            return;
+        }
+        _sb = createSupabaseClient(token);
     }
 
     async function ensureSupabaseAuth() {
@@ -1397,9 +1425,12 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ initData })
             });
-            if (!res.ok) throw new Error('telegram-auth failed');
+            if (!res.ok) {
+                clearSupabaseAuth();
+                throw new Error('telegram-auth failed');
+            }
             const data = await res.json();
-            if (data?.token) {
+            if (data?.token && typeof data.token === 'string' && data.token.split('.').length === 3) {
                 setSupabaseAuth(data.token);
                 try {
                     localStorage.setItem('sb_jwt', data.token);
@@ -1407,6 +1438,9 @@
                 } catch (e) {
                     // ignore storage errors
                 }
+            } else {
+                clearSupabaseAuth();
+                throw new Error('telegram-auth returned invalid token');
             }
         } catch (e) {
             console.warn('Supabase auth failed:', e?.message || e);
