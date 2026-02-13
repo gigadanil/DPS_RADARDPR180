@@ -1392,18 +1392,6 @@
         if (!initData) return;
 
         try {
-            const cachedToken = localStorage.getItem('sb_jwt');
-            const cachedExp = Number(localStorage.getItem('sb_jwt_exp') || 0);
-            const nowSec = Math.floor(Date.now() / 1000);
-            if (cachedToken && cachedExp && cachedExp - 30 > nowSec) {
-                setSupabaseAuth(cachedToken);
-                return;
-            }
-        } catch (e) {
-            // ignore storage errors
-        }
-
-        try {
             const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
