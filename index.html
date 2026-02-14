@@ -1744,10 +1744,27 @@
     let currentWarningAudio = null;
     let appNotifications = [];
     let patrolNotifBatch = { count: 0, lastMarker: null, timer: null };
+    let notifFeedSyncIntervalId = null;
     const NOTIF_STORAGE_PREFIX = 'app_notifications_';
     const NOTIF_GROUP_WINDOW_MS = 5 * 60 * 1000;
     const NOTIF_MAX_ITEMS = 120;
+    const NOTIF_FEED_RADIUS_METERS = 20000;
+    const NOTIF_FEED_MARKER_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+    const NOTIF_FEED_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+    const CRITICAL_DTP_CONFIRMATIONS = 3;
     const PATROL_TYPES = new Set(['dps', 'patrol', 'specbat', 'motobat', 'cargo_control']);
+    const SAFE_DRIVE_NEWS_ITEMS = [
+        {
+            id: 'news_notif_feed_v1',
+            icon: '🔵',
+            title: 'Важные новости SafeDrive',
+            body: 'Раздел «Уведомления» теперь показывает МЧС, SOS и критичные ДТП.',
+            createdAt: '2026-02-14T21:00:00.000Z',
+            read: false,
+            source: 'safedrive_news',
+            priority: 'normal'
+        }
+    ];
     // Стиль озвучки: 'standard' (стандартный) или 'cheeky' (дерзкий)
     let voiceStyle = 'standard';
     // Оповещения по расстоянию только при автослежении
@@ -1910,6 +1927,25 @@
         }
     }
 
+    function formatRelativeNotificationTime(ts) {
+        const value = new Date(ts).getTime();
+        if (!Number.isFinite(value)) return '';
+        const diffMs = Date.now() - value;
+        if (diffMs < 60 * 1000) return 'только что';
+        const diffMin = Math.floor(diffMs / (60 * 1000));
+        if (diffMin < 60) return `${diffMin} мин. назад`;
+        const diffH = Math.floor(diffMin / 60);
+        if (diffH < 24) return `${diffH} ч. назад`;
+        const diffD = Math.floor(diffH / 24);
+        return `${diffD} дн. назад`;
+    }
+
+    function formatDistanceForNotification(distanceMeters) {
+        if (!Number.isFinite(distanceMeters)) return null;
+        if (distanceMeters >= 1000) return `${(distanceMeters / 1000).toFixed(1)} км от вас`;
+        return `${Math.round(distanceMeters)} м от вас`;
+    }
+
     function showInAppNotification(notification) {
         const wrap = document.getElementById('inAppNotifWrap');
         if (!wrap) return;
@@ -1969,21 +2005,39 @@
         }
     }
 
-    function pushAppNotification(notification) {
-        appNotifications.unshift(notification);
+    function upsertAppNotification(notification, options = {}) {
+        if (!notification || !notification.id) return;
+        const silent = !!options.silent;
+        const idx = appNotifications.findIndex(n => String(n.id) === String(notification.id));
+        if (idx >= 0) {
+            const prev = appNotifications[idx] || {};
+            appNotifications[idx] = { ...prev, ...notification, read: typeof notification.read === 'boolean' ? notification.read : prev.read };
+        } else {
+            appNotifications.unshift(notification);
+        }
+
+        appNotifications.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         if (appNotifications.length > NOTIF_MAX_ITEMS) appNotifications = appNotifications.slice(0, NOTIF_MAX_ITEMS);
+
         saveNotificationsState();
         renderNotificationsList();
         updateNotificationBadge();
-        if (!document.hidden) showInAppNotification(notification);
-        showSystemNotification(notification);
+
+        if (!silent && idx < 0) {
+            if (!document.hidden) showInAppNotification(notification);
+            showSystemNotification(notification);
+        }
+    }
+
+    function pushAppNotification(notification) {
+        upsertAppNotification(notification, { silent: false });
     }
 
     function renderNotificationsList() {
         const list = document.getElementById('notificationsList');
         if (!list) return;
         if (!appNotifications.length) {
-            list.innerHTML = '<div style="text-align:center; color: var(--gray); padding: 16px;">Пока нет уведомлений</div>';
+            list.innerHTML = '<div style="text-align:center; color: var(--gray); padding: 16px;">Пока нет важных событий</div>';
             return;
         }
         list.innerHTML = appNotifications.map(n => `
@@ -1992,7 +2046,7 @@
                 <div style="flex:1; min-width:0;">
                     <div class="notif-title">${escapeHtml(n.title)}</div>
                     <div class="notif-body">${escapeHtml(n.body || '')}</div>
-                    <div class="notif-time">${formatNotificationTime(n.createdAt)}</div>
+                    <div class="notif-time">${formatRelativeNotificationTime(n.createdAt) || formatNotificationTime(n.createdAt)}</div>
                 </div>
             </div>
         `).join('');
@@ -2012,6 +2066,7 @@
     function openNotificationsDrawer() {
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
+        syncImportantNotificationsFeed({ silent: true }).catch(()=>{});
         renderNotificationsList();
         document.getElementById('notificationsModal').classList.add('active');
     }
@@ -2069,8 +2124,9 @@
         const label = getMarkerLabel(type);
         const distance = Number.isFinite(distanceMeters) ? `${Math.round(distanceMeters)} м` : null;
         const baseBody = override || `${label}${distance ? ` • ${distance}` : ''}${marker?.comment ? ` • ${String(marker.comment).slice(0, 80)}` : ''}`;
+        const markerIdPart = marker?.id ? String(marker.id) : `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         return {
-            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            id: `realtime_${type}_${markerIdPart}`,
             type,
             icon,
             title: type === 'sos' ? '🆘 Рядом SOS' : `Рядом: ${label}`,
@@ -2078,8 +2134,122 @@
             priority: type === 'sos' ? 'high' : 'normal',
             createdAt: new Date().toISOString(),
             read: false,
+            source: 'marker',
             coords: extractMarkerCoordsForNotif(marker)
         };
+    }
+
+    function buildFeedMarkerNotification(marker, kind, distanceMeters) {
+        const markerId = String(marker?.id || `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+        const distanceText = formatDistanceForNotification(distanceMeters);
+        const comment = String(marker?.comment || '').trim();
+        const ts = marker?.ts ? new Date(marker.ts).toISOString() : new Date().toISOString();
+
+        if (kind === 'sos') {
+            return {
+                id: `feed_sos_${markerId}`,
+                type: 'sos',
+                icon: '🔴',
+                title: 'SOS: Нужна помощь',
+                body: `${comment || 'Пользователь запросил помощь'}${distanceText ? ` (${distanceText})` : ''}`,
+                priority: 'high',
+                createdAt: ts,
+                read: false,
+                source: 'sos',
+                coords: extractMarkerCoordsForNotif(marker)
+            };
+        }
+
+        return {
+            id: `feed_dtp_critical_${markerId}`,
+            type: 'dtp',
+            icon: '🔵',
+            title: 'ДТП: Критичное событие',
+            body: `${comment || 'Возможное перекрытие движения'}${distanceText ? ` (${distanceText})` : ''}`,
+            priority: 'normal',
+            createdAt: ts,
+            read: false,
+            source: 'critical_dtp',
+            coords: extractMarkerCoordsForNotif(marker)
+        };
+    }
+
+    async function syncMchsFeedToNotifications({ silent = true } = {}) {
+        try {
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/mchs-auto?action=feed&limit=8`, { method: 'GET' });
+            if (!resp.ok) return;
+            const payload = await resp.json();
+            const alerts = Array.isArray(payload?.alerts) ? payload.alerts : [];
+            alerts.forEach(alert => {
+                const alertId = String(alert?.id || '');
+                if (!alertId) return;
+                const hazard = String(alert?.hazard_text || alert?.title || '').trim();
+                const recommendation = String(alert?.recommendation_text || '').trim();
+                upsertAppNotification({
+                    id: `feed_mchs_${alertId}`,
+                    type: 'mchs',
+                    icon: '🟠',
+                    title: 'МЧС: Штормовое предупреждение',
+                    body: `${hazard}${recommendation ? ` • ${recommendation}` : ''}`.slice(0, 220),
+                    priority: 'normal',
+                    createdAt: alert?.pub_date || alert?.created_at || new Date().toISOString(),
+                    read: false,
+                    source: 'mchs',
+                    link: alert?.source_link || null
+                }, { silent });
+            });
+        } catch (e) {
+            console.warn('Не удалось синхронизировать сводки МЧС:', e?.message || e);
+        }
+    }
+
+    async function syncNearbyImportantMarkersToNotifications({ silent = true } = {}) {
+        try {
+            const sinceIso = new Date(Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS).toISOString();
+            const { data: markers, error } = await _sb
+                .from('markers')
+                .select('id,type,ts,comment,coords,latitude,longitude,leave_confirmations,author_id')
+                .in('type', ['sos', 'dtp'])
+                .gte('ts', sinceIso)
+                .order('ts', { ascending: false })
+                .limit(80);
+
+            if (error || !Array.isArray(markers)) return;
+
+            markers.forEach(marker => {
+                if (String(marker?.author_id || '') === String(uid || '')) return;
+
+                const coords = extractMarkerCoordsForNotif(marker);
+                let distanceMeters = NaN;
+                if (coords && Array.isArray(userLocation) && userLocation.length >= 2) {
+                    distanceMeters = calculateDistance(userLocation[0], userLocation[1], Number(coords.lat), Number(coords.lon));
+                    if (Number.isFinite(distanceMeters) && distanceMeters > NOTIF_FEED_RADIUS_METERS) return;
+                }
+
+                if (marker.type === 'sos') {
+                    upsertAppNotification(buildFeedMarkerNotification(marker, 'sos', distanceMeters), { silent });
+                    return;
+                }
+
+                const confirms = Number(marker?.leave_confirmations || 0);
+                if (marker.type === 'dtp' && confirms >= CRITICAL_DTP_CONFIRMATIONS) {
+                    upsertAppNotification(buildFeedMarkerNotification(marker, 'critical_dtp', distanceMeters), { silent });
+                }
+            });
+        } catch (e) {
+            console.warn('Не удалось синхронизировать SOS/ДТП в ленту уведомлений:', e?.message || e);
+        }
+    }
+
+    function seedSafeDriveNewsNotifications() {
+        SAFE_DRIVE_NEWS_ITEMS.forEach(item => {
+            upsertAppNotification({ ...item }, { silent: true });
+        });
+    }
+
+    async function syncImportantNotificationsFeed({ silent = true } = {}) {
+        await syncMchsFeedToNotifications({ silent });
+        await syncNearbyImportantMarkersToNotifications({ silent });
     }
 
     async function notifyHelpBotAboutMarker(marker) {
@@ -3199,6 +3369,13 @@
         loadSpeedometerPreference();
         restoreTypeCategoryPreference();
         loadNotificationsState();
+        seedSafeDriveNewsNotifications();
+        syncImportantNotificationsFeed({ silent: true }).catch(()=>{});
+        if (!notifFeedSyncIntervalId) {
+            notifFeedSyncIntervalId = setInterval(() => {
+                syncImportantNotificationsFeed({ silent: true }).catch(()=>{});
+            }, NOTIF_FEED_SYNC_INTERVAL_MS);
+        }
         updateSpeedometerUI(userSpeedKmh);
         registerServiceWorker();
         startProximityBannerLoop();
