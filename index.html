@@ -338,6 +338,17 @@
         .chat-btn { position: absolute; bottom: calc(100px + var(--safe-area-inset-bottom)); right: calc(15px + var(--safe-area-inset-right)); z-index: 1500; width: 50px; height: 50px; border-radius: 50%; background: var(--blue); border: 2px solid white; cursor: pointer; font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
         .chat-btn:hover { transform: scale(1.05); }
         .chat-btn:active { transform: scale(0.95); }
+        .notif-btn { background: #5856d6; }
+        .notif-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; border: 2px solid #fff; display: none; padding: 0 4px; box-sizing: border-box; }
+        .notif-toast-wrap { position: absolute; top: calc(58px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 1900; width: min(92vw, 440px); pointer-events: none; }
+        .notif-toast { background: rgba(17,17,17,0.95); color: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.25); font-size: 12px; margin-bottom: 8px; opacity: 0; transform: translateY(-8px); transition: all .2s ease; }
+        .notif-toast.visible { opacity: 1; transform: translateY(0); }
+        .notif-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid #ececf1; border-radius: 12px; margin-bottom: 8px; background: #fff; cursor: pointer; }
+        .notif-row.unread { border-color: #cfe1ff; background: #f7fbff; }
+        .notif-icon { font-size: 20px; line-height: 1; }
+        .notif-title { font-size: 13px; font-weight: 700; color: #111; }
+        .notif-body { font-size: 12px; color: #555; margin-top: 2px; }
+        .notif-time { font-size: 10px; color: #999; margin-top: 4px; }
         
         .chat-messages { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; max-height: 400px; overflow-y: auto; padding: 10px; background: #f9f9f9; border-radius: 12px; }
         .chat-message { padding: 10px 12px; border-radius: 10px; font-size: 13px; max-width: 80%; word-wrap: break-word; }
@@ -636,6 +647,12 @@
     <button class="chat-btn" onclick="openActivityModal()" style="bottom: 160px;">📡</button>
     <!-- Кнопка тепловой карты -->
     <button class="chat-btn" onclick="openActivityModal('heatmap')" style="bottom: 220px; background: #ff9f0a;" title="Тепловая карта активности">🔥</button>
+    <!-- Кнопка уведомлений -->
+    <button class="chat-btn notif-btn" onclick="openNotificationsDrawer()" style="bottom: 280px;" title="Уведомления">
+        🔔
+        <span id="notifUnreadBadge" class="notif-badge">0</span>
+    </button>
+    <div id="inAppNotifWrap" class="notif-toast-wrap"></div>
     
     <!-- Модальное окно чата -->
     <div id="chatModal" class="modal">
@@ -659,6 +676,23 @@
                     <button class="chat-photo-btn" onclick="document.getElementById('chatPhotoInput').click()">📷</button>
                 </div>
                 <button class="chat-send-btn" onclick="sendChatMessage()">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Шторка уведомлений -->
+    <div id="notificationsModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="margin: 0;">🔔 Уведомления</h2>
+                <button class="modal-close" onclick="closeNotificationsDrawer()">✕</button>
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <button class="main-btn" style="flex:1; background:#34c759;" onclick="markAllNotificationsRead()">Прочитать все</button>
+                <button class="main-btn" style="flex:1; background:#999;" onclick="clearAllNotifications()">Очистить</button>
+            </div>
+            <div id="notificationsList" style="max-height: 460px; overflow-y: auto;">
+                <div style="text-align:center; color: var(--gray); padding: 16px;">Пока нет уведомлений</div>
             </div>
         </div>
     </div>
@@ -1417,6 +1451,7 @@
                     <button data-type="sos" onclick="setType('sos', this)" class="type-btn"><div class="icon-circle">🆘</div><span>SOS</span></button>
                     <button data-type="dtp" onclick="setType('dtp', this)" class="type-btn"><div class="icon-circle">💥</div><span>ДТП</span></button>
                     <button data-type="danger" onclick="setType('danger', this)" class="type-btn"><div class="icon-circle">⚠️</div><span>Опасность</span></button>
+                    <button data-type="works" onclick="setType('works', this)" class="type-btn"><div class="icon-circle">🛣️</div><span>Работы</span></button>
                     <button data-type="traffic_jam" onclick="setType('traffic_jam', this)" class="type-btn"><div class="icon-circle">🚗</div><span>Пробка</span></button>
                 </div>
             </div>
@@ -1705,6 +1740,12 @@
     };
     let proximityBannerIntervalId = null;
     let currentWarningAudio = null;
+    let appNotifications = [];
+    let patrolNotifBatch = { count: 0, lastMarker: null, timer: null };
+    const NOTIF_STORAGE_PREFIX = 'app_notifications_';
+    const NOTIF_GROUP_WINDOW_MS = 5 * 60 * 1000;
+    const NOTIF_MAX_ITEMS = 120;
+    const PATROL_TYPES = new Set(['dps', 'patrol', 'specbat', 'motobat', 'cargo_control']);
     // Стиль озвучки: 'standard' (стандартный) или 'cheeky' (дерзкий)
     let voiceStyle = 'standard';
     // Оповещения по расстоянию только при автослежении
@@ -1799,6 +1840,338 @@
                 console.warn('Service Worker registration failed:', err);
             });
         });
+    }
+
+    function getNotifStorageKey() {
+        return `${NOTIF_STORAGE_PREFIX}${String(uid || 'anon')}`;
+    }
+
+    function escapeHtml(input) {
+        return String(input || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function loadNotificationsState() {
+        try {
+            const raw = localStorage.getItem(getNotifStorageKey());
+            const parsed = raw ? JSON.parse(raw) : [];
+            appNotifications = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            appNotifications = [];
+        }
+        renderNotificationsList();
+        updateNotificationBadge();
+    }
+
+    function saveNotificationsState() {
+        try {
+            localStorage.setItem(getNotifStorageKey(), JSON.stringify(appNotifications.slice(0, NOTIF_MAX_ITEMS)));
+        } catch (e) {
+            console.warn('Не удалось сохранить уведомления:', e?.message || e);
+        }
+    }
+
+    async function updatePwaBadge(unreadCount) {
+        try {
+            if (typeof navigator.setAppBadge === 'function') {
+                if (unreadCount > 0) await navigator.setAppBadge(unreadCount);
+                else if (typeof navigator.clearAppBadge === 'function') await navigator.clearAppBadge();
+            }
+        } catch (e) {
+            // ignore unsupported contexts
+        }
+    }
+
+    function updateNotificationBadge() {
+        const unread = appNotifications.filter(n => !n.read).length;
+        const badge = document.getElementById('notifUnreadBadge');
+        if (badge) {
+            if (unread > 0) {
+                badge.style.display = 'block';
+                badge.textContent = unread > 99 ? '99+' : String(unread);
+            } else {
+                badge.style.display = 'none';
+            }
+        }
+        updatePwaBadge(unread);
+    }
+
+    function formatNotificationTime(ts) {
+        try {
+            return new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function showInAppNotification(notification) {
+        const wrap = document.getElementById('inAppNotifWrap');
+        if (!wrap) return;
+        const toast = document.createElement('div');
+        toast.className = 'notif-toast';
+        toast.innerHTML = `<div style="font-weight:700; margin-bottom:2px;">${escapeHtml(notification.title)}</div><div>${escapeHtml(notification.body || '')}</div>`;
+        wrap.prepend(toast);
+        requestAnimationFrame(() => toast.classList.add('visible'));
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 220);
+        }, 4200);
+        if (notification.priority === 'high' && navigator.vibrate) {
+            try { navigator.vibrate([200, 120, 220]); } catch (e) {}
+        }
+    }
+
+    async function showSystemNotification(notification) {
+        if (!document.hidden) return;
+        if (!('Notification' in window)) return;
+        let permission = Notification.permission;
+        if (permission === 'default') {
+            try { permission = await Notification.requestPermission(); } catch (e) { return; }
+        }
+        if (permission !== 'granted') return;
+
+        const options = {
+            body: notification.body || '',
+            tag: `marker-${notification.type || 'event'}`,
+            renotify: notification.priority === 'high',
+            data: {
+                url: '/',
+                coords: notification.coords || null,
+                notifId: notification.id
+            },
+            vibrate: notification.priority === 'high' ? [200, 120, 220] : [80],
+            badge: 'manifest.json'
+        };
+
+        try {
+            if (navigator.serviceWorker?.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'SHOW_NOTIFICATION',
+                    title: notification.title,
+                    options
+                });
+                return;
+            }
+            if (navigator.serviceWorker?.ready) {
+                const reg = await navigator.serviceWorker.ready;
+                await reg.showNotification(notification.title, options);
+                return;
+            }
+            new Notification(notification.title, options);
+        } catch (e) {
+            console.warn('Не удалось показать системное уведомление:', e?.message || e);
+        }
+    }
+
+    function pushAppNotification(notification) {
+        appNotifications.unshift(notification);
+        if (appNotifications.length > NOTIF_MAX_ITEMS) appNotifications = appNotifications.slice(0, NOTIF_MAX_ITEMS);
+        saveNotificationsState();
+        renderNotificationsList();
+        updateNotificationBadge();
+        if (!document.hidden) showInAppNotification(notification);
+        showSystemNotification(notification);
+    }
+
+    function renderNotificationsList() {
+        const list = document.getElementById('notificationsList');
+        if (!list) return;
+        if (!appNotifications.length) {
+            list.innerHTML = '<div style="text-align:center; color: var(--gray); padding: 16px;">Пока нет уведомлений</div>';
+            return;
+        }
+        list.innerHTML = appNotifications.map(n => `
+            <div class="notif-row ${n.read ? '' : 'unread'}" onclick="goToNotification('${escapeHtml(n.id)}')">
+                <div class="notif-icon">${escapeHtml(n.icon || '📍')}</div>
+                <div style="flex:1; min-width:0;">
+                    <div class="notif-title">${escapeHtml(n.title)}</div>
+                    <div class="notif-body">${escapeHtml(n.body || '')}</div>
+                    <div class="notif-time">${formatNotificationTime(n.createdAt)}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function markNotificationReadById(id) {
+        const idx = appNotifications.findIndex(n => String(n.id) === String(id));
+        if (idx < 0) return;
+        if (!appNotifications[idx].read) {
+            appNotifications[idx].read = true;
+            saveNotificationsState();
+            renderNotificationsList();
+            updateNotificationBadge();
+        }
+    }
+
+    function openNotificationsDrawer() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
+        renderNotificationsList();
+        document.getElementById('notificationsModal').classList.add('active');
+    }
+
+    function closeNotificationsDrawer() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
+        document.getElementById('notificationsModal').classList.remove('active');
+    }
+
+    function markAllNotificationsRead() {
+        appNotifications = appNotifications.map(n => ({ ...n, read: true }));
+        saveNotificationsState();
+        renderNotificationsList();
+        updateNotificationBadge();
+    }
+
+    function clearAllNotifications() {
+        appNotifications = [];
+        saveNotificationsState();
+        renderNotificationsList();
+        updateNotificationBadge();
+    }
+
+    function goToNotification(notificationId) {
+        const n = appNotifications.find(item => String(item.id) === String(notificationId));
+        if (!n) return;
+        markNotificationReadById(notificationId);
+        if (n.coords && myMap) {
+            try {
+                myMap.setCenter([n.coords.lat, n.coords.lon], 16, { duration: 250 });
+            } catch (e) {}
+        }
+        closeNotificationsDrawer();
+    }
+
+    function extractMarkerCoordsForNotif(marker) {
+        if (!marker) return null;
+        if (Array.isArray(marker.coords) && marker.coords.length >= 2) {
+            const a = Number(marker.coords[0]);
+            const b = Number(marker.coords[1]);
+            if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return { lat: a, lon: b };
+            if (Math.abs(a) <= 180 && Math.abs(b) <= 90) return { lat: b, lon: a };
+            return { lat: a, lon: b };
+        }
+        if (typeof marker.latitude === 'number' && typeof marker.longitude === 'number') {
+            return { lat: marker.latitude, lon: marker.longitude };
+        }
+        return null;
+    }
+
+    function buildMarkerNotification(marker, distanceMeters, override = null) {
+        const type = marker?.type || 'event';
+        const icon = getMarkerEmoji(type);
+        const label = getMarkerLabel(type);
+        const distance = Number.isFinite(distanceMeters) ? `${Math.round(distanceMeters)} м` : null;
+        const baseBody = override || `${label}${distance ? ` • ${distance}` : ''}${marker?.comment ? ` • ${String(marker.comment).slice(0, 80)}` : ''}`;
+        return {
+            id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            type,
+            icon,
+            title: type === 'sos' ? '🆘 Рядом SOS' : `Рядом: ${label}`,
+            body: baseBody,
+            priority: type === 'sos' ? 'high' : 'normal',
+            createdAt: new Date().toISOString(),
+            read: false,
+            coords: extractMarkerCoordsForNotif(marker)
+        };
+    }
+
+    async function notifyHelpBotAboutMarker(marker) {
+        try {
+            if (!marker || !marker.type) return;
+            const helpTypes = new Set(['sos', 'dtp', 'danger', 'traffic_jam', 'works']);
+            if (!helpTypes.has(String(marker.type))) return;
+
+            const token = localStorage.getItem('sb_jwt') || '';
+            if (!token) return;
+
+            const addrText = (document.getElementById('addr-text')?.textContent || '').trim();
+            const driverName = String(currentDriver?.name || 'Водитель');
+            const driverRank = isAdminUserId(uid) ? 'Админ' : 'Участник';
+
+            const payload = {
+                markerId: marker.id,
+                type: marker.type,
+                comment: marker.comment || '',
+                lat: marker.coords?.[0],
+                lon: marker.coords?.[1],
+                placeText: addrText,
+                driverName,
+                driverRank
+            };
+
+            await fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify(payload)
+            });
+        } catch (e) {
+            console.warn('Не удалось отправить уведомление в Telegram-бота:', e?.message || e);
+        }
+    }
+
+    function flushPatrolBatchNotification() {
+        if (!patrolNotifBatch.count || !patrolNotifBatch.lastMarker) return;
+        const count = patrolNotifBatch.count;
+        const notif = buildMarkerNotification(
+            patrolNotifBatch.lastMarker,
+            patrolNotifBatch.lastDistance,
+            `В вашем районе высокая активность патрулей (${count} новых меток за 5 минут)`
+        );
+        notif.title = '🛡️ Активность патрулей';
+        pushAppNotification(notif);
+        patrolNotifBatch.count = 0;
+        patrolNotifBatch.lastMarker = null;
+        patrolNotifBatch.lastDistance = null;
+        if (patrolNotifBatch.timer) {
+            clearTimeout(patrolNotifBatch.timer);
+            patrolNotifBatch.timer = null;
+        }
+    }
+
+    function queuePatrolBatchNotification(marker, distanceMeters) {
+        patrolNotifBatch.count += 1;
+        patrolNotifBatch.lastMarker = marker;
+        patrolNotifBatch.lastDistance = distanceMeters;
+        if (!patrolNotifBatch.timer) {
+            patrolNotifBatch.timer = setTimeout(() => {
+                flushPatrolBatchNotification();
+            }, NOTIF_GROUP_WINDOW_MS);
+        }
+    }
+
+    function handleRealtimeMarkerNotification(payload) {
+        try {
+            if (!payload || payload.eventType !== 'INSERT' || !payload.new) return;
+            const marker = payload.new;
+            if (String(marker.author_id || '') === String(uid || '')) return;
+
+            const coords = extractMarkerCoordsForNotif(marker);
+            if (!coords || !userLocation || !Array.isArray(userLocation) || userLocation.length < 2) return;
+            const distance = calculateDistance(userLocation[0], userLocation[1], coords.lat, coords.lon);
+            if (!Number.isFinite(distance) || distance > 10000) return;
+
+            if (marker.type === 'sos') {
+                pushAppNotification(buildMarkerNotification(marker, distance));
+                return;
+            }
+
+            if (PATROL_TYPES.has(marker.type)) {
+                queuePatrolBatchNotification(marker, distance);
+                return;
+            }
+
+            pushAppNotification(buildMarkerNotification(marker, distance));
+        } catch (e) {
+            console.warn('Ошибка обработки realtime-уведомления:', e?.message || e);
+        }
     }
 
     // Границы Донецкой области ДНР (примерные координаты)
@@ -2799,6 +3172,7 @@
         loadWarningDistance();
         loadSpeedometerPreference();
         restoreTypeCategoryPreference();
+        loadNotificationsState();
         updateSpeedometerUI(userSpeedKmh);
         registerServiceWorker();
         startProximityBannerLoop();
@@ -2826,7 +3200,7 @@
         el.classList.add('active');
 
         // Автопереключаем вкладку по выбранному типу
-        const helpTypes = new Set(['sos', 'dtp', 'danger', 'traffic_jam']);
+        const helpTypes = new Set(['sos', 'dtp', 'danger', 'works', 'traffic_jam']);
         const targetCategory = helpTypes.has(t) ? 'help' : 'patrol';
         switchTypeCategory(targetCategory);
     }
@@ -4641,8 +5015,9 @@
 
         markersRealtimeChannel = _sb
             .channel('realtime-markers')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'markers' }, () => {
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'markers' }, (payload) => {
                 scheduleMarkersRealtimeReload();
+                handleRealtimeMarkerNotification(payload);
             })
             .subscribe();
 
@@ -6953,14 +7328,15 @@
 
         // Вставляем новый маркер в БД
         try {
-            const { error } = await _sb.from('markers').insert([{
+            const markerToCreate = {
                 coords: coords, // Центр текущей карты
                 ts: Date.now(), // Текущее время
                 exp: Date.now() + 7200000, // Время жизни маркера (2 часа)
                 type: selectedType, // Тип маркера (ДПС, Рейд и т.д.)
                 comment: document.getElementById('m-comm').value, // Комментарий пользователя
                 author_id: uid // ID автора маркера
-            }]);
+            };
+            const { data: insertedMarkers, error } = await _sb.from('markers').insert([markerToCreate]).select('id,type,comment,coords');
 
             if (!error) {
                 try { localStorage.setItem(rateKey, String(Date.now())); } catch(e) {}
@@ -6978,6 +7354,9 @@
                 // Отключаем автосдвиг GPS на следующее обновление (чтобы карта не вернулась к GPS после размещения метки)
                 disableAutoFollowOnce = true;
                 alert('✅ Метка успешно добавлена!');
+                if (insertedMarkers && insertedMarkers[0]) {
+                    notifyHelpBotAboutMarker(insertedMarkers[0]);
+                }
                 loadMarkers();
             }
         } catch (e) {
