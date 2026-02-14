@@ -371,6 +371,19 @@
         .notif-title { font-size: 13px; font-weight: 700; color: #111; }
         .notif-body { font-size: 12px; color: #555; margin-top: 2px; }
         .notif-time { font-size: 10px; color: #999; margin-top: 4px; }
+        .heatmap-toggle-btn { background: #ff9f0a; font-size: 18px; }
+        .heatmap-toggle-btn.active { background: #ff3b30; box-shadow: 0 0 0 3px rgba(255,59,48,0.18), 0 8px 22px rgba(255,59,48,0.28); }
+        #mapDimmingOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 1200;
+            pointer-events: none;
+            background: rgba(28, 28, 30, 0.30);
+            opacity: 0;
+            transition: opacity .25s ease;
+            backdrop-filter: grayscale(0.55) contrast(0.9);
+        }
+        #mapDimmingOverlay.active { opacity: 1; }
         
         .chat-messages { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; max-height: 400px; overflow-y: auto; padding: 10px; background: #f9f9f9; border-radius: 12px; }
         .chat-message { padding: 10px 12px; border-radius: 10px; font-size: 13px; max-width: 80%; word-wrap: break-word; }
@@ -647,6 +660,7 @@
     <!-- Онлайн-счётчик пользователей -->
     <div id="onlineCountBadge" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 1600; background: white; padding: 6px 10px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); font-weight:700; display: none;">Онлайн: —</div>
     <div id="map"></div>
+    <div id="mapDimmingOverlay"></div>
 
     <!-- Баннер админ-уведомлений -->
     <div id="broadcastBanner" class="broadcast-banner"></div>
@@ -665,10 +679,8 @@
     
     <!-- Кнопка чата -->
     <button class="chat-btn" onclick="openChatModal()">💬</button>
-    <!-- Кнопка ленты событий -->
-    <button class="chat-btn" onclick="openActivityModal()" style="bottom: 160px;">📡</button>
     <!-- Кнопка тепловой карты -->
-    <button class="chat-btn" onclick="openActivityModal('heatmap')" style="bottom: 220px; background: #ff9f0a;" title="Тепловая карта активности">🔥</button>
+    <button class="chat-btn heatmap-toggle-btn" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" style="bottom: 220px;" title="Тепловая карта ДТП">🗂️🔥</button>
     <!-- Кнопка уведомлений -->
     <button class="chat-btn notif-btn" onclick="openNotificationsDrawer()" style="bottom: 280px;" title="Уведомления">
         🔔
@@ -1776,6 +1788,16 @@
     const NOTIF_FEED_SYNC_INTERVAL_MS = 5 * 60 * 1000;
     const CRITICAL_DTP_CONFIRMATIONS = 3;
     const PATROL_TYPES = new Set(['dps', 'patrol', 'specbat', 'motobat', 'cargo_control']);
+    const TARGET_MIN_TOP_PX = 120;
+    const TARGET_CARD_GAP_PX = 90;
+    let dtpHeatmapEnabled = false;
+    let dtpHeatmapCollection = null;
+    let dtpHeatmapCellsCache = [];
+    let dtpHeatmapCacheLoadedAt = 0;
+    let dtpHeatmapRenderTimer = null;
+    const DTP_HEATMAP_CACHE_MS = 2 * 60 * 1000;
+    const DTP_HEATMAP_LOOKBACK_DAYS = 30;
+    const DTP_HEATMAP_MAX_POINTS = 1200;
     const SAFE_DRIVE_NEWS_ITEMS = [
         {
             id: 'news_notif_feed_v1',
@@ -1833,6 +1855,243 @@
             card.classList.add('hidden');
             if (openBtn) openBtn.classList.add('visible');
         }
+        updateTargetAnchorPosition();
+    }
+
+    function updateTargetAnchorPosition() {
+        const target = document.querySelector('.target');
+        if (!target) return;
+
+        target.style.transform = 'translate(-50%, -50%)';
+
+        const card = document.getElementById('actionCard');
+        if (!actionCardVisible || !card || card.classList.contains('hidden')) {
+            target.style.top = '50%';
+            return;
+        }
+
+        const cardRect = card.getBoundingClientRect();
+        const desiredTop = Math.max(
+            TARGET_MIN_TOP_PX,
+            Math.min(window.innerHeight * 0.5, cardRect.top - TARGET_CARD_GAP_PX)
+        );
+        target.style.top = `${Math.round(desiredTop)}px`;
+    }
+
+    function getTargetPlacementCoords() {
+        if (!myMap) return [48.01, 37.80];
+
+        const fallback = myMap.getCenter();
+        try {
+            const target = document.querySelector('.target');
+            const projection = myMap.options?.get?.('projection');
+            if (!target || !projection || !myMap.converter?.pageToGlobal) return fallback;
+
+            const rect = target.getBoundingClientRect();
+            const pixelPoint = [
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2
+            ];
+
+            const globalPixels = myMap.converter.pageToGlobal(pixelPoint);
+            const coords = projection.fromGlobalPixels(globalPixels, myMap.getZoom());
+
+            if (Array.isArray(coords) && coords.length >= 2 && Number.isFinite(Number(coords[0])) && Number.isFinite(Number(coords[1]))) {
+                return [Number(coords[0]), Number(coords[1])];
+            }
+        } catch (e) {
+            console.warn('Не удалось вычислить координаты по центральной метке:', e?.message || e);
+        }
+        return fallback;
+    }
+
+    function setDtpHeatmapUiState(enabled) {
+        const btn = document.getElementById('dtpHeatmapBtn');
+        if (btn) btn.classList.toggle('active', !!enabled);
+        const overlay = document.getElementById('mapDimmingOverlay');
+        if (overlay) overlay.classList.toggle('active', !!enabled);
+    }
+
+    function parseMarkerTimestampToMs(value) {
+        if (typeof value === 'number') {
+            if (value > 1e12) return value;
+            if (value > 1e9) return value * 1000;
+        }
+        if (typeof value === 'string') {
+            const asNum = Number(value);
+            if (Number.isFinite(asNum)) return parseMarkerTimestampToMs(asNum);
+            const parsed = Date.parse(value);
+            if (Number.isFinite(parsed)) return parsed;
+        }
+        return Date.now();
+    }
+
+    function getDtpHeatmapCellDegrees(zoom) {
+        if (zoom >= 17) return 0.0015;
+        if (zoom >= 16) return 0.0025;
+        if (zoom >= 15) return 0.004;
+        if (zoom >= 14) return 0.006;
+        if (zoom >= 13) return 0.009;
+        return 0.014;
+    }
+
+    function getDtpHeatmapRadiusMeters(zoom) {
+        if (zoom >= 17) return 220;
+        if (zoom >= 16) return 320;
+        if (zoom >= 15) return 460;
+        if (zoom >= 14) return 700;
+        if (zoom >= 13) return 950;
+        return 1250;
+    }
+
+    function getDtpHeatColor(norm) {
+        const n = Math.max(0, Math.min(1, Number(norm) || 0));
+        if (n <= 0.5) {
+            const t = n / 0.5;
+            const r = Math.round(70 + (255 - 70) * t);
+            const g = Math.round(180 + (214 - 180) * t);
+            const b = Math.round(255 + (10 - 255) * t);
+            return `rgb(${r},${g},${b})`;
+        }
+        const t = (n - 0.5) / 0.5;
+        const r = 255;
+        const g = Math.round(214 + (59 - 214) * t);
+        const b = Math.round(10 + (48 - 10) * t);
+        return `rgb(${r},${g},${b})`;
+    }
+
+    async function loadDtpHeatmapData(force = false) {
+        if (!force && (Date.now() - dtpHeatmapCacheLoadedAt) < DTP_HEATMAP_CACHE_MS && dtpHeatmapCellsCache.length) {
+            return dtpHeatmapCellsCache;
+        }
+
+        const { data, error } = await _sb
+            .from('markers')
+            .select('id,type,ts,coords,latitude,longitude,leave_confirmations')
+            .eq('type', 'dtp')
+            .order('ts', { ascending: false })
+            .limit(DTP_HEATMAP_MAX_POINTS);
+
+        if (error || !Array.isArray(data)) {
+            console.warn('Не удалось загрузить точки для тепловой карты ДТП:', error?.message || error);
+            return dtpHeatmapCellsCache;
+        }
+
+        const lookbackMs = DTP_HEATMAP_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+
+        dtpHeatmapCellsCache = data.map(row => {
+            const coords = extractMarkerCoordsForNotif(row);
+            if (!coords) return null;
+
+            const tsMs = parseMarkerTimestampToMs(row?.ts);
+            const ageMs = Math.max(0, now - tsMs);
+            const recency = ageMs <= 24 * 60 * 60 * 1000 ? 1 : ageMs <= 3 * 24 * 60 * 60 * 1000 ? 0.75 : ageMs <= 7 * 24 * 60 * 60 * 1000 ? 0.55 : 0.35;
+            const confirmations = Number(row?.leave_confirmations || 0);
+            const confirmBoost = Math.min(1.4, confirmations * 0.18);
+
+            return {
+                lat: Number(coords.lat),
+                lon: Number(coords.lon),
+                tsMs,
+                weight: recency + confirmBoost
+            };
+        }).filter(point => {
+            if (!point) return false;
+            if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) return false;
+            return (now - point.tsMs) <= lookbackMs;
+        });
+
+        dtpHeatmapCacheLoadedAt = Date.now();
+        return dtpHeatmapCellsCache;
+    }
+
+    function aggregateDtpHeatmapCells(points, zoom) {
+        const cellDeg = getDtpHeatmapCellDegrees(zoom);
+        const cellMap = new Map();
+
+        points.forEach(point => {
+            const latKey = Math.round(point.lat / cellDeg);
+            const lonKey = Math.round(point.lon / cellDeg);
+            const key = `${latKey}:${lonKey}`;
+            const existing = cellMap.get(key) || { lat: latKey * cellDeg, lon: lonKey * cellDeg, weight: 0, hits: 0 };
+            existing.weight += Number(point.weight || 0);
+            existing.hits += 1;
+            cellMap.set(key, existing);
+        });
+
+        return [...cellMap.values()];
+    }
+
+    async function renderDtpHeatmapOverlay() {
+        if (!myMap) return;
+        if (!dtpHeatmapCollection) {
+            dtpHeatmapCollection = new ymaps.GeoObjectCollection();
+            myMap.geoObjects.add(dtpHeatmapCollection);
+        }
+
+        dtpHeatmapCollection.removeAll();
+        if (!dtpHeatmapEnabled) return;
+
+        const points = await loadDtpHeatmapData(false);
+        if (!points.length) return;
+
+        const zoom = Number(myMap.getZoom() || 14);
+        const radius = getDtpHeatmapRadiusMeters(zoom);
+        const bounds = myMap.getBounds();
+        const cells = aggregateDtpHeatmapCells(points, zoom).filter(cell => {
+            if (!Array.isArray(bounds) || bounds.length < 2) return true;
+            const [sw, ne] = bounds;
+            return cell.lat >= Number(sw[0]) - 0.03 && cell.lat <= Number(ne[0]) + 0.03 && cell.lon >= Number(sw[1]) - 0.03 && cell.lon <= Number(ne[1]) + 0.03;
+        });
+
+        if (!cells.length) return;
+        const maxWeight = Math.max(...cells.map(c => Number(c.weight || 0)), 1);
+
+        cells.forEach(cell => {
+            const norm = Math.max(0.08, Math.min(1, Number(cell.weight || 0) / maxWeight));
+            const color = getDtpHeatColor(norm);
+
+            const glow = new ymaps.Circle([[cell.lat, cell.lon], radius * 1.7], {}, {
+                fillColor: color,
+                fillOpacity: 0.14 + norm * 0.16,
+                strokeOpacity: 0,
+                zIndex: 1100
+            });
+            const core = new ymaps.Circle([[cell.lat, cell.lon], radius], {}, {
+                fillColor: color,
+                fillOpacity: 0.20 + norm * 0.34,
+                strokeColor: color,
+                strokeOpacity: 0.08,
+                strokeWidth: 1,
+                zIndex: 1101
+            });
+
+            dtpHeatmapCollection.add(glow);
+            dtpHeatmapCollection.add(core);
+        });
+    }
+
+    function scheduleDtpHeatmapRender() {
+        if (dtpHeatmapRenderTimer) clearTimeout(dtpHeatmapRenderTimer);
+        dtpHeatmapRenderTimer = setTimeout(() => {
+            renderDtpHeatmapOverlay().catch(e => {
+                console.warn('Не удалось отрисовать тепловую карту ДТП:', e?.message || e);
+            });
+        }, 120);
+    }
+
+    async function toggleDtpHeatmap(forceState = null) {
+        dtpHeatmapEnabled = typeof forceState === 'boolean' ? forceState : !dtpHeatmapEnabled;
+        setDtpHeatmapUiState(dtpHeatmapEnabled);
+
+        if (!dtpHeatmapEnabled) {
+            if (dtpHeatmapCollection) dtpHeatmapCollection.removeAll();
+            return;
+        }
+
+        await loadDtpHeatmapData(false);
+        scheduleDtpHeatmapRender();
     }
 
     // Спидометр: загрузка и применение настроек
@@ -7478,18 +7737,20 @@
             
             // При изменении центра карты обновляем адрес
             myMap.events.add('actionend', () => {
-                ymaps.geocode(myMap.getCenter()).then(res => {
+                const targetCoords = getTargetPlacementCoords();
+                ymaps.geocode(targetCoords).then(res => {
                     const obj = res.geoObjects.get(0);
                     document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
                     
                     // Проверяем, в какой области находимся
-                    const coords = myMap.getCenter();
+                    const coords = targetCoords;
                     if (isInDonetskRegion(coords)) {
                         document.getElementById('addr-text').style.color = '#34c759';
                     } else {
                         document.getElementById('addr-text').style.color = '#ff3b30';
                     }
                 });
+                if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
             });
             // Если пользователь начал вручную передвигать карту — отключаем автоследование
             myMap.events.add('actionstart', () => {
@@ -7499,6 +7760,9 @@
             // Инициализируем приложение (проверяем регистрацию)
             appInitialized = true;
             initApp();
+            updateTargetAnchorPosition();
+            window.addEventListener('resize', updateTargetAnchorPosition);
+            setDtpHeatmapUiState(false);
             
             // Инициализируем GPS отслеживание
             initGPS();
@@ -7575,9 +7839,9 @@
             return;
         }
 
-        // Берём координаты из центра карты — так можно ставить метки в любом месте
-        // Если нужно поставить метку именно по GPS, сначала центрируйте карту на своём местоположении
-        const coords = myMap.getCenter();
+        // Берём координаты из позиции центральной метки (прицела),
+        // чтобы постановка была точной даже при поднятии прицела над нижним виджетом.
+        const coords = getTargetPlacementCoords();
         
         // Проверяем, находится ли местоположение в Донецкой области ДНР
         if (!isInDonetskRegion(coords)) {
@@ -7823,6 +8087,10 @@
                 }
             }
         });
+        if (dtpHeatmapEnabled) {
+            dtpHeatmapCacheLoadedAt = 0;
+            scheduleDtpHeatmapRender();
+        }
         } catch (error) {
             console.error('Ошибка при загрузке маркеров (timeout или ошибка БД):', error?.message);
         }
