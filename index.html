@@ -242,6 +242,14 @@
         .type-btn:hover .icon-circle { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
         .type-btn.active { color: var(--blue); background: rgba(0, 122, 255, 0.08); }
         .type-btn.active .icon-circle { background: #fff; border-color: var(--blue); box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3); }
+        .type-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+        .type-tab-btn { flex: 1; border: 1px solid #d9d9df; background: #f5f5f9; color: #666; border-radius: 10px; padding: 8px 10px; font-size: 11px; font-weight: 800; cursor: pointer; }
+        .type-tab-btn.active { background: #fff; color: var(--blue); border-color: var(--blue); }
+        .type-group { display: none; width: 100%; gap: 6px; flex-wrap: wrap; }
+        .type-group.active { display: flex; }
+        .type-group-title { width: 100%; font-size: 11px; font-weight: 800; margin: 4px 0 2px 0; }
+        .type-group-title.patrol { color: var(--blue); }
+        .type-group-title.help { color: #34c759; }
         
         /* Счётчик активных меток */
         .markers-counter { font-size: 11px; color: var(--gray); margin-bottom: 10px; text-align: center; padding: 8px; background: #f9f9f9; border-radius: 10px; }
@@ -780,12 +788,23 @@
             <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
                 <select id="markerTypeFilter" style="padding: 8px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; cursor: pointer;">
                     <option value="">📍 Все события</option>
-                    <option value="dps">🤝 Помощь на обочине</option>
-                    <option value="camera">⚠️ Опасность на дороге</option>
-                    <option value="patrol">🚦 Техническая остановка</option>
-                    <option value="dtp">💥 ДТП</option>
-                    <option value="works">🛣️ Сложный участок</option>
-                    <option value="sos">🆘 SOS помощь</option>
+                    <optgroup label="Дорожный патруль">
+                        <option value="dps">👮 ДПС (Стандарт)</option>
+                        <option value="patrol">🚔 Рейд</option>
+                        <option value="specbat">🛡️ Спецбат</option>
+                        <option value="motobat">🏍️ Мотобат</option>
+                        <option value="cargo_control">🚛 Грузовой контроль</option>
+                    </optgroup>
+                    <optgroup label="Взаимопомощь">
+                        <option value="sos">🆘 SOS / Нужна помощь</option>
+                        <option value="dtp">💥 ДТП</option>
+                        <option value="danger">⚠️ Опасность</option>
+                        <option value="traffic_jam">🚗 Пробка / Затор</option>
+                    </optgroup>
+                    <optgroup label="Legacy">
+                        <option value="camera">📸 Наблюдение (legacy)</option>
+                        <option value="works">🛣️ Работы (legacy)</option>
+                    </optgroup>
                 </select>
                 <button onclick="clearMarkerFilter()" style="padding: 8px 12px; border: none; border-radius: 8px; background: #f0f0f5; cursor: pointer; font-size: 13px; font-weight: 600;">🔄 Сброс</button>
             </div>
@@ -1379,12 +1398,27 @@
             <span class="addr-label" id="addr-text">Определение адреса...</span>
             <div class="markers-counter" id="markersCounter">Загрузка...</div>
             <div class="type-selector">
-                <button onclick="setType('dps', this)" class="type-btn active"><div class="icon-circle">🤝</div><span>Помощь</span></button>
-                <button onclick="setType('patrol', this)" class="type-btn"><div class="icon-circle">🚦</div><span>Тех. стоп</span></button>
-                <button onclick="setType('camera', this)" class="type-btn"><div class="icon-circle">⚠️</div><span>Опасность</span></button>
-                <button onclick="setType('dtp', this)" class="type-btn"><div class="icon-circle">💥</div><span>ДТП</span></button>
-                <button onclick="setType('works', this)" class="type-btn"><div class="icon-circle">🛣️</div><span>Участок</span></button>
-                <button onclick="setType('sos', this)" class="type-btn"><div class="icon-circle">🆘</div><span>SOS помощь</span></button>
+                <div class="type-tabs">
+                    <button class="type-tab-btn active" data-category="patrol" onclick="switchTypeCategory('patrol', this)">🛡️ ПАТРУЛЬ</button>
+                    <button class="type-tab-btn" data-category="help" onclick="switchTypeCategory('help', this)">🤝 ВЗАИМОПОМОЩЬ</button>
+                </div>
+
+                <div class="type-group active" data-category="patrol">
+                    <div class="type-group-title patrol">🛡️ ДОРОЖНЫЙ ПАТРУЛЬ</div>
+                    <button data-type="dps" onclick="setType('dps', this)" class="type-btn active"><div class="icon-circle">👮</div><span>ДПС</span></button>
+                    <button data-type="patrol" onclick="setType('patrol', this)" class="type-btn"><div class="icon-circle">🚔</div><span>Рейд</span></button>
+                    <button data-type="specbat" onclick="setType('specbat', this)" class="type-btn"><div class="icon-circle">🛡️</div><span>Спецбат</span></button>
+                    <button data-type="motobat" onclick="setType('motobat', this)" class="type-btn"><div class="icon-circle">🏍️</div><span>Мотобат</span></button>
+                    <button data-type="cargo_control" onclick="setType('cargo_control', this)" class="type-btn"><div class="icon-circle">🚛</div><span>Груз. контроль</span></button>
+                </div>
+
+                <div class="type-group" data-category="help">
+                    <div class="type-group-title help">🤝 ВЗАИМОПОМОЩЬ</div>
+                    <button data-type="sos" onclick="setType('sos', this)" class="type-btn"><div class="icon-circle">🆘</div><span>SOS</span></button>
+                    <button data-type="dtp" onclick="setType('dtp', this)" class="type-btn"><div class="icon-circle">💥</div><span>ДТП</span></button>
+                    <button data-type="danger" onclick="setType('danger', this)" class="type-btn"><div class="icon-circle">⚠️</div><span>Опасность</span></button>
+                    <button data-type="traffic_jam" onclick="setType('traffic_jam', this)" class="type-btn"><div class="icon-circle">🚗</div><span>Пробка</span></button>
+                </div>
             </div>
             <input type="text" id="m-comm" style="width:100%; margin-bottom:10px; border-radius:10px; border:1px solid #ddd; padding:8px; box-sizing: border-box;" placeholder="Комментарий...">
             <button class="main-btn" onclick="addPoint()">ОТПРАВИТЬ</button>
@@ -1587,8 +1621,20 @@
         }
     }
     
-    // Иконки для разных типов событий взаимопомощи
-    const MAP_ICONS = { dps: '🤝', patrol: '🚦', camera: '⚠️', dtp: '💥', works: '🛣️', sos: '🆘' };
+    // Иконки для разных типов дорожных событий
+    const MAP_ICONS = {
+        dps: '👮',
+        patrol: '🚔',
+        specbat: '🛡️',
+        motobat: '🏍️',
+        cargo_control: '🚛',
+        sos: '🆘',
+        dtp: '💥',
+        danger: '⚠️',
+        traffic_jam: '🚗',
+        camera: '📸',
+        works: '🛣️'
+    };
     // ID текущего пользователя из Telegram (null если не авторизован)
     const rawTgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     const uid = rawTgId ? String(rawTgId) : null;
@@ -1618,6 +1664,7 @@
     const ADMIN_TITLE_LABEL = 'Основатель';
     // Порог подтверждений для статуса "Проверенный водитель"
     const TRUST_LIKES_THRESHOLD = 20; // можно менять по необходимости
+    const TYPE_CATEGORY_STORAGE_KEY = 'selected_type_category';
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
@@ -1820,26 +1867,51 @@
 
     function getMarkerLabel(type) {
         const labels = {
-            dps: 'Помощь на обочине',
-            patrol: 'Техническая остановка',
-            camera: 'Опасность на дороге',
+            dps: 'ДПС (Стандарт)',
+            patrol: 'Рейд',
+            specbat: 'Спецбат',
+            motobat: 'Мотобат',
+            cargo_control: 'Грузовой контроль',
+            camera: 'Наблюдение',
             dtp: 'ДТП',
-            works: 'Сложный участок',
-            sos: 'SOS помощь'
+            works: 'Работы',
+            sos: 'SOS / Нужна помощь',
+            danger: 'Опасность',
+            traffic_jam: 'Пробка / Затор'
         };
         return labels[type] || 'Дорожное событие';
     }
 
     function getMarkerEmoji(type) {
         const icons = {
-            dps: '🤝',
-            patrol: '🚦',
-            camera: '⚠️',
+            dps: '👮',
+            patrol: '🚔',
+            specbat: '🛡️',
+            motobat: '🏍️',
+            cargo_control: '🚛',
+            camera: '📸',
             dtp: '💥',
             works: '🛣️',
-            sos: '🆘'
+            sos: '🆘',
+            danger: '⚠️',
+            traffic_jam: '🚗'
         };
         return icons[type] || '⚠️';
+    }
+
+    async function getUserSosBonus(userId) {
+        try {
+            if (!userId) return 0;
+            const { data, error } = await _sb.rpc('get_user_sos_bonus', { p_user_id: String(userId) });
+            if (error) {
+                console.warn('Не удалось получить SOS-бонус:', error?.message || error);
+                return 0;
+            }
+            return Number(data) || 0;
+        } catch (e) {
+            console.warn('Ошибка получения SOS-бонуса:', e?.message || e);
+            return 0;
+        }
     }
 
     function updateProximityBanner(distance, type) {
@@ -1950,9 +2022,9 @@
     }
     
     /**
-     * Озвучивает предупреждение о посте ДПС
+    * Озвучивает предупреждение о дорожном событии
      * @param {number} distance - расстояние в метрах
-     * @param {string} type - тип метки (dps, camera, etc.)
+    * @param {string} type - тип метки (dps, patrol, sos и т.д.)
      * @param {string} comment - комментарий к метке
      */
     /**
@@ -2037,12 +2109,17 @@
         
         let text;
         const messageByType = {
-            dps: `Впереди запрос помощи на обочине через ${distancePretty} метров. Если можете, поддержите водителя.`,
-            patrol: `Впереди техническая остановка или затруднение через ${distancePretty} метров. Планируйте время заранее.`,
-            camera: `Впереди опасный участок через ${distancePretty} метров. Будьте особенно осторожны.`,
+            dps: `Впереди пост ДПС через ${distancePretty} метров. Соблюдайте правила и будьте внимательны.`,
+            patrol: `Впереди дорожный рейд через ${distancePretty} метров. Двигайтесь спокойно и без нарушений.`,
+            specbat: `Впереди усиленный контроль (спецбат) через ${distancePretty} метров. Соблюдайте требования инспекторов.`,
+            motobat: `Впереди патруль мотобата через ${distancePretty} метров. Снизьте скорость и держите дистанцию.`,
+            cargo_control: `Впереди грузовой контроль через ${distancePretty} метров. Проверьте документы и параметры груза.`,
+            camera: `Впереди участок наблюдения через ${distancePretty} метров. Будьте внимательны.`,
             dtp: `Впереди ДТП через ${distancePretty} метров. Снизьте скорость и соблюдайте дистанцию.`,
-            works: `Впереди сложный дорожный участок через ${distancePretty} метров. Двигайтесь внимательно.`,
-            sos: `Впереди SOS-метка через ${distancePretty} метров. При возможности окажите помощь.`
+            works: `Впереди дорожные работы через ${distancePretty} метров. Двигайтесь внимательно.`,
+            sos: `Впереди SOS-запрос помощи через ${distancePretty} метров. При возможности окажите поддержку.`,
+            danger: `Впереди опасность на дороге через ${distancePretty} метров. Будьте особенно осторожны.`,
+            traffic_jam: `Впереди пробка через ${distancePretty} метров. По возможности выберите объезд.`
         };
 
         if (voiceStyle === 'cheeky') {
@@ -2721,6 +2798,7 @@
         loadProximityMode();
         loadWarningDistance();
         loadSpeedometerPreference();
+        restoreTypeCategoryPreference();
         updateSpeedometerUI(userSpeedKmh);
         registerServiceWorker();
         startProximityBannerLoop();
@@ -2746,6 +2824,47 @@
         document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
         // Добавляем класс active к выбранной кнопке
         el.classList.add('active');
+
+        // Автопереключаем вкладку по выбранному типу
+        const helpTypes = new Set(['sos', 'dtp', 'danger', 'traffic_jam']);
+        const targetCategory = helpTypes.has(t) ? 'help' : 'patrol';
+        switchTypeCategory(targetCategory);
+    }
+
+    function switchTypeCategory(category, tabEl = null) {
+        document.querySelectorAll('.type-tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.category === category);
+        });
+        document.querySelectorAll('.type-group').forEach(group => {
+            group.classList.toggle('active', group.dataset.category === category);
+        });
+
+        // Если активный тип не принадлежит вкладке — выбираем первый тип в этой вкладке
+        const currentActive = document.querySelector('.type-btn.active');
+        const currentCategory = currentActive?.closest('.type-group')?.dataset?.category;
+        if (currentCategory !== category) {
+            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+            const firstBtn = document.querySelector(`.type-group[data-category="${category}"] .type-btn`);
+            if (firstBtn) {
+                firstBtn.classList.add('active');
+                selectedType = firstBtn.dataset.type || selectedType;
+            }
+        }
+
+        try { localStorage.setItem(TYPE_CATEGORY_STORAGE_KEY, category); } catch(e) {}
+
+        if (tabEl && tabEl.dataset?.category !== category) {
+            tabEl.classList.remove('active');
+        }
+    }
+
+    function restoreTypeCategoryPreference() {
+        let saved = 'patrol';
+        try {
+            const raw = localStorage.getItem(TYPE_CATEGORY_STORAGE_KEY);
+            if (raw === 'help' || raw === 'patrol') saved = raw;
+        } catch(e) {}
+        switchTypeCategory(saved);
     }
 
     // ============= ФУНКЦИИ ДЛЯ ЗБТ ПРИГЛАШЕНИЙ =============
@@ -2975,6 +3094,9 @@
             console.warn('Ошибка при подсчёте маркеров:', e?.message || e);
         }
 
+        // Получаем серверный SOS-бонус (+50 за подтвержденную помощь)
+        const sosBonus = await getUserSosBonus(uid);
+
         // Подготовка отображаемых данных
         const displayName = currentDriver.name || ((window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name) || '');
         
@@ -3014,7 +3136,7 @@
             profileNameEl.classList.remove('admin-name');
         }
         updateProfileAdminBadges(isAdminProfile);
-        const karmaPoints = Math.max(0, (likes - dislikes) + marks_count);
+        const karmaPoints = Math.max(0, (likes - dislikes) + marks_count + sosBonus);
         document.getElementById('profile-rating').textContent = `${karmaPoints}`;
         document.getElementById('profile-marks-count').textContent = marks_count;
         document.getElementById('profile-votes-sum').textContent = karmaPoints;
@@ -3071,7 +3193,7 @@
         // Попытка сохранить вычисленные значения взаимовыручки в таблице drivers (если колонки есть)
         try {
             await _sb.from('drivers').upsert([
-                { user_id: uid, likes_sum: likes, is_trusted: isTrusted }
+                { user_id: uid, likes_sum: (likes + sosBonus), is_trusted: isTrusted }
             ], { onConflict: 'user_id' });
         } catch (e) {
             // Если таблица или колонки отсутствуют — просто логируем, приложение продолжит работать
@@ -3212,7 +3334,8 @@
             updateProfileAdminBadges(isAdminProfile);
             
             // Обновляем уровень взаимовыручки и статистику
-            const karmaPoints = Math.max(0, (likes - dislikes) + marks_count);
+            const sosBonus = await getUserSosBonus(userId);
+            const karmaPoints = Math.max(0, (likes - dislikes) + marks_count + sosBonus);
             document.getElementById('profile-rating').textContent = `${karmaPoints}`;
             document.getElementById('profile-marks-count').textContent = marks_count;
             document.getElementById('profile-votes-sum').textContent = karmaPoints;
@@ -3323,11 +3446,22 @@
                 return;
             }
             
+            // Загружаем SOS-бонусы для всех водителей
+            const { data: sosRewards } = await _sb.from('sos_help_rewards').select('helper_id,bonus_points');
+            const sosBonusByUser = {};
+            if (sosRewards && sosRewards.length) {
+                sosRewards.forEach(r => {
+                    const key = String(r.helper_id || '');
+                    sosBonusByUser[key] = (sosBonusByUser[key] || 0) + (Number(r.bonus_points) || 0);
+                });
+            }
+
             // Считаем очки кармы для каждого водителя (если likes_sum отсутствует)
             let driverStats = [];
             for (const d of drivers) {
                 let likesSum = d.likes_sum || 0;
                 let isTrusted = d.is_trusted || false;
+                const sosBonus = Number(sosBonusByUser[String(d.user_id)] || 0);
                 
                 // Если likes_sum не заполнен, считаем из markers
                 if (!d.likes_sum) {
@@ -3337,6 +3471,7 @@
                     }
                     isTrusted = likesSum >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20);
                 }
+                likesSum += sosBonus;
                 
                 driverStats.push({
                     user_id: d.user_id,
@@ -5910,7 +6045,7 @@
         }
 
         try {
-            const { data: markerInfo } = await _sb.from('markers').select('author_id').eq('id', markerId).maybeSingle();
+            const { data: markerInfo } = await _sb.from('markers').select('author_id,type').eq('id', markerId).maybeSingle();
             const isAdminMarker = markerInfo && isAdminUserId(markerInfo.author_id);
             if (isAdminMarker && status === 'leave') {
                 alert('Эта метка подтверждена администрацией и не удаляется голосами.');
@@ -5952,6 +6087,18 @@
                     }
                 }
             } else if (!insertError) {
+                let sosBonusText = '';
+                if (status === 'stay' && markerInfo?.type === 'sos') {
+                    try {
+                        const { data: claimData, error: claimError } = await _sb.rpc('claim_sos_help_bonus', { p_marker_id: markerId });
+                        if (!claimError && Array.isArray(claimData) && claimData.length > 0 && claimData[0]?.granted) {
+                            sosBonusText = ' +50 очков кармы за SOS-помощь';
+                        }
+                    } catch (e) {
+                        console.warn('Не удалось начислить SOS-бонус:', e?.message || e);
+                    }
+                }
+
                 // Успешно добавили запись, считаем количество "leave" подтверждений
                 const { data: confirmations } = await _sb.from('marker_confirmations')
                     .select('id').eq('marker_id', markerId).eq('status', 'leave');
@@ -5968,7 +6115,11 @@
                 }
                 
                 // Иначе показываем обновлённый счётчик
-                alert(`✅ Ваш голос учтён (${leaveCount}/${typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3} для удаления)`);
+                if (status === 'stay') {
+                    alert(`✅ Подтверждение принято.${sosBonusText}`);
+                } else {
+                    alert(`✅ Ваш голос учтён (${leaveCount}/${typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3} для удаления)`);
+                }
                 loadMarkers(); // обновляем карту с новым счётчиком
             } else if (insertError) {
                 alert('Ошибка при голосовании: ' + (insertError.message || 'неизвестная ошибка'));
@@ -6042,8 +6193,32 @@
             }
             
             let html = '';
-            const typeNames = { dps: 'Проверка', patrol: 'Контроль', camera: 'Наблюдение', dtp: 'ДТП', works: 'Работы', sos: 'SOS' };
-            const typeEmoji = { dps: '👮', patrol: '🚔', camera: '📸', dtp: '💥', works: '🚧', sos: '🆘' };
+            const typeNames = {
+                dps: 'ДПС (Стандарт)',
+                patrol: 'Рейд',
+                specbat: 'Спецбат',
+                motobat: 'Мотобат',
+                cargo_control: 'Грузовой контроль',
+                sos: 'SOS / Нужна помощь',
+                dtp: 'ДТП',
+                danger: 'Опасность',
+                traffic_jam: 'Пробка / Затор',
+                camera: 'Наблюдение',
+                works: 'Работы'
+            };
+            const typeEmoji = {
+                dps: '👮',
+                patrol: '🚔',
+                specbat: '🛡️',
+                motobat: '🏍️',
+                cargo_control: '🚛',
+                sos: '🆘',
+                dtp: '💥',
+                danger: '⚠️',
+                traffic_jam: '🚗',
+                camera: '📸',
+                works: '🚧'
+            };
             
             if (recentMarkers && recentMarkers.length > 0) {
                 recentMarkers.forEach(marker => {
@@ -6241,6 +6416,9 @@
                 totalVotes += (m.votes_up || 0) + (m.votes_down || 0);
             });
         }
+
+        const sosBonus = await getUserSosBonus(uid);
+        totalLikes += sosBonus;
         
         // Новые ачивки с эмодзи-паком SafeDrive 180 (по запросу пользователя)
         const achievements = [];
@@ -6846,7 +7024,19 @@
         // Обновляем счётчик в UI
         const counterEl = document.getElementById('markersCounter');
         if (counterEl) {
-            const typeNames = { dps: 'Помощь', patrol: 'Тех. остановка', camera: 'Опасность', dtp: 'ДТП', works: 'Участок', sos: 'SOS помощь' };
+            const typeNames = {
+                dps: 'ДПС',
+                patrol: 'Рейд',
+                specbat: 'Спецбат',
+                motobat: 'Мотобат',
+                cargo_control: 'Груз. контроль',
+                sos: 'SOS',
+                dtp: 'ДТП',
+                danger: 'Опасность',
+                traffic_jam: 'Пробка',
+                camera: 'Наблюдение',
+                works: 'Работы'
+            };
             let counterHTML = 'Активные: ';
             let hasCounters = false;
             for (const [type, count] of Object.entries(typeCounts)) {
