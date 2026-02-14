@@ -360,6 +360,15 @@
         .chat-btn { position: absolute; bottom: calc(100px + var(--safe-area-inset-bottom)); right: calc(15px + var(--safe-area-inset-right)); z-index: 1500; width: 50px; height: 50px; border-radius: 50%; background: var(--blue); border: 2px solid white; cursor: pointer; font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: center; }
         .chat-btn:hover { transform: scale(1.05); }
         .chat-btn:active { transform: scale(0.95); }
+        .fab-chat { bottom: calc(100px + var(--safe-area-inset-bottom)); }
+        .fab-heatmap { bottom: calc(220px + var(--safe-area-inset-bottom)); }
+        .fab-notif { bottom: calc(280px + var(--safe-area-inset-bottom)); }
+        .fab-activity { bottom: calc(340px + var(--safe-area-inset-bottom)); }
+        @media (max-height: 760px) {
+            .fab-heatmap { bottom: calc(205px + var(--safe-area-inset-bottom)); }
+            .fab-notif { bottom: calc(260px + var(--safe-area-inset-bottom)); }
+            .fab-activity { bottom: calc(315px + var(--safe-area-inset-bottom)); }
+        }
         .notif-btn { background: #5856d6; }
         .notif-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; border: 2px solid #fff; display: none; padding: 0 4px; box-sizing: border-box; }
         .notif-toast-wrap { position: absolute; top: calc(58px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 1900; width: min(92vw, 440px); pointer-events: none; }
@@ -373,6 +382,7 @@
         .notif-time { font-size: 10px; color: #999; margin-top: 4px; }
         .heatmap-toggle-btn { background: #ff9f0a; font-size: 18px; }
         .heatmap-toggle-btn.active { background: #ff3b30; box-shadow: 0 0 0 3px rgba(255,59,48,0.18), 0 8px 22px rgba(255,59,48,0.28); }
+        .activity-btn { background: #007aff; font-size: 18px; }
         #mapDimmingOverlay {
             position: absolute;
             inset: 0;
@@ -678,11 +688,13 @@
     <button class="speedometer-open-btn" id="speedometerOpenBtn" onclick="toggleSpeedometer(true)" title="Показать спидометр">🧭</button>
     
     <!-- Кнопка чата -->
-    <button class="chat-btn" onclick="openChatModal()">💬</button>
+    <button class="chat-btn fab-chat" onclick="openChatModal()">💬</button>
+    <!-- Кнопка активности ДПС/Спецбат -->
+    <button class="chat-btn activity-btn fab-activity" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС и Спецбат за месяц">👮🛡️</button>
     <!-- Кнопка тепловой карты -->
-    <button class="chat-btn heatmap-toggle-btn" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" style="bottom: 220px;" title="Тепловая карта ДТП">🗂️🔥</button>
+    <button class="chat-btn heatmap-toggle-btn fab-heatmap" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" title="Тепловая карта ДТП">🗂️🔥</button>
     <!-- Кнопка уведомлений -->
-    <button class="chat-btn notif-btn" onclick="openNotificationsDrawer()" style="bottom: 280px;" title="Уведомления">
+    <button class="chat-btn notif-btn fab-notif" onclick="openNotificationsDrawer()" title="Уведомления">
         🔔
         <span id="notifUnreadBadge" class="notif-badge">0</span>
     </button>
@@ -1436,6 +1448,14 @@
                     <div class="heatmap-toggle" id="heatmapToggle">
                         <button type="button" data-mode="day">День</button>
                         <button type="button" data-mode="week" class="active">Неделя</button>
+                        <button type="button" data-mode="month">Месяц</button>
+                    </div>
+                </div>
+                <div class="heatmap-header" style="margin-top: 6px;">
+                    <div class="heatmap-title" style="font-size: 12px; color: #666;">Типы</div>
+                    <div class="heatmap-toggle" id="heatmapTypeToggle">
+                        <button type="button" data-type="all" class="active">Все</button>
+                        <button type="button" data-type="dps_specbat">ДПС + Спецбат</button>
                     </div>
                 </div>
                 <div class="heatmap-legend" id="heatmapLegend">
@@ -7044,20 +7064,41 @@
     async function openActivityModal(mode) {
         const feed = document.getElementById('activityFeed');
         feed.innerHTML = '<div style="text-align: center; color: var(--gray);">⏳ Загрузка событий...</div>';
+        const isDpsSpecbatMonthMode = mode === 'dpsSpecbatMonth';
 
         initActivityHeatmapUI();
-        if (mode === 'heatmap') {
+        if (isDpsSpecbatMonthMode) {
+            activityHeatmapMode = 'month';
+            activityHeatmapType = 'dps_specbat';
+            const toggle = document.getElementById('heatmapToggle');
+            if (toggle) {
+                [...toggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.dataset.mode === 'month'));
+            }
+            const typeToggle = document.getElementById('heatmapTypeToggle');
+            if (typeToggle) {
+                [...typeToggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.dataset.type === 'dps_specbat'));
+            }
+        } else if (mode === 'heatmap') {
             activityHeatmapMode = 'week';
+            activityHeatmapType = 'all';
             const toggle = document.getElementById('heatmapToggle');
             if (toggle) {
                 [...toggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.dataset.mode === 'week'));
+            }
+            const typeToggle = document.getElementById('heatmapTypeToggle');
+            if (typeToggle) {
+                [...typeToggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b.dataset.type === 'all'));
             }
         }
         loadActivityHeatmap();
         
         try {
             // Загружаем последние маркеры (события добавления)
-            const { data: recentMarkers } = await _sb.from('markers').select('id,type,ts,author_id').order('ts', { ascending: false }).limit(20);
+            let recentMarkersQuery = _sb.from('markers').select('id,type,ts,author_id');
+            if (isDpsSpecbatMonthMode) {
+                recentMarkersQuery = recentMarkersQuery.in('type', ['dps', 'specbat']);
+            }
+            const { data: recentMarkers } = await recentMarkersQuery.order('ts', { ascending: false }).limit(20);
             
             // Загружаем информацию о водителях (имя, рейтинг) для отображения звёзд в ленте
             const { data: drivers } = await _sb.from('drivers').select('user_id,name,likes_sum,is_trusted');
@@ -7151,21 +7192,34 @@
     }
 
     let activityHeatmapMode = 'week';
+    let activityHeatmapType = 'all';
     let activityHeatmapCache = null;
     let activityHeatmapCachedAt = 0;
 
     function initActivityHeatmapUI() {
         const toggle = document.getElementById('heatmapToggle');
-        if (!toggle || toggle.dataset.bound) return;
-        toggle.dataset.bound = '1';
+        if (toggle && !toggle.dataset.bound) {
+            toggle.dataset.bound = '1';
+            toggle.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-mode]');
+                if (!btn) return;
+                activityHeatmapMode = btn.dataset.mode;
+                [...toggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b === btn));
+                renderActivityHeatmap();
+            });
+        }
 
-        toggle.addEventListener('click', (e) => {
-            const btn = e.target.closest('button[data-mode]');
-            if (!btn) return;
-            activityHeatmapMode = btn.dataset.mode;
-            [...toggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b === btn));
-            renderActivityHeatmap();
-        });
+        const typeToggle = document.getElementById('heatmapTypeToggle');
+        if (typeToggle && !typeToggle.dataset.bound) {
+            typeToggle.dataset.bound = '1';
+            typeToggle.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-type]');
+                if (!btn) return;
+                activityHeatmapType = btn.dataset.type;
+                [...typeToggle.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b === btn));
+                renderActivityHeatmap();
+            });
+        }
     }
 
     async function loadActivityHeatmap(force = false) {
@@ -7180,38 +7234,21 @@
 
         try {
             const nowDate = new Date();
-            const weekStart = new Date(nowDate);
-            weekStart.setDate(nowDate.getDate() - 6);
-            weekStart.setHours(0, 0, 0, 0);
+            const monthStart = new Date(nowDate);
+            monthStart.setDate(nowDate.getDate() - 29);
+            monthStart.setHours(0, 0, 0, 0);
 
             const { data: markers } = await _sb
                 .from('markers')
-                .select('ts')
-                .gte('ts', weekStart.toISOString())
+                .select('ts,type')
+                .gte('ts', monthStart.toISOString())
                 .order('ts', { ascending: false })
-                .limit(5000);
+                .limit(10000);
 
-            const weekCounts = Array.from({ length: 7 }, () => Array(24).fill(0));
-            const dayCounts = Array(24).fill(0);
-
-            const dayStart = new Date(nowDate);
-            dayStart.setHours(0, 0, 0, 0);
-            const msDay = 24 * 60 * 60 * 1000;
-
-            if (markers) {
-                markers.forEach(m => {
-                    const d = new Date(m.ts);
-                    if (isNaN(d.getTime())) return;
-                    const hour = d.getHours();
-                    const dayOffset = Math.floor((d - weekStart) / msDay);
-                    if (dayOffset >= 0 && dayOffset < 7) {
-                        weekCounts[dayOffset][hour] += 1;
-                    }
-                    if (d >= dayStart) dayCounts[hour] += 1;
-                });
-            }
-
-            activityHeatmapCache = { weekCounts, dayCounts, updatedAt: nowDate };
+            activityHeatmapCache = {
+                markers: Array.isArray(markers) ? markers : [],
+                updatedAt: nowDate
+            };
             activityHeatmapCachedAt = now;
             renderActivityHeatmap();
         } catch (e) {
@@ -7225,12 +7262,19 @@
         const summaryEl = document.getElementById('heatmapSummary');
         if (!gridEl || !summaryEl || !activityHeatmapCache) return;
 
+        const markers = Array.isArray(activityHeatmapCache.markers) ? activityHeatmapCache.markers : [];
         const hours = Array.from({ length: 24 }, (_, i) => i);
         const dayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
         const nowDate = activityHeatmapCache.updatedAt || new Date();
+        const nowMs = nowDate.getTime();
+        const dayStart = new Date(nowDate);
+        dayStart.setHours(0, 0, 0, 0);
         const weekStart = new Date(nowDate);
         weekStart.setDate(nowDate.getDate() - 6);
         weekStart.setHours(0, 0, 0, 0);
+        const monthStart = new Date(nowDate);
+        monthStart.setDate(nowDate.getDate() - 29);
+        monthStart.setHours(0, 0, 0, 0);
         const dayLabels = Array.from({ length: 7 }, (_, i) => {
             const d = new Date(weekStart);
             d.setDate(weekStart.getDate() + i);
@@ -7240,11 +7284,45 @@
             return `${name} ${dd}.${mm}`;
         });
 
+        const modeStart = activityHeatmapMode === 'day'
+            ? dayStart
+            : activityHeatmapMode === 'month'
+                ? monthStart
+                : weekStart;
+        const modeStartMs = modeStart.getTime();
+        const allowedTypes = activityHeatmapType === 'dps_specbat' ? new Set(['dps', 'specbat']) : null;
+
+        const scopedMarkers = markers.filter(m => {
+            if (!m?.ts) return false;
+            const tsMs = new Date(m.ts).getTime();
+            if (!Number.isFinite(tsMs)) return false;
+            if (tsMs < modeStartMs || tsMs > nowMs) return false;
+            if (allowedTypes && !allowedTypes.has(m.type)) return false;
+            return true;
+        });
+
+        const weekCounts = Array.from({ length: 7 }, () => Array(24).fill(0));
+        const rowCounts = Array(24).fill(0);
+        const msDay = 24 * 60 * 60 * 1000;
+
+        scopedMarkers.forEach(m => {
+            const d = new Date(m.ts);
+            if (isNaN(d.getTime())) return;
+            const hour = d.getHours();
+            rowCounts[hour] += 1;
+            if (activityHeatmapMode === 'week') {
+                const dayOffset = Math.floor((d - weekStart) / msDay);
+                if (dayOffset >= 0 && dayOffset < 7) {
+                    weekCounts[dayOffset][hour] += 1;
+                }
+            }
+        });
+
         let max = 0;
         if (activityHeatmapMode === 'week') {
-            activityHeatmapCache.weekCounts.forEach(row => row.forEach(v => { if (v > max) max = v; }));
+            weekCounts.forEach(row => row.forEach(v => { if (v > max) max = v; }));
         } else {
-            activityHeatmapCache.dayCounts.forEach(v => { if (v > max) max = v; });
+            rowCounts.forEach(v => { if (v > max) max = v; });
         }
 
         const colorFor = (value) => {
@@ -7260,7 +7338,7 @@
         });
 
         if (activityHeatmapMode === 'week') {
-            activityHeatmapCache.weekCounts.forEach((row, rowIndex) => {
+            weekCounts.forEach((row, rowIndex) => {
                 html += `<div class="heatmap-label">${dayLabels[rowIndex]}</div>`;
                 row.forEach((v, h) => {
                     const title = `${dayLabels[rowIndex]} ${String(h).padStart(2, '0')}:00 — ${v}`;
@@ -7268,21 +7346,33 @@
                 });
             });
         } else {
-            html += '<div class="heatmap-label">Сегодня</div>';
-            activityHeatmapCache.dayCounts.forEach((v, h) => {
-                const title = `Сегодня ${String(h).padStart(2, '0')}:00 — ${v}`;
+            const rowLabel = activityHeatmapMode === 'month' ? '30 дней' : 'Сегодня';
+            html += `<div class="heatmap-label">${rowLabel}</div>`;
+            rowCounts.forEach((v, h) => {
+                const title = `${rowLabel} ${String(h).padStart(2, '0')}:00 — ${v}`;
                 html += `<div class="heatmap-cell" title="${title}" style="background:${colorFor(v)}"></div>`;
             });
         }
 
         gridEl.innerHTML = html;
 
-        const sumWeek = activityHeatmapCache.weekCounts.flat().reduce((a, b) => a + b, 0);
-        const sumDay = activityHeatmapCache.dayCounts.reduce((a, b) => a + b, 0);
-        if (activityHeatmapMode === 'week') {
-            summaryEl.textContent = `Всего за 7 дней: ${sumWeek}`;
+        const total = scopedMarkers.length;
+        const peakCount = rowCounts.reduce((acc, v) => Math.max(acc, v), 0);
+        const peakHours = peakCount > 0
+            ? rowCounts
+                .map((v, h) => ({ v, h }))
+                .filter(x => x.v === peakCount)
+                .map(x => `${String(x.h).padStart(2, '0')}:00`)
+            : [];
+        const peakText = peakHours.length ? peakHours.join(', ') : 'нет данных';
+        const typeLabel = activityHeatmapType === 'dps_specbat' ? 'ДПС + Спецбат' : 'Все типы';
+
+        if (activityHeatmapMode === 'month') {
+            summaryEl.textContent = `${typeLabel} • Всего за 30 дней: ${total} • Пиковое время: ${peakText}`;
+        } else if (activityHeatmapMode === 'week') {
+            summaryEl.textContent = `${typeLabel} • Всего за 7 дней: ${total} • Пиковое время: ${peakText}`;
         } else {
-            summaryEl.textContent = `Всего сегодня: ${sumDay}`;
+            summaryEl.textContent = `${typeLabel} • Всего сегодня: ${total} • Пиковое время: ${peakText}`;
         }
     }
 
