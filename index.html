@@ -404,7 +404,7 @@
         .profile-name.trusted { color: #b8860b; text-shadow: 0 1px 0 rgba(0,0,0,0.15); }
         .profile-id { font-size: 12px; color: var(--gray); }
         
-        /* Рейтинг */
+        /* Уровень взаимовыручки */
         .rating-card { background: linear-gradient(135deg, var(--blue), #5ac8fa); border-radius: 15px; padding: 15px; color: white; margin-bottom: 15px; }
         .rating-value { font-size: 36px; font-weight: 800; }
         .rating-label { font-size: 12px; opacity: 0.9; }
@@ -779,13 +779,13 @@
             <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px;">Активные метки</h3>
             <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
                 <select id="markerTypeFilter" style="padding: 8px 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 13px; cursor: pointer;">
-                    <option value="">📍 Все типы</option>
-                    <option value="dps">� ДПС</option>
-                    <option value="camera">📸 Камера</option>
-                    <option value="patrol">🚔 Рейд</option>
+                    <option value="">📍 Все события</option>
+                    <option value="dps">🤝 Помощь на обочине</option>
+                    <option value="camera">⚠️ Опасность на дороге</option>
+                    <option value="patrol">🚦 Техническая остановка</option>
                     <option value="dtp">💥 ДТП</option>
-                    <option value="works">🚧 Работы</option>
-                    <option value="sos">🆘 SOS</option>
+                    <option value="works">🛣️ Сложный участок</option>
+                    <option value="sos">🆘 SOS помощь</option>
                 </select>
                 <button onclick="clearMarkerFilter()" style="padding: 8px 12px; border: none; border-radius: 8px; background: #f0f0f5; cursor: pointer; font-size: 13px; font-weight: 600;">🔄 Сброс</button>
             </div>
@@ -795,8 +795,8 @@
                         <tr>
                             <th>Тип</th>
                             <th>Комментарий</th>
-                            <th>Лайки</th>
-                            <th>Дизлайки</th>
+                            <th>Подтверждения</th>
+                            <th>Спорные</th>
                             <th>Exp</th>
                             <th>Действие</th>
                         </tr>
@@ -1115,10 +1115,11 @@
             <div style="line-height: 1.5; color: #333; font-size: 14px;">
                 <p style="margin-top: 0;"><strong>Добро пожаловать в Safe Drive 180!</strong></p>
                 <p>Перед использованием, пожалуйста, подтвердите, что вы согласны с правилами:</p>
-                <p style="margin: 8px 0;">Приложение используется только для мониторинга дорожной обстановки (ПДД, камеры, ДТП).</p>
+                <p style="margin: 8px 0;">Приложение используется только для обмена гражданской информацией о дорожной обстановке (помощь, опасности, ДТП, работы).</p>
                 <p style="margin: 8px 0;">Запрещено размещение любой информации, связанной с безопасностью региона или военными объектами.</p>
                 <p style="margin: 8px 0;">Вы несете личную ответственность за соблюдение ПДД.</p>
                 <p style="margin: 8px 0 16px 0;">Нажимая «Принимаю», вы подтверждаете, что будете использовать сервис только в гражданских целях для помощи другим водителям.</p>
+                <p style="margin: 8px 0 0 0;"><strong>Цель проекта:</strong> снижение аварийности и взаимоподдержка граждан в сложных дорожных условиях.</p>
             </div>
             <button id="rulesAcceptBtn" class="main-btn" style="margin-top: 10px;">ПРИНИМАЮ И СОГЛАСЕН</button>
         </div>
@@ -1180,8 +1181,8 @@
             </div>
             
             <div class="rating-card">
-                <div class="rating-label">Ваш рейтинг</div>
-                <div class="rating-value" id="profile-rating">0.0</div>
+                <div class="rating-label">Ваш уровень взаимовыручки</div>
+                <div class="rating-value" id="profile-rating">0</div>
             </div>
             
             <div class="stats-grid">
@@ -1191,15 +1192,15 @@
                 </div>
                 <div class="stat-item">
                     <div class="stat-value" id="profile-votes-sum">0</div>
-                    <div class="stat-label">Полезных голосов</div>
+                    <div class="stat-label">Очков кармы</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-value" id="profile-likes">0</div>
-                    <div class="stat-label">Лайков</div>
+                    <div class="stat-label">Подтверждений</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-value" id="profile-dislikes">0</div>
-                    <div class="stat-label">Дизлайков</div>
+                    <div class="stat-label">Спорных голосов</div>
                 </div>
             </div>
             
@@ -1208,7 +1209,7 @@
                 <div id="profile-trust-status" style="font-size: 16px; font-weight: 800; color: var(--blue);">🎯 Обычный водитель</div>
             </div>
             
-            <button class="main-btn" onclick="openRatingsModal()" style="margin-bottom: 10px; background: #34c759;">ГЛОБАЛЬНЫЙ РЕЙТИНГ</button>
+            <button class="main-btn" onclick="openRatingsModal()" style="margin-bottom: 10px; background: #34c759;">ГЛОБАЛЬНЫЙ УРОВЕНЬ ВЗАИМОВЫРУЧКИ</button>
             
             <!-- Настройки озвучки уведомлений -->
             <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
@@ -1310,20 +1311,20 @@
         </div>
     </div>
     
-    <!-- Модальное окно глобального рейтинга -->
+    <!-- Модальное окно глобального уровня взаимовыручки -->
     <div id="ratingsModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 style="margin: 0;">🏆 Рейтинг водителей</h2>
+                <h2 style="margin: 0;">🏆 Уровень взаимовыручки</h2>
                 <button class="modal-close" onclick="closeRatingsModal()">✕</button>
             </div>
             
             <div style="font-size: 12px; color: var(--gray); margin-bottom: 15px; text-align: center;">
-                Водители сортированы по сумме лайков. ⭐ = проверенный водитель (20+ лайков)
+                Участники сортированы по вкладу в взаимопомощь. 🛟 = выручатор (50+ очков)
             </div>
             
             <div style="max-height: 500px; overflow-y: auto;">
-                <div id="ratingsList" style="text-align: center; color: var(--gray);">Загрузка рейтинга...</div>
+                <div id="ratingsList" style="text-align: center; color: var(--gray);">Загрузка уровней взаимовыручки...</div>
             </div>
             
             <button class="main-btn" onclick="closeRatingsModal()" style="margin-top: 15px;">Закрыть</button>
@@ -1378,12 +1379,12 @@
             <span class="addr-label" id="addr-text">Определение адреса...</span>
             <div class="markers-counter" id="markersCounter">Загрузка...</div>
             <div class="type-selector">
-                <button onclick="setType('dps', this)" class="type-btn active"><div class="icon-circle">👮</div><span>ДПС</span></button>
-                <button onclick="setType('patrol', this)" class="type-btn"><div class="icon-circle">🚔</div><span>Рейд</span></button>
-                <button onclick="setType('camera', this)" class="type-btn"><div class="icon-circle">📸</div><span>Камера</span></button>
+                <button onclick="setType('dps', this)" class="type-btn active"><div class="icon-circle">🤝</div><span>Помощь</span></button>
+                <button onclick="setType('patrol', this)" class="type-btn"><div class="icon-circle">🚦</div><span>Тех. стоп</span></button>
+                <button onclick="setType('camera', this)" class="type-btn"><div class="icon-circle">⚠️</div><span>Опасность</span></button>
                 <button onclick="setType('dtp', this)" class="type-btn"><div class="icon-circle">💥</div><span>ДТП</span></button>
-                <button onclick="setType('works', this)" class="type-btn"><div class="icon-circle">🚧</div><span>Работы</span></button>
-                <button onclick="setType('sos', this)" class="type-btn"><div class="icon-circle">🆘</div><span>SOS</span></button>
+                <button onclick="setType('works', this)" class="type-btn"><div class="icon-circle">🛣️</div><span>Участок</span></button>
+                <button onclick="setType('sos', this)" class="type-btn"><div class="icon-circle">🆘</div><span>SOS помощь</span></button>
             </div>
             <input type="text" id="m-comm" style="width:100%; margin-bottom:10px; border-radius:10px; border:1px solid #ddd; padding:8px; box-sizing: border-box;" placeholder="Комментарий...">
             <button class="main-btn" onclick="addPoint()">ОТПРАВИТЬ</button>
@@ -1586,8 +1587,8 @@
         }
     }
     
-    // Иконки для разных типов маркеров (ДПС, Рейд, Камера, ДТП, Работы, SOS)
-    const MAP_ICONS = { dps: '👮', patrol: '🚔', camera: '📸', dtp: '💥', works: '🚧', sos: '🆘' };
+    // Иконки для разных типов событий взаимопомощи
+    const MAP_ICONS = { dps: '🤝', patrol: '🚦', camera: '⚠️', dtp: '💥', works: '🛣️', sos: '🆘' };
     // ID текущего пользователя из Telegram (null если не авторизован)
     const rawTgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     const uid = rawTgId ? String(rawTgId) : null;
@@ -1615,7 +1616,7 @@
     const ADMIN_ID = "5118431735";
     const ADMIN_RANK_LABEL = 'Admin SafeDrive';
     const ADMIN_TITLE_LABEL = 'Основатель';
-    // Порог лайков для статуса "Проверенный водитель"
+    // Порог подтверждений для статуса "Проверенный водитель"
     const TRUST_LIKES_THRESHOLD = 20; // можно менять по необходимости
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
@@ -1819,23 +1820,23 @@
 
     function getMarkerLabel(type) {
         const labels = {
-            dps: 'Пост ДПС',
-            patrol: 'Рейд',
-            camera: 'Камера',
+            dps: 'Помощь на обочине',
+            patrol: 'Техническая остановка',
+            camera: 'Опасность на дороге',
             dtp: 'ДТП',
-            works: 'Работы',
-            sos: 'SOS'
+            works: 'Сложный участок',
+            sos: 'SOS помощь'
         };
-        return labels[type] || 'Опасность';
+        return labels[type] || 'Дорожное событие';
     }
 
     function getMarkerEmoji(type) {
         const icons = {
-            dps: '👮‍♂️',
-            patrol: '🚔',
-            camera: '📸',
+            dps: '🤝',
+            patrol: '🚦',
+            camera: '⚠️',
             dtp: '💥',
-            works: '🚧',
+            works: '🛣️',
             sos: '🆘'
         };
         return icons[type] || '⚠️';
@@ -2035,12 +2036,19 @@
         }
         
         let text;
-        // Новый текст озвучки (по запросу пользователя)
+        const messageByType = {
+            dps: `Впереди запрос помощи на обочине через ${distancePretty} метров. Если можете, поддержите водителя.`,
+            patrol: `Впереди техническая остановка или затруднение через ${distancePretty} метров. Планируйте время заранее.`,
+            camera: `Впереди опасный участок через ${distancePretty} метров. Будьте особенно осторожны.`,
+            dtp: `Впереди ДТП через ${distancePretty} метров. Снизьте скорость и соблюдайте дистанцию.`,
+            works: `Впереди сложный дорожный участок через ${distancePretty} метров. Двигайтесь внимательно.`,
+            sos: `Впереди SOS-метка через ${distancePretty} метров. При возможности окажите помощь.`
+        };
+
         if (voiceStyle === 'cheeky') {
-            text = `Тормози! Слышишь, гражданин?! ${distancePretty} метров! Там засада! Западня! Или вы хотите, чтобы вас там разорвали?! Думайте головой, когда едите! Тормози, я сказал!`;
+            text = messageByType[type] || `Впереди дорожное событие через ${distancePretty} метров. Будьте внимательны.`;
         } else {
-            // Стандартный стиль — спокойнее
-            text = `Внимание! Впереди опасность на расстоянии ${distancePretty} метров. Снижайте скорость и будьте осторожны.`;
+            text = messageByType[type] || `Впереди дорожное событие через ${distancePretty} метров. Будьте внимательны.`;
         }
         
         // Отменяем предыдущую речь если есть
@@ -3006,10 +3014,10 @@
             profileNameEl.classList.remove('admin-name');
         }
         updateProfileAdminBadges(isAdminProfile);
-        const rating = marks_count ? ((likes - dislikes) / marks_count) : 0;
-        document.getElementById('profile-rating').textContent = rating.toFixed(1);
+        const karmaPoints = Math.max(0, (likes - dislikes) + marks_count);
+        document.getElementById('profile-rating').textContent = `${karmaPoints}`;
         document.getElementById('profile-marks-count').textContent = marks_count;
-        document.getElementById('profile-votes-sum').textContent = (likes + dislikes);
+        document.getElementById('profile-votes-sum').textContent = karmaPoints;
         document.getElementById('profile-likes').textContent = likes;
         document.getElementById('profile-dislikes').textContent = dislikes;
         
@@ -3018,11 +3026,14 @@
         if (isAdminProfile) {
             trustStatusEl.innerHTML = `👑 ${ADMIN_TITLE_LABEL}`;
             trustStatusEl.style.color = '#d4af37';
+        } else if (karmaPoints >= 50) {
+            trustStatusEl.innerHTML = '🛟 Выручатор';
+            trustStatusEl.style.color = '#1e88e5';
         } else if (isTrusted) {
             trustStatusEl.innerHTML = '⭐ Проверенный водитель';
             trustStatusEl.style.color = '#b8860b';
         } else {
-            trustStatusEl.innerHTML = `🎯 Обычный водитель (${likes}/${typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20} лайков)`;
+            trustStatusEl.innerHTML = `🤝 Участник взаимопомощи (${karmaPoints} очков)`;
             trustStatusEl.style.color = 'var(--blue)';
         }
 
@@ -3057,14 +3068,14 @@
             console.warn('Ошибка при загрузке достижений:', e?.message || e);
         }
 
-        // Попытка сохранить вычисленные значения рейтинга в таблице drivers (если колонки есть)
+        // Попытка сохранить вычисленные значения взаимовыручки в таблице drivers (если колонки есть)
         try {
             await _sb.from('drivers').upsert([
                 { user_id: uid, likes_sum: likes, is_trusted: isTrusted }
             ], { onConflict: 'user_id' });
         } catch (e) {
             // Если таблица или колонки отсутствуют — просто логируем, приложение продолжит работать
-            console.warn('Не удалось обновить рейтинг в drivers (возможно, колонки likes_sum/is_trusted отсутствуют):', e?.message || e);
+            console.warn('Не удалось обновить показатели взаимовыручки в drivers (возможно, колонки likes_sum/is_trusted отсутствуют):', e?.message || e);
         }
 
         const target = document.querySelector('.target');
@@ -3200,11 +3211,11 @@
             }
             updateProfileAdminBadges(isAdminProfile);
             
-            // Обновляем рейтинг и статистику
-            const rating = marks_count ? ((likes - dislikes) / marks_count) : 0;
-            document.getElementById('profile-rating').textContent = rating.toFixed(1);
+            // Обновляем уровень взаимовыручки и статистику
+            const karmaPoints = Math.max(0, (likes - dislikes) + marks_count);
+            document.getElementById('profile-rating').textContent = `${karmaPoints}`;
             document.getElementById('profile-marks-count').textContent = marks_count;
-            document.getElementById('profile-votes-sum').textContent = (likes + dislikes);
+            document.getElementById('profile-votes-sum').textContent = karmaPoints;
             document.getElementById('profile-likes').textContent = likes;
             document.getElementById('profile-dislikes').textContent = dislikes;
             
@@ -3213,13 +3224,14 @@
             if (isAdminProfile) {
                 trustStatusEl.innerHTML = `👑 ${ADMIN_TITLE_LABEL}`;
                 trustStatusEl.style.color = '#d4af37';
+            } else if (karmaPoints >= 50) {
+                trustStatusEl.innerHTML = '🛟 Выручатор';
+                trustStatusEl.style.color = '#1e88e5';
             } else if (isTrusted) {
                 trustStatusEl.innerHTML = '⭐ Проверенный водитель';
                 trustStatusEl.style.color = '#b8860b';
             } else {
-                const threshold = typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20;
-                const remaining = Math.max(0, threshold - likes);
-                trustStatusEl.innerHTML = `⏳ ${remaining} лайков до статуса`;
+                trustStatusEl.innerHTML = `🤝 Участник взаимопомощи (${karmaPoints} очков)`;
                 trustStatusEl.style.color = '#999';
             }
 
@@ -3294,10 +3306,10 @@
             console.warn('Ошибка при загрузке профиля пользователя:', e?.message || e);
             alert('Ошибка при загрузке профиля: ' + (e?.message || 'неизвестная ошибка'));
         }
-    }    // Функция открытия модала с глобальным рейтингом водителей
+    }    // Функция открытия модала с глобальным уровнем взаимовыручки
     async function openRatingsModal() {
         const ratingsList = document.getElementById('ratingsList');
-        ratingsList.innerHTML = '<div style="color: var(--gray);">⏳ Загрузка рейтинга...</div>';
+        ratingsList.innerHTML = '<div style="color: var(--gray);">⏳ Загрузка уровней взаимовыручки...</div>';
         
         try {
             // Загружаем всех водителей
@@ -3311,7 +3323,7 @@
                 return;
             }
             
-            // Считаем лайки для каждого водителя (если likes_sum отсутствует)
+            // Считаем очки кармы для каждого водителя (если likes_sum отсутствует)
             let driverStats = [];
             for (const d of drivers) {
                 let likesSum = d.likes_sum || 0;
@@ -3335,7 +3347,7 @@
                 });
             }
             
-            // Сортируем по лайкам (по убыванию)
+            // Сортируем по очкам кармы (по убыванию)
             driverStats.sort((a, b) => b.likes - a.likes);
             
             // Генерируем HTML
@@ -3355,7 +3367,7 @@
                         </div>
                         <div style="text-align: right;">
                             <div style="font-weight: 800; color: var(--blue); font-size: 16px;">${driver.likes}</div>
-                            <div style="font-size: 11px; color: var(--gray);">лайков</div>
+                            <div style="font-size: 11px; color: var(--gray);">кармы</div>
                         </div>
                     </div>
                 `;
@@ -3363,8 +3375,8 @@
             
             ratingsList.innerHTML = html;
         } catch (e) {
-            console.warn('Ошибка при загрузке рейтинга:', e?.message || e);
-            ratingsList.innerHTML = '<div style="color: red; padding: 20px;">Ошибка загрузки рейтинга</div>';
+            console.warn('Ошибка при загрузке уровней взаимовыручки:', e?.message || e);
+            ratingsList.innerHTML = '<div style="color: red; padding: 20px;">Ошибка загрузки уровней взаимовыручки</div>';
         }
         
         const target = document.querySelector('.target');
@@ -3372,7 +3384,7 @@
         document.getElementById('ratingsModal').classList.add('active');
     }
 
-    // Функция закрытия рейтинга
+    // Функция закрытия модала взаимовыручки
     function closeRatingsModal() {
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'visible';
@@ -6030,7 +6042,7 @@
             }
             
             let html = '';
-            const typeNames = { dps: 'ДПС', patrol: 'Рейд', camera: 'Камера', dtp: 'ДТП', works: 'Работы', sos: 'SOS' };
+            const typeNames = { dps: 'Проверка', patrol: 'Контроль', camera: 'Наблюдение', dtp: 'ДТП', works: 'Работы', sos: 'SOS' };
             const typeEmoji = { dps: '👮', patrol: '🚔', camera: '📸', dtp: '💥', works: '🚧', sos: '🆘' };
             
             if (recentMarkers && recentMarkers.length > 0) {
@@ -6215,7 +6227,7 @@
 
     // Функция загрузки достижений в профиль
     async function loadAchievements() {
-        // Получаем количество меток и лайков пользователя
+        // Получаем количество меток и очков поддержки пользователя
         const { data: markers } = await _sb.from('markers').select('votes_up, votes_down, ts, type, exp').eq('author_id', uid);
         
         let markersCount = 0;
@@ -6239,14 +6251,14 @@
         if (markersCount >= 50) achievements.push({ icon: '🏅', title: 'Половина сотни', desc: '50 меток' });
         if (markersCount >= 100) achievements.push({ icon: '💯', title: 'Столетие', desc: '100 меток' });
 
-        // Рейтинг и доверие
-        if (totalLikes >= 10) achievements.push({ icon: '👍', title: 'Полезно', desc: '10 лайков от сообщества' });
-        if (totalLikes >= 50) achievements.push({ icon: '👑', title: 'Король дорог', desc: 'Топовый юзер неделе по подтвержденным меткам' });
-        if (totalLikes >= 100) achievements.push({ icon: '🍀', title: 'Легенда', desc: '100 лайков' });
+        // Карма и доверие
+        if (totalLikes >= 10) achievements.push({ icon: '👍', title: 'Полезно', desc: '10 очков кармы от сообщества' });
+        if (totalLikes >= 50) achievements.push({ icon: '👑', title: 'Лидер взаимопомощи', desc: 'Высокий вклад в подтверждённые события' });
+        if (totalLikes >= 100) achievements.push({ icon: '🍀', title: 'Легенда', desc: '100 очков кармы' });
 
         // Точность и надежность
         if (totalVotes >= 50) achievements.push({ icon: '👁️', title: 'Глаз орла', desc: 'Сверхточные метки, которые висят часами' });
-        if (totalVotes >= 200) achievements.push({ icon: '🕊️', title: 'Миротворец', desc: '100 постов ДПС пройдено без штрафов' });
+        if (totalVotes >= 200) achievements.push({ icon: '🕊️', title: 'Миротворец', desc: 'Большой вклад в спокойные поездки сообщества' });
 
         // Дополнительно: загружаем серверные ачивки из таблицы user_achievements
         const serverCounts = {};
@@ -6281,7 +6293,7 @@
         if (markersCount >= 10) title = '🚙 Активный водитель';
         if (markersCount >= 50) title = '🏎️ Опытный водитель';
         if (markersCount >= 100) title = '🏆 Навигатор-профи';
-        if (totalLikes >= 50) title = '👑 Король дорог';
+        if (totalLikes >= 50) title = '👑 Лидер взаимопомощи';
 
         // Убираем дубликаты по заголовку
         const uniq = [];
@@ -6294,11 +6306,11 @@
             { key: 'markers_10', icon: '🔟', title: 'Десяток', desc: '10 меток', required: 10, progress: markersCount, metric: 'меток' },
             { key: 'markers_50', icon: '🏅', title: 'Половина сотни', desc: '50 меток', required: 50, progress: markersCount, metric: 'меток' },
             { key: 'markers_100', icon: '💯', title: 'Столетие', desc: '100 меток', required: 100, progress: markersCount, metric: 'меток' },
-            { key: 'likes_10', icon: '👍', title: 'Полезно', desc: '10 лайков от сообщества', required: 10, progress: totalLikes, metric: 'лайков' },
-            { key: 'likes_50', icon: '👑', title: 'Король дорог', desc: 'Топовый юзер неделе по подтвержденным меткам', required: 50, progress: totalLikes, metric: 'лайков' },
-            { key: 'likes_100', icon: '🍀', title: 'Легенда', desc: '100 лайков', required: 100, progress: totalLikes, metric: 'лайков' },
+            { key: 'likes_10', icon: '👍', title: 'Полезно', desc: '10 очков кармы от сообщества', required: 10, progress: totalLikes, metric: 'кармы' },
+            { key: 'likes_50', icon: '👑', title: 'Лидер взаимопомощи', desc: 'Высокий вклад в подтверждённые события', required: 50, progress: totalLikes, metric: 'кармы' },
+            { key: 'likes_100', icon: '🍀', title: 'Легенда', desc: '100 очков кармы', required: 100, progress: totalLikes, metric: 'кармы' },
             { key: 'votes_50', icon: '👁️', title: 'Глаз орла', desc: 'Сверхточные метки, которые висят часами', required: 50, progress: totalVotes, metric: 'голосов' },
-            { key: 'votes_200', icon: '🕊️', title: 'Миротворец', desc: '100 постов ДПС пройдено без штрафов', required: 200, progress: totalVotes, metric: 'голосов' },
+            { key: 'votes_200', icon: '🕊️', title: 'Миротворец', desc: 'Большой вклад в спокойные поездки сообщества', required: 200, progress: totalVotes, metric: 'голосов' },
             { key: 'beta_tester', icon: '🛡️', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ', required: 1, progress: serverCounts['beta_tester'] || 0, metric: 'раз' },
             { key: 'bug_report_1', icon: '🔍', title: 'Охтник за багами', desc: 'Помог чистить код и звуки', required: 1, progress: serverCounts['bug_report'] || 0, metric: 'отчетов' },
             { key: 'bug_report_5', icon: '📢', title: 'Сын Жириновского', desc: 'Обладатель эксклюзивной озвучки', required: 5, progress: serverCounts['bug_report'] || 0, metric: 'отчетов' },
@@ -6834,7 +6846,7 @@
         // Обновляем счётчик в UI
         const counterEl = document.getElementById('markersCounter');
         if (counterEl) {
-            const typeNames = { dps: 'ДПС', patrol: 'Рейд', camera: 'Камера', dtp: 'ДТП', works: 'Работы', sos: 'SOS' };
+            const typeNames = { dps: 'Помощь', patrol: 'Тех. остановка', camera: 'Опасность', dtp: 'ДТП', works: 'Участок', sos: 'SOS помощь' };
             let counterHTML = 'Активные: ';
             let hasCounters = false;
             for (const [type, count] of Object.entries(typeCounts)) {
@@ -6844,7 +6856,7 @@
                 }
             }
             if (!hasCounters) {
-                counterHTML = '✅ Опасностей не найдено';
+                counterHTML = '✅ Активных событий нет';
             }
             counterEl.innerHTML = counterHTML;
         }
