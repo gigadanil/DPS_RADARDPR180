@@ -1392,6 +1392,7 @@
     }
 
     function clearSupabaseAuth() {
+        closeRealtimeChannels();
         _sb = createSupabaseClient();
         try {
             localStorage.removeItem('sb_jwt');
@@ -1412,7 +1413,9 @@
             clearSupabaseAuth();
             return;
         }
+        closeRealtimeChannels();
         _sb = createSupabaseClient(token);
+        initRealtimeChannels();
     }
 
     async function ensureSupabaseAuth() {
@@ -1476,7 +1479,7 @@
     const MAP_ICONS = { dps: '👮', patrol: '🚔', camera: '📸', dtp: '💥', works: '🚧', sos: '🆘' };
     // ID текущего пользователя из Telegram (null если не авторизован)
     const rawTgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-    const uid = rawTgId ? Number(rawTgId) : null;
+    const uid = rawTgId ? String(rawTgId) : null;
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
     let myMap, selectedType = 'dps';
     // Текущее GPS местоположение пользователя
@@ -1511,6 +1514,11 @@
     let adminInvisible = false;
     // Realtime-канал для админ-уведомлений и статусов
     let adminBroadcastChannel = null;
+    // Realtime-каналы для мгновенного обновления карты и чата
+    let markersRealtimeChannel = null;
+    let messagesRealtimeChannel = null;
+    let markersRealtimeTimer = null;
+    let messagesRealtimeTimer = null;
     let adminInvisibleIntervalId = null;
     // Флаг инициализации приложения (чтобы не вызывать initApp повторно)
     let initAppInProgress = false;
@@ -4100,7 +4108,7 @@
                 .from('app_maintenance')
                 .select('value')
                 .eq('key', 'maintenance_mode')
-                .single();
+                .maybeSingle();
 
             const statusEl = document.getElementById('maintenanceStatus');
             if (!statusEl) return;
@@ -4198,7 +4206,7 @@
                 .from('app_maintenance')
                 .select('value')
                 .eq('key', 'maintenance_mode')
-                .single();
+                .maybeSingle();
 
             if (data) {
                 const settings = JSON.parse(data.value);
@@ -4297,6 +4305,63 @@
         adminBroadcastChannel.subscribe();
     }
 
+    function closeRealtimeChannels() {
+        try {
+            if (_sb && markersRealtimeChannel) _sb.removeChannel(markersRealtimeChannel);
+            if (_sb && messagesRealtimeChannel) _sb.removeChannel(messagesRealtimeChannel);
+        } catch (e) {
+            console.warn('Ошибка отключения realtime каналов:', e?.message || e);
+        }
+        markersRealtimeChannel = null;
+        messagesRealtimeChannel = null;
+        if (markersRealtimeTimer) {
+            clearTimeout(markersRealtimeTimer);
+            markersRealtimeTimer = null;
+        }
+        if (messagesRealtimeTimer) {
+            clearTimeout(messagesRealtimeTimer);
+            messagesRealtimeTimer = null;
+        }
+    }
+
+    function scheduleMarkersRealtimeReload() {
+        if (markersRealtimeTimer) return;
+        markersRealtimeTimer = setTimeout(() => {
+            markersRealtimeTimer = null;
+            if (typeof loadMarkers === 'function') loadMarkers().catch?.(()=>{});
+        }, 300);
+    }
+
+    function scheduleMessagesRealtimeReload() {
+        if (messagesRealtimeTimer) return;
+        messagesRealtimeTimer = setTimeout(() => {
+            messagesRealtimeTimer = null;
+            const chatModal = document.getElementById('chatModal');
+            if (chatModal && chatModal.classList.contains('active') && typeof loadChatMessages === 'function') {
+                loadChatMessages().catch?.(()=>{});
+            }
+        }, 300);
+    }
+
+    function initRealtimeChannels() {
+        if (!_sb) return;
+        if (markersRealtimeChannel || messagesRealtimeChannel) return;
+
+        markersRealtimeChannel = _sb
+            .channel('realtime-markers')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'markers' }, () => {
+                scheduleMarkersRealtimeReload();
+            })
+            .subscribe();
+
+        messagesRealtimeChannel = _sb
+            .channel('realtime-messages')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
+                scheduleMessagesRealtimeReload();
+            })
+            .subscribe();
+    }
+
     function showBroadcastBanner(text, withSignal) {
         const banner = document.getElementById('broadcastBanner');
         if (!banner) return;
@@ -4378,7 +4443,7 @@
                 .from('app_maintenance')
                 .select('value')
                 .eq('key', 'admin_invisible')
-                .single();
+                .maybeSingle();
             if (data && data.value) {
                 const settings = JSON.parse(data.value);
                 nextState = !!settings.active;
@@ -5318,7 +5383,7 @@
             // Загружаем только некэшированные
             if (uncachedIds.length > 0) {
                 try {
-                    const { data: authors } = await _sb.from('drivers').select('user_id,likes_sum,is_trusted,avatar,avatar_url').in('user_id', uncachedIds);
+                    const { data: authors } = await _sb.from('drivers').select('user_id,likes_sum,is_trusted,avatar_url').in('user_id', uncachedIds);
                     if (authors) {
                         authors.forEach(a => {
                             const id = String(a.user_id);
@@ -5532,11 +5597,16 @@
         // Вставляем сообщение в БД
         try {
             const messageData = {
-                author_id: uid,
+                author_id: String(uid || ''),
                 author_name: currentDriver?.name || 'Аноним',
                 text: messageText || '',
                 created_at: new Date().toISOString()
             };
+
+            if (!messageData.author_id) {
+                alert('❌ Ошибка: не определен ID пользователя. Перезапустите мини‑приложение.');
+                return;
+            }
             
             // Добавляем фото только если оно есть
             if (photoURL) {
