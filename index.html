@@ -5067,21 +5067,42 @@
         status.style.display = 'block';
 
         try {
-            // Генерируем уникальный код (6 символов, буквы и цифры)
-            const code = Array.from({length: 6}, () => 
-                'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]
-            ).join('');
+            if (!isAdmin) {
+                throw new Error('Недостаточно прав: только админ может создавать коды');
+            }
 
-            // Вставляем в БД
-            const { error } = await _sb.from('beta_invites').insert({
-                code: code,
-                created_by: String(uid),
-                max_uses: count,
-                description: desc
-            });
+            let code = '';
+            let inserted = false;
+            let lastError = null;
+            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
-            if (error) {
-                throw error;
+            // Делаем несколько попыток, чтобы не падать на редкой коллизии уникального code
+            for (let attempt = 1; attempt <= 7; attempt++) {
+                code = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+
+                const { error } = await _sb.from('beta_invites').insert({
+                    code: code,
+                    created_by: String(uid || ADMIN_ID),
+                    max_uses: count,
+                    description: desc
+                });
+
+                if (!error) {
+                    inserted = true;
+                    break;
+                }
+
+                lastError = error;
+                const msg = String(error?.message || '');
+                const codeErr = String(error?.code || '');
+                const isDuplicate = codeErr === '23505' || /duplicate key|unique/i.test(msg);
+                if (!isDuplicate) {
+                    throw error;
+                }
+            }
+
+            if (!inserted) {
+                throw lastError || new Error('Не удалось создать уникальный код');
             }
 
             status.textContent = `✅ Код создан: ${code}`;
@@ -5095,7 +5116,13 @@
 
         } catch (err) {
             console.error('Ошибка при создании кода:', err);
-            status.textContent = '❌ ' + (err?.message || 'Ошибка сервера');
+            const msg = String(err?.message || 'Ошибка сервера');
+            const codeErr = String(err?.code || '');
+            if (codeErr === '42501' || /row-level security|permission denied|violates row-level/i.test(msg)) {
+                status.textContent = '❌ Нет прав на INSERT в beta_invites (RLS). Примените SQL-фикс из fix_rls.sql';
+            } else {
+                status.textContent = '❌ ' + msg;
+            }
             status.style.color = '#dc3545';
         }
     }
@@ -6012,6 +6039,16 @@
                 .eq('id', currentReviewRequestId);
 
             if (error) throw error;
+
+            // Fallback: если DB-триггер не настроен, снимаем бан вручную
+            try {
+                const request = allUnbanRequests.find(r => r.id === currentReviewRequestId);
+                if (request?.user_id) {
+                    await _sb.from('bans').delete().eq('user_id', String(request.user_id));
+                }
+            } catch (fallbackError) {
+                console.warn('Fallback снятия бана не выполнен:', fallbackError?.message || fallbackError);
+            }
 
             alert('✅ Запрос одобрен! Бан автоматически снят.');
             closeReviewUnbanModal();
@@ -8368,40 +8405,18 @@
             try {
                 // Определяем дату окончания бана
                 const bannedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+                const targetUserId = String(currentModeratingUserId);
+                const adminIdString = String(uid);
 
-                // Проверяем, есть ли уже запись о бане
-                const { data: existingBan } = await _sb
-                    .from('bans')
-                    .select('*')
-                    .eq('user_id', currentModeratingUserId)
-                    .single();
-
-                if (existingBan) {
-                    // Обновляем существующий бан
-                    const { error } = await _sb
-                        .from('bans')
-                        .update({
-                            banned_until: bannedUntil,
-                            ban_type: 'temp',
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('user_id', currentModeratingUserId);
-
-                    if (error) throw error;
-                } else {
-                    // Создаем новую запись о бане
-                    const { error } = await _sb
-                        .from('bans')
-                        .insert({
-                            user_id: currentModeratingUserId,
-                            banned_until: bannedUntil,
-                            ban_type: 'temp',
-                            banned_by: uid,
-                            created_at: new Date().toISOString()
-                        });
-
-                    if (error) throw error;
-                }
+                // Бан через SECURITY DEFINER RPC, чтобы не зависеть от прямых RLS-прав на таблицу bans
+                const { error: banError } = await _sb.rpc('ban_user_admin', {
+                    p_admin_user_id: adminIdString,
+                    p_target_user_id: targetUserId,
+                    p_banned_until: bannedUntil,
+                    p_ban_type: 'temp',
+                    p_reason: `Временный бан на ${durationText}`
+                });
+                if (banError) throw banError;
 
                 alert(`✅ Пользователь "${userName}" забанен на ${durationText}`);
                 currentModeratingUserId = null;
@@ -8411,19 +8426,24 @@
                     const { error: deleteError } = await _sb
                         .from('markers')
                         .delete()
-                        .eq('author_id', currentModeratingUserId);
+                        .eq('author_id', targetUserId);
 
                     if (deleteError) {
                         console.error('Ошибка удаления меток:', deleteError);
                     } else {
                         alert('✅ Метки пользователя удалены');
-                        await refreshMarkers(); // Обновляем карту
+                        await loadMarkers(); // Обновляем карту
                     }
                 }
 
             } catch (error) {
                 console.error('Ошибка при бане пользователя:', error);
-                alert('❌ Произошла ошибка при попытке забанить пользователя');
+                const msg = String(error?.message || 'Неизвестная ошибка');
+                if (/ban_user_admin|function .* does not exist|permission denied|row-level security/i.test(msg)) {
+                    alert('❌ Бан не выполнен: проверьте SQL-функцию ban_user_admin и права EXECUTE для authenticated.');
+                } else {
+                    alert('❌ Произошла ошибка при попытке забанить пользователя: ' + msg);
+                }
                 // Возвращаемся к модальному окну модерации
                 document.getElementById('moderatorModal').classList.add('active');
             }
@@ -8453,45 +8473,15 @@
                 const userIdString = String(currentModeratingUserId);
                 const adminIdString = String(uid);
 
-                // Проверяем, есть ли уже запись о бане
-                const { data: existingBan, error: fetchError } = await _sb
-                    .from('bans')
-                    .select('*')
-                    .eq('user_id', userIdString)
-                    .maybeSingle(); // Используем maybeSingle вместо single для избежания ошибок
-
-                if (fetchError && fetchError.code !== 'PGRST116') {
-                    throw fetchError;
-                }
-
-                if (existingBan) {
-                    // Обновляем существующий бан
-                    const { error } = await _sb
-                        .from('bans')
-                        .update({
-                            banned_until: bannedUntil,
-                            ban_type: banType,
-                            banned_by: adminIdString,
-                            updated_at: new Date().toISOString()
-                        })
-                        .eq('user_id', userIdString);
-
-                    if (error) throw error;
-                } else {
-                    // Создаем новую запись о бане
-                    const { error } = await _sb
-                        .from('bans')
-                        .insert({
-                            user_id: userIdString,
-                            banned_until: bannedUntil,
-                            ban_type: banType,
-                            banned_by: adminIdString,
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        });
-
-                    if (error) throw error;
-                }
+                // Бан через SECURITY DEFINER RPC
+                const { error: banError } = await _sb.rpc('ban_user_admin', {
+                    p_admin_user_id: adminIdString,
+                    p_target_user_id: userIdString,
+                    p_banned_until: bannedUntil,
+                    p_ban_type: banType,
+                    p_reason: banType === 'temp' ? 'Временный бан (24ч)' : 'Постоянный бан'
+                });
+                if (banError) throw banError;
 
                 const successMessage = banType === 'temp'
                     ? `✅ Пользователь "${userName}" забанен на 24 часа`
@@ -8511,13 +8501,18 @@
                         console.error('Ошибка удаления меток:', deleteError);
                     } else {
                         alert('✅ Метки пользователя удалены');
-                        await refreshMarkers(); // Обновляем карту
+                        await loadMarkers(); // Обновляем карту
                     }
                 }
 
             } catch (error) {
                 console.error('Ошибка при бане пользователя:', error);
-                alert('❌ Ошибка при бане пользователя: ' + (error.message || 'Неизвестная ошибка'));
+                const msg = String(error?.message || 'Неизвестная ошибка');
+                if (/ban_user_admin|function .* does not exist|permission denied|row-level security/i.test(msg)) {
+                    alert('❌ Бан не выполнен: проверьте SQL-функцию ban_user_admin и права EXECUTE для authenticated.');
+                } else {
+                    alert('❌ Ошибка при бане пользователя: ' + msg);
+                }
             }
         }
 
@@ -8675,6 +8670,28 @@
                 const fullName = driverName || telegramName || 'водитель';
                 
                 console.log('Начало: userIdString=' + userIdString + ', fullName=' + fullName);
+
+                // Не создаем повторный pending-запрос
+                const { data: pendingRequest, error: pendingError } = await _sb
+                    .from('unban_requests')
+                    .select('id,status,created_at')
+                    .eq('user_id', userIdString)
+                    .eq('status', 'pending')
+                    .order('created_at', { ascending: false })
+                    .maybeSingle();
+
+                if (pendingError && pendingError.code !== 'PGRST116') {
+                    throw pendingError;
+                }
+
+                if (pendingRequest) {
+                    status.textContent = 'ℹ️ У вас уже есть активный запрос на разбан';
+                    status.style.color = '#ff9500';
+                    status.style.display = 'block';
+                    btn.textContent = '⏳ Запрос уже отправлен';
+                    btn.disabled = true;
+                    return;
+                }
                 
                 // Вставляем запрос
                 const insertResult = await _sb.from('unban_requests').insert({
