@@ -210,13 +210,35 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translate(-50%, -100%);
+            transform: translate(-50%, -50%);
             z-index: 9999;
             pointer-events: none;
-            font-size: 40px;
+            width: 30px;
+            height: 30px;
             transition: visibility 0.2s, opacity 0.2s;
             visibility: visible;
             opacity: 1;
+        }
+        .target::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            border: 2px solid var(--blue);
+            background: rgba(255,255,255,0.92);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+        }
+        .target::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff3b30;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.95);
         }
         .bottom-ui { position: absolute; bottom: calc(10px + var(--safe-area-inset-bottom)); left: 0; right: 0; z-index: 1000; padding: 0 8px; }
         .action-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-radius: 24px; padding: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); position: relative; }
@@ -549,7 +571,7 @@
     </div>
 
 
-    <div class="target">📍</div>
+    <div class="target" aria-hidden="true"></div>
 
     <!-- Overlay: Требуется вход через Telegram -->
     <div id="tgAuthOverlay" class="auth-overlay" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
@@ -1748,6 +1770,7 @@
     const NOTIF_STORAGE_PREFIX = 'app_notifications_';
     const NOTIF_GROUP_WINDOW_MS = 5 * 60 * 1000;
     const NOTIF_MAX_ITEMS = 120;
+    const NOTIF_MCHS_RETENTION_MS = 24 * 60 * 60 * 1000;
     const NOTIF_FEED_RADIUS_METERS = 20000;
     const NOTIF_FEED_MARKER_LOOKBACK_MS = 24 * 60 * 60 * 1000;
     const NOTIF_FEED_SYNC_INTERVAL_MS = 5 * 60 * 1000;
@@ -1882,8 +1905,23 @@
         } catch (e) {
             appNotifications = [];
         }
+        pruneOldMchsNotifications();
         renderNotificationsList();
         updateNotificationBadge();
+    }
+
+    function pruneOldMchsNotifications() {
+        const now = Date.now();
+        const before = appNotifications.length;
+        appNotifications = appNotifications.filter(n => {
+            if (String(n?.source || '') !== 'mchs') return true;
+            const ts = new Date(n?.createdAt || 0).getTime();
+            if (!Number.isFinite(ts)) return false;
+            return (now - ts) <= NOTIF_MCHS_RETENTION_MS;
+        });
+        if (appNotifications.length !== before) {
+            saveNotificationsState();
+        }
     }
 
     function saveNotificationsState() {
@@ -1944,6 +1982,18 @@
         if (!Number.isFinite(distanceMeters)) return null;
         if (distanceMeters >= 1000) return `${(distanceMeters / 1000).toFixed(1)} км от вас`;
         return `${Math.round(distanceMeters)} м от вас`;
+    }
+
+    function looksLikeMojibake(text) {
+        const value = String(text || '');
+        return /Ð|Ñ|�/.test(value);
+    }
+
+    function normalizeFeedText(value, fallback = '') {
+        const text = String(value || '').trim();
+        if (!text) return fallback;
+        if (looksLikeMojibake(text)) return fallback;
+        return text;
     }
 
     function showInAppNotification(notification) {
@@ -2183,18 +2233,23 @@
             alerts.forEach(alert => {
                 const alertId = String(alert?.id || '');
                 if (!alertId) return;
-                const hazard = String(alert?.hazard_text || alert?.title || '').trim();
-                const recommendation = String(alert?.recommendation_text || '').trim();
+                const rawTitle = String(alert?.title || '').trim();
+                const isSafeDriveUpdate = /обновление\s+safedrive/i.test(rawTitle) || !alert?.source_link;
+                const hazard = normalizeFeedText(alert?.hazard_text, normalizeFeedText(rawTitle, 'Без описания'));
+                const recommendation = normalizeFeedText(
+                    alert?.recommendation_text,
+                    isSafeDriveUpdate ? 'Следите за сообщениями в разделе «Уведомления».' : ''
+                );
                 upsertAppNotification({
-                    id: `feed_mchs_${alertId}`,
-                    type: 'mchs',
-                    icon: '🟠',
-                    title: 'МЧС: Штормовое предупреждение',
+                    id: `${isSafeDriveUpdate ? 'feed_update_' : 'feed_mchs_'}${alertId}`,
+                    type: isSafeDriveUpdate ? 'update' : 'mchs',
+                    icon: isSafeDriveUpdate ? '🔵' : '🟠',
+                    title: isSafeDriveUpdate ? 'SafeDrive: Обновление' : 'МЧС: Штормовое предупреждение',
                     body: `${hazard}${recommendation ? ` • ${recommendation}` : ''}`.slice(0, 220),
                     priority: 'normal',
                     createdAt: alert?.pub_date || alert?.created_at || new Date().toISOString(),
                     read: false,
-                    source: 'mchs',
+                    source: isSafeDriveUpdate ? 'safedrive_news' : 'mchs',
                     link: alert?.source_link || null
                 }, { silent });
             });
@@ -2250,6 +2305,7 @@
     async function syncImportantNotificationsFeed({ silent = true } = {}) {
         await syncMchsFeedToNotifications({ silent });
         await syncNearbyImportantMarkersToNotifications({ silent });
+        pruneOldMchsNotifications();
     }
 
     async function notifyHelpBotAboutMarker(marker) {
