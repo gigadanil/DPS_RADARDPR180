@@ -2086,8 +2086,15 @@
             const helpTypes = new Set(['sos', 'dtp', 'danger', 'traffic_jam', 'works']);
             if (!helpTypes.has(String(marker.type))) return;
 
-            const token = localStorage.getItem('sb_jwt') || '';
-            if (!token) return;
+            let token = localStorage.getItem('sb_jwt') || '';
+            if (!token) {
+                await ensureSupabaseAuth();
+                token = localStorage.getItem('sb_jwt') || '';
+            }
+            if (!token) {
+                console.warn('Пропуск отправки в help-notify: JWT токен отсутствует');
+                return;
+            }
 
             const addrText = (document.getElementById('addr-text')?.textContent || '').trim();
             const driverName = String(currentDriver?.name || 'Водитель');
@@ -2104,7 +2111,7 @@
                 driverRank
             };
 
-            await fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2112,6 +2119,15 @@
                 },
                 body: JSON.stringify(payload)
             });
+
+            if (!resp.ok) {
+                let bodyText = '';
+                try { bodyText = await resp.text(); } catch(e) { bodyText = ''; }
+                console.warn('help-notify вернул ошибку:', resp.status, bodyText || '(пустой ответ)');
+                return;
+            }
+
+            console.log('✅ Уведомление в Telegram отправлено через help-notify');
         } catch (e) {
             console.warn('Не удалось отправить уведомление в Telegram-бота:', e?.message || e);
         }
