@@ -6026,6 +6026,8 @@
 
         try {
             const adminIdString = String(uid);
+            const request = allUnbanRequests.find(r => r.id === currentReviewRequestId);
+            const targetUserId = request?.user_id ? String(request.user_id) : null;
 
             // Обновляем статус запроса (триггер автоматически снимет бан)
             const { error } = await _sb
@@ -6040,14 +6042,24 @@
 
             if (error) throw error;
 
-            // Fallback: если DB-триггер не настроен, снимаем бан вручную
-            try {
-                const request = allUnbanRequests.find(r => r.id === currentReviewRequestId);
-                if (request?.user_id) {
-                    await _sb.from('bans').delete().eq('user_id', String(request.user_id));
+            // Гарантированно снимаем бан админ-функцией (не зависит от RLS на таблице bans)
+            if (targetUserId) {
+                const { error: unbanRpcError } = await _sb.rpc('unban_user_admin', {
+                    p_admin_user_id: adminIdString,
+                    p_target_user_id: targetUserId
+                });
+
+                if (unbanRpcError) {
+                    console.warn('unban_user_admin RPC error:', unbanRpcError?.message || unbanRpcError);
+                    // Фоллбек: прямое удаление (сработает, если есть policy для админа)
+                    const { error: unbanDeleteError } = await _sb
+                        .from('bans')
+                        .delete()
+                        .eq('user_id', targetUserId);
+                    if (unbanDeleteError && unbanDeleteError.code !== 'PGRST116') {
+                        console.warn('Fallback delete bans error:', unbanDeleteError?.message || unbanDeleteError);
+                    }
                 }
-            } catch (fallbackError) {
-                console.warn('Fallback снятия бана не выполнен:', fallbackError?.message || fallbackError);
             }
 
             alert('✅ Запрос одобрен! Бан автоматически снят.');
