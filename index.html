@@ -1508,7 +1508,7 @@
 
     async function ensureSupabaseAuth() {
         const initData = window.Telegram?.WebApp?.initData;
-        if (!initData) return;
+        if (!initData) return null;
 
         try {
             const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
@@ -1529,12 +1529,14 @@
                 } catch (e) {
                     // ignore storage errors
                 }
+                return data.token;
             } else {
                 clearSupabaseAuth();
                 throw new Error('telegram-auth returned invalid token');
             }
         } catch (e) {
             console.warn('Supabase auth failed:', e?.message || e);
+            return null;
         }
     }
 
@@ -2088,8 +2090,8 @@
 
             let token = localStorage.getItem('sb_jwt') || '';
             if (!token) {
-                await ensureSupabaseAuth();
-                token = localStorage.getItem('sb_jwt') || '';
+                const refreshed = await ensureSupabaseAuth();
+                token = refreshed || localStorage.getItem('sb_jwt') || '';
             }
             if (!token) {
                 console.warn('Пропуск отправки в help-notify: JWT токен отсутствует');
@@ -2127,7 +2129,15 @@
                 return;
             }
 
-            console.log('✅ Уведомление в Telegram отправлено через help-notify');
+            try {
+                const payload = await resp.json();
+                console.log('help-notify result:', payload);
+                if (Number(payload?.sent || 0) <= 0) {
+                    console.warn('help-notify: отправлено 0 уведомлений', payload);
+                }
+            } catch (e) {
+                console.log('✅ Уведомление в Telegram отправлено через help-notify');
+            }
         } catch (e) {
             console.warn('Не удалось отправить уведомление в Telegram-бота:', e?.message || e);
         }
