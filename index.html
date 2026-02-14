@@ -1106,6 +1106,24 @@
     </div>
 </div>
     
+    <!-- Обязательное окно правил при первом входе -->
+    <div id="rulesModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="margin: 0;">Правила</h2>
+            </div>
+            <div style="line-height: 1.5; color: #333; font-size: 14px;">
+                <p style="margin-top: 0;"><strong>Добро пожаловать в Safe Drive 180!</strong></p>
+                <p>Перед использованием, пожалуйста, подтвердите, что вы согласны с правилами:</p>
+                <p style="margin: 8px 0;">Приложение используется только для мониторинга дорожной обстановки (ПДД, камеры, ДТП).</p>
+                <p style="margin: 8px 0;">Запрещено размещение любой информации, связанной с безопасностью региона или военными объектами.</p>
+                <p style="margin: 8px 0;">Вы несете личную ответственность за соблюдение ПДД.</p>
+                <p style="margin: 8px 0 16px 0;">Нажимая «Принимаю», вы подтверждаете, что будете использовать сервис только в гражданских целях для помощи другим водителям.</p>
+            </div>
+            <button id="rulesAcceptBtn" class="main-btn" style="margin-top: 10px;">ПРИНИМАЮ И СОГЛАСЕН</button>
+        </div>
+    </div>
+
     <!-- Модальное окно для регистрации (только данные об авто) -->
     <div id="registrationModal" class="modal">
         <div class="modal-content">
@@ -1449,6 +1467,99 @@
             console.warn('Supabase auth failed:', e?.message || e);
         }
     }
+
+    function getRulesAcceptanceKey(userId) {
+        return `rulesAccepted_${String(userId || '')}`;
+    }
+
+    const RULES_CONSENT_KEY = 'rules_v1';
+
+    function hasAcceptedRules(userId) {
+        if (!userId) return false;
+        try {
+            return localStorage.getItem(getRulesAcceptanceKey(userId)) === 'true';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async function hasAcceptedRulesOnServer(userId) {
+        if (!userId || !_sb) return false;
+        try {
+            const { data, error } = await _sb
+                .from('user_consents')
+                .select('accepted_at')
+                .eq('user_id', String(userId))
+                .eq('consent_key', RULES_CONSENT_KEY)
+                .maybeSingle();
+            if (error) return false;
+            return !!data;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function markRulesAccepted(userId) {
+        if (!userId) return;
+        try {
+            localStorage.setItem(getRulesAcceptanceKey(userId), 'true');
+        } catch (e) {
+            console.warn('Не удалось сохранить принятие правил:', e?.message || e);
+        }
+    }
+
+    async function markRulesAcceptedOnServer(userId) {
+        if (!userId || !_sb) return;
+        try {
+            await _sb
+                .from('user_consents')
+                .upsert({
+                    user_id: String(userId),
+                    consent_key: RULES_CONSENT_KEY,
+                    accepted_at: new Date().toISOString()
+                }, { onConflict: 'user_id,consent_key' });
+        } catch (e) {
+            console.warn('Не удалось сохранить согласие на сервере:', e?.message || e);
+        }
+    }
+
+    function showRulesModal(userId) {
+        return new Promise((resolve) => {
+            const modal = document.getElementById('rulesModal');
+            const acceptBtn = document.getElementById('rulesAcceptBtn');
+            if (!modal || !acceptBtn) {
+                resolve(true);
+                return;
+            }
+
+            if (acceptBtn._rulesHandler) {
+                acceptBtn.removeEventListener('click', acceptBtn._rulesHandler);
+            }
+
+            const onAccept = async () => {
+                markRulesAccepted(userId);
+                await markRulesAcceptedOnServer(userId);
+                modal.classList.remove('active');
+                acceptBtn.removeEventListener('click', onAccept);
+                acceptBtn._rulesHandler = null;
+                resolve(true);
+            };
+
+            acceptBtn._rulesHandler = onAccept;
+            acceptBtn.addEventListener('click', onAccept);
+            modal.classList.add('active');
+        });
+    }
+
+    async function ensureRulesAccepted(userId) {
+        if (!userId) return true;
+        if (hasAcceptedRules(userId)) return true;
+        if (await hasAcceptedRulesOnServer(userId)) {
+            markRulesAccepted(userId);
+            return true;
+        }
+        return showRulesModal(userId);
+    }
     
     // Вспомогательная функция для запросов к Supabase с таймаутом
     async function queryWithTimeout(promise, timeoutMs = 15000) {
@@ -1520,6 +1631,8 @@
     let markersRealtimeTimer = null;
     let messagesRealtimeTimer = null;
     let adminInvisibleIntervalId = null;
+    // Флаг: открыт ли собственный профиль (для блокировки настроек в чужом профиле)
+    let isViewingOwnProfile = true;
     // Флаг инициализации приложения (чтобы не вызывать initApp повторно)
     let initAppInProgress = false;
     // Спидометр: видимость
@@ -2041,6 +2154,7 @@
      * @param {string} style - 'standard' или 'cheeky'
      */
     function setVoiceStyle(style) {
+        if (!isViewingOwnProfile) return;
         voiceStyle = style;
         
         // Обновляем визуальное состояние кнопок
@@ -2101,6 +2215,7 @@
     }
 
     function setWarningDistance(value) {
+        if (!isViewingOwnProfile) return;
         warningDistanceMeters = Math.max(300, Math.min(2000, Number(value) || 800));
         updateWarningDistanceUI();
         distanceNotifications.clear();
@@ -2122,6 +2237,7 @@
     }
 
     function setProximityMode(requireFollow) {
+        if (!isViewingOwnProfile) return;
         proximityRequiresFollow = !!requireFollow;
         const alwaysBtn = document.getElementById('proximityModeAlways');
         const followBtn = document.getElementById('proximityModeFollow');
@@ -2809,6 +2925,19 @@
             return openOtherUserProfile(viewUserId);
         }
 
+        isViewingOwnProfile = true;
+
+        const voiceStandardBtn = document.getElementById('voiceStyleStandard');
+        const voiceCheekyBtn = document.getElementById('voiceStyleCheeky');
+        const warningDistanceRange = document.getElementById('warningDistanceRange');
+        const proximityAlwaysBtn = document.getElementById('proximityModeAlways');
+        const proximityFollowBtn = document.getElementById('proximityModeFollow');
+        if (voiceStandardBtn) { voiceStandardBtn.disabled = false; voiceStandardBtn.style.opacity = '1'; }
+        if (voiceCheekyBtn) { voiceCheekyBtn.disabled = false; voiceCheekyBtn.style.opacity = '1'; }
+        if (warningDistanceRange) { warningDistanceRange.disabled = false; warningDistanceRange.style.opacity = '1'; }
+        if (proximityAlwaysBtn) { proximityAlwaysBtn.disabled = false; proximityAlwaysBtn.style.opacity = '1'; }
+        if (proximityFollowBtn) { proximityFollowBtn.disabled = false; proximityFollowBtn.style.opacity = '1'; }
+
         // Загружаем базовую информацию профиля
         try {
             const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate,avatar_url').eq('user_id', uid).maybeSingle();
@@ -2956,6 +3085,8 @@
 
     // Функция закрытия профиля
     function closeProfileModal() {
+        isViewingOwnProfile = true;
+
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'visible';
         
@@ -2995,6 +3126,8 @@
     // Функция просмотра профиля другого пользователя
     async function openOtherUserProfile(userId) {
         try {
+            isViewingOwnProfile = false;
+
             // Загружаем данные пользователя
             const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate,avatar_url').eq('user_id', userId).maybeSingle();
             
@@ -3027,6 +3160,18 @@
             // Скрываем форму редактирования авто
             const carEditForm = document.querySelector('div[style*="border: 1px solid #ddd"]');
             if (carEditForm) carEditForm.style.display = 'none';
+
+            // Блокируем персональные настройки в чужом профиле
+            const voiceStandardBtn = document.getElementById('voiceStyleStandard');
+            const voiceCheekyBtn = document.getElementById('voiceStyleCheeky');
+            const warningDistanceRange = document.getElementById('warningDistanceRange');
+            const proximityAlwaysBtn = document.getElementById('proximityModeAlways');
+            const proximityFollowBtn = document.getElementById('proximityModeFollow');
+            if (voiceStandardBtn) { voiceStandardBtn.disabled = true; voiceStandardBtn.style.opacity = '0.5'; }
+            if (voiceCheekyBtn) { voiceCheekyBtn.disabled = true; voiceCheekyBtn.style.opacity = '0.5'; }
+            if (warningDistanceRange) { warningDistanceRange.disabled = true; warningDistanceRange.style.opacity = '0.5'; }
+            if (proximityAlwaysBtn) { proximityAlwaysBtn.disabled = true; proximityAlwaysBtn.style.opacity = '0.5'; }
+            if (proximityFollowBtn) { proximityFollowBtn.disabled = true; proximityFollowBtn.style.opacity = '0.5'; }
 
             // Отображаем аватар
             const avatarEl = document.getElementById('profile-avatar-display');
@@ -6468,6 +6613,12 @@
         showSplashScreen();
 
         try {
+            const tgUserForRules = window.Telegram?.WebApp?.initDataUnsafe?.user;
+            if (tgUserForRules?.id) {
+                await ensureSupabaseAuth();
+                await ensureRulesAccepted(String(tgUserForRules.id));
+            }
+
             // Проверяем статус бана с таймаутом
             userBanStatus = await Promise.race([
                 checkBanStatus(),
