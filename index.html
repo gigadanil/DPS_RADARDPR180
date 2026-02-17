@@ -1626,7 +1626,11 @@
                 throw new Error('telegram-auth returned invalid token');
             }
         } catch (e) {
-            console.warn('Supabase auth failed:', e?.message || e);
+            const msg = String(e?.message || e || '');
+            console.warn('Supabase auth failed:', msg);
+            if (/invalid hash/i.test(msg)) {
+                console.warn('⚠️ Telegram initData не совпадает с токеном бота. Откройте Mini App ИМЕННО из @DPSRADARDPR180bot (не из BotFather/пересланных ссылок), затем перезапустите карту.');
+            }
             return null;
         }
     }
@@ -3828,6 +3832,16 @@
         const helpTypes = new Set(['sos', 'dtp', 'danger', 'works', 'traffic_jam']);
         const targetCategory = helpTypes.has(t) ? 'help' : 'patrol';
         switchTypeCategory(targetCategory);
+
+        try {
+            const comm = document.getElementById('m-comm');
+            if (comm) {
+                if (t === 'sos') comm.placeholder = 'SOS: Тип | Комментарий (например: Пробил колесо | Нужен домкрат)';
+                else if (t === 'dps') comm.placeholder = 'ДПС: Статус (например: Работают / Проверка документов)';
+                else if (t === 'specbat') comm.placeholder = 'Спецбат: Направление | Инфо (например: В сторону центра | Усиленная проверка)';
+                else comm.placeholder = 'Комментарий...';
+            }
+        } catch (e) {}
     }
 
     function switchTypeCategory(category, tabEl = null) {
@@ -8062,6 +8076,17 @@
         // Берём координаты из позиции центральной метки (прицела),
         // чтобы постановка была точной даже при поднятии прицела над нижним виджетом.
         const coords = getTargetPlacementCoords();
+
+        const commentEl = document.getElementById('m-comm');
+        const rawComment = (commentEl && typeof commentEl.value === 'string') ? commentEl.value.trim() : '';
+        if (['sos', 'dps', 'specbat'].includes(String(selectedType))) {
+            if (!rawComment) {
+                if (selectedType === 'sos') alert('🆘 Для SOS заполните поле: Тип | Комментарий');
+                else if (selectedType === 'dps') alert('🚔 Для ДПС заполните поле Статус (например: Работают / Проверка документов)');
+                else alert('🛡 Для Спецбата заполните поле: Направление | Инфо');
+                return;
+            }
+        }
         
         // Проверяем, находится ли местоположение в Донецкой области ДНР
         if (!isInDonetskRegion(coords)) {
@@ -8076,7 +8101,7 @@
                 ts: Date.now(), // Текущее время
                 exp: Date.now() + 7200000, // Время жизни маркера (2 часа)
                 type: selectedType, // Тип маркера (ДПС, Рейд и т.д.)
-                comment: document.getElementById('m-comm').value, // Комментарий пользователя
+                comment: rawComment, // Комментарий пользователя
                 author_id: uid // ID автора маркера
             };
             const { data: insertedMarkers, error } = await _sb.from('markers').insert([markerToCreate]).select('id,type,comment,coords');
