@@ -1444,7 +1444,7 @@
 
             <div id="activityHeatmap" class="activity-heatmap">
                 <div class="heatmap-header">
-                    <div class="heatmap-title">🔥 Тепловая карта активности</div>
+                    <div class="heatmap-title">🔥 Тепловая карта вашей активности</div>
                     <div class="heatmap-toggle" id="heatmapToggle">
                         <button type="button" data-mode="day">День</button>
                         <button type="button" data-mode="week" class="active">Неделя</button>
@@ -1868,7 +1868,7 @@
             id: 'news_notif_feed_v1',
             icon: '🔵',
             title: 'Важные новости SafeDrive',
-            body: 'Раздел «Уведомления» теперь показывает МЧС, SOS и критичные ДТП.',
+            body: 'Раздел «Уведомления» теперь показывает Погоду (Open‑Meteo), SOS и критичные ДТП.',
             createdAt: '2026-02-14T21:00:00.000Z',
             read: false,
             source: 'safedrive_news',
@@ -2558,7 +2558,9 @@
                 const alertId = String(alert?.id || '');
                 if (!alertId) return;
                 const rawTitle = String(alert?.title || '').trim();
-                const isSafeDriveUpdate = /обновление\s+safedrive/i.test(rawTitle) || !alert?.source_link;
+                const link = String(alert?.source_link || '').trim();
+                const isWeather = /open-meteo\.com/i.test(link) || /\bпогода\b/i.test(rawTitle);
+                const isSafeDriveUpdate = /обновление\s+safedrive/i.test(rawTitle) || (!link && !isWeather);
                 const hazard = normalizeFeedText(alert?.hazard_text, normalizeFeedText(rawTitle, 'Без описания'));
                 const recommendation = normalizeFeedText(
                     alert?.recommendation_text,
@@ -2566,19 +2568,19 @@
                 );
                 upsertAppNotification({
                     id: `${isSafeDriveUpdate ? 'feed_update_' : 'feed_mchs_'}${alertId}`,
-                    type: isSafeDriveUpdate ? 'update' : 'mchs',
-                    icon: isSafeDriveUpdate ? '🔵' : '🟠',
-                    title: isSafeDriveUpdate ? 'SafeDrive: Обновление' : 'МЧС: Штормовое предупреждение',
+                    type: isSafeDriveUpdate ? 'update' : (isWeather ? 'weather' : 'mchs'),
+                    icon: isSafeDriveUpdate ? '🔵' : (isWeather ? '🌦' : '🟠'),
+                    title: isSafeDriveUpdate ? 'SafeDrive: Обновление' : (isWeather ? 'Погода: Донецк' : 'МЧС: Штормовое предупреждение'),
                     body: `${hazard}${recommendation ? ` • ${recommendation}` : ''}`.slice(0, 220),
                     priority: 'normal',
                     createdAt: alert?.pub_date || alert?.created_at || new Date().toISOString(),
                     read: false,
-                    source: isSafeDriveUpdate ? 'safedrive_news' : 'mchs',
-                    link: alert?.source_link || null
+                    source: isSafeDriveUpdate ? 'safedrive_news' : (isWeather ? 'weather' : 'mchs'),
+                    link: link || null
                 }, { silent });
             });
         } catch (e) {
-            console.warn('Не удалось синхронизировать сводки МЧС:', e?.message || e);
+            console.warn('Не удалось синхронизировать погоду/сводки:', e?.message || e);
         }
     }
 
@@ -3702,6 +3704,13 @@
         // Переключаем Supabase на authenticated (JWT из Telegram)
         await ensureSupabaseAuth();
 
+        // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
+        try {
+            if (localStorage.getItem('beta_access_granted') === 'true') {
+                await ensureUserAchievement(uid, 'beta_tester');
+            }
+        } catch(e) {}
+
         try {
             // Проверяем, не забанен ли пользователь (с таймаутом)
             const banInfo = await Promise.race([
@@ -3933,6 +3942,9 @@
                 localStorage.setItem('beta_access_granted', 'true');
                 localStorage.setItem('beta_code_used', code);
                 localStorage.setItem('beta_access_date', new Date().toISOString());
+
+                // Ачивка за вход в ЗБТ
+                try { await ensureUserAchievement(uid, 'beta_tester'); } catch(e) {}
 
                 status.textContent = '✅ Доступ предоставлен! Загрузка...';
                 status.style.color = '#28a745';
@@ -7370,6 +7382,14 @@
         const summaryEl = document.getElementById('heatmapSummary');
         if (summaryEl) summaryEl.textContent = 'Загрузка...';
 
+        if (!uid) {
+            if (summaryEl) summaryEl.textContent = 'Нет данных (не авторизован)';
+            activityHeatmapCache = { markers: [], updatedAt: new Date() };
+            activityHeatmapCachedAt = Date.now();
+            renderActivityHeatmap();
+            return;
+        }
+
         const now = Date.now();
         if (!force && activityHeatmapCache && (now - activityHeatmapCachedAt) < 120000) {
             renderActivityHeatmap();
@@ -7385,6 +7405,7 @@
             const { data: markers } = await _sb
                 .from('markers')
                 .select('ts,type')
+                .eq('author_id', uid)
                 .gte('ts', monthStart.toISOString())
                 .order('ts', { ascending: false })
                 .limit(10000);
