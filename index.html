@@ -1566,6 +1566,7 @@
             if (!uid) return;
             if (!_sb) return;
             if (!Array.isArray(userLocation) || userLocation.length < 2) return;
+            if (!gpsReliable) return;
 
             const now = Date.now();
             if (!force && lastHelpHomeSyncAt && (now - lastHelpHomeSyncAt) < 5 * 60 * 1000) return;
@@ -1574,7 +1575,10 @@
             const lat = Number(userLocation[0]);
             const lon = Number(userLocation[1]);
             if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+            // если геолокация не получена и браузер вернул 0,0 — не перетираем опорную точку
+            if (Math.abs(lat) < 1e-9 && Math.abs(lon) < 1e-9) return;
 
+            // В приватных чатах chat_id обычно совпадает с user_id (Telegram ID), поэтому обновляем по обоим вариантам.
             await _sb
                 .from('telegram_help_subscribers')
                 .update({
@@ -1582,7 +1586,7 @@
                     home_lon: lon,
                     updated_at: new Date().toISOString()
                 })
-                .eq('user_id', String(uid));
+                .or(`user_id.eq.${String(uid)},chat_id.eq.${String(uid)}`);
         } catch (e) {
             // Если пользователь ещё не подписан в Telegram-боте (нет строки) — будет update 0 rows, это ок.
             // Если токена нет/просрочен — sync не нужен, auth восстановится через ensureSupabaseAuth.
@@ -1766,6 +1770,10 @@
     let myMap, selectedType = 'dps';
     // Текущее GPS местоположение пользователя
     let userLocation = null;
+    let lastReliableUserLocation = null;
+    let lastGpsAccuracyMeters = null;
+    let gpsReliable = false;
+    let gpsWarnedUnreliable = false;
     // ID отслеживания GPS (для остановки отслеживания)
     let gpsWatchId = null;
     // Маркер текущего местоположения на карте
@@ -2644,6 +2652,7 @@
                 markerId: marker.id,
                 type: marker.type,
                 comment: marker.comment || '',
+                createdAtMs: Number(marker.ts || marker.createdAtMs || Date.now()),
                 lat: marker.coords?.[0],
                 lon: marker.coords?.[1],
                 placeText: addrText,
@@ -2672,6 +2681,12 @@
                 console.log('help-notify result:', payload);
                 if (Number(payload?.sent || 0) <= 0) {
                     console.warn('help-notify: отправлено 0 уведомлений', payload);
+                    const errors = Array.isArray(payload?.errors) ? payload.errors : [];
+                    const has403 = errors.some(e => Number(e?.status) === 403);
+                    const bodyJoin = errors.map(e => String(e?.body || '')).join(' | ');
+                    if (has403 && /bot can't initiate conversation|blocked by the user|user is deactivated|Forbidden/i.test(bodyJoin)) {
+                        console.warn('⚠️ Telegram не дал отправить сообщение. Откройте бота уведомлений @SafeDrive180_MCHS_bot и нажмите /start, затем повторите метку.');
+                    }
                 }
             } catch (e) {
                 console.log('✅ Уведомление в Telegram отправлено через help-notify');
@@ -3296,6 +3311,17 @@
         setProximityMode(proximityRequiresFollow);
     }
 
+        function isReliableGeoPosition(lat, lon, accuracyMeters) {
+                const a = Number(accuracyMeters);
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+                if (!Number.isFinite(a)) return false;
+                // Если погрешность очень большая — это почти всегда IP/кэш-локация (Telegram Desktop/Web)
+                if (a > 5000) return false;
+                // Если точка не в ДНР — скорее всего неверные данные
+                if (!isInDonetskRegion([lat, lon])) return false;
+                return true;
+        }
+
     function initGPS() {
         if (!navigator.geolocation) {
             console.warn('Geolocation не поддерживается браузером');
@@ -3306,7 +3332,7 @@
         const options = {
             enableHighAccuracy: true,
             timeout: 15000,            // Оптимизация: увеличили таймаут
-            maximumAge: 5000           // Кэшируем GPS данные на 5 сек
+            maximumAge: 0              // Не берём кэш — в WebView он часто даёт неверные координаты
         };
         
         // Начинаем отслеживание местоположения с вычислением скорости
@@ -3327,6 +3353,30 @@
                     const { latitude, longitude, accuracy } = position.coords;
                     const now = Date.now();
 
+                    lastGpsAccuracyMeters = Number(accuracy);
+                    const latNum = Number(latitude);
+                    const lonNum = Number(longitude);
+                    const reliableNow = isReliableGeoPosition(latNum, lonNum, Number(accuracy));
+                    gpsReliable = reliableNow;
+
+                    if (!reliableNow) {
+                        if (!gpsWarnedUnreliable) {
+                            gpsWarnedUnreliable = true;
+                            console.warn('⚠️ Геолокация неточная (большая погрешность или точка вне ДНР). Включите GPS и разрешите доступ к местоположению для Telegram, затем подождите 10–20 секунд.');
+                        }
+                        if (lastReliableUserLocation) {
+                            // Не перетираем точные координаты мусором
+                            return;
+                        }
+                        // Если точных ещё нет — покажем хотя бы маркер, но без синка радиуса и автоследования
+                        userSpeedKmh = 0;
+                        userLocation = [latNum, lonNum];
+                        updateUserLocationMarker();
+                        updateSpeedometerUI(userSpeedKmh);
+                        console.log(`📍 GPS (не точно): ${latNum.toFixed(4)}, ${lonNum.toFixed(4)} (точность: ${Number(accuracy).toFixed(0)}м)`);
+                        return;
+                    }
+
                     // Вычисляем скорость на основе предыдущей позиции (м/c -> км/ч)
                     if (lastUserPositionCoords && lastUserPositionTime) {
                         const prev = lastUserPositionCoords;
@@ -3341,6 +3391,7 @@
                     lastUserPositionTime = now;
 
                     userLocation = [latitude, longitude];
+                    lastReliableUserLocation = [latitude, longitude];
 
                     // обновляем опорную точку для радиуса Telegram-уведомлений (если пользователь подписан)
                     syncHelpSubscriberHomeCoords(false).catch(()=>{});
