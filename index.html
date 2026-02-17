@@ -1560,6 +1560,35 @@
         initRealtimeChannels();
     }
 
+    let lastHelpHomeSyncAt = 0;
+    async function syncHelpSubscriberHomeCoords(force = false) {
+        try {
+            if (!uid) return;
+            if (!_sb) return;
+            if (!Array.isArray(userLocation) || userLocation.length < 2) return;
+
+            const now = Date.now();
+            if (!force && lastHelpHomeSyncAt && (now - lastHelpHomeSyncAt) < 5 * 60 * 1000) return;
+            lastHelpHomeSyncAt = now;
+
+            const lat = Number(userLocation[0]);
+            const lon = Number(userLocation[1]);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+            await _sb
+                .from('telegram_help_subscribers')
+                .update({
+                    home_lat: lat,
+                    home_lon: lon,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('user_id', String(uid));
+        } catch (e) {
+            // Если пользователь ещё не подписан в Telegram-боте (нет строки) — будет update 0 rows, это ок.
+            // Если токена нет/просрочен — sync не нужен, auth восстановится через ensureSupabaseAuth.
+        }
+    }
+
     async function ensureSupabaseAuth() {
         const initData = window.Telegram?.WebApp?.initData;
         if (!initData) return null;
@@ -1571,8 +1600,10 @@
                 body: JSON.stringify({ initData })
             });
             if (!res.ok) {
+                let errText = '';
+                try { errText = await res.text(); } catch (e) { errText = ''; }
                 clearSupabaseAuth();
-                throw new Error('telegram-auth failed');
+                throw new Error(`telegram-auth failed (${res.status}): ${errText || 'empty response'}`);
             }
             const data = await res.json();
             if (data?.token && typeof data.token === 'string' && data.token.split('.').length === 3) {
@@ -1583,6 +1614,8 @@
                 } catch (e) {
                     // ignore storage errors
                 }
+                // после успешной авторизации можно синхронизировать координаты подписчика (если GPS уже известен)
+                syncHelpSubscriberHomeCoords(true).catch(()=>{});
                 return data.token;
             } else {
                 clearSupabaseAuth();
@@ -3308,6 +3341,9 @@
                     lastUserPositionTime = now;
 
                     userLocation = [latitude, longitude];
+
+                    // обновляем опорную точку для радиуса Telegram-уведомлений (если пользователь подписан)
+                    syncHelpSubscriberHomeCoords(false).catch(()=>{});
 
                     // Обновляем маркер на карте (включая визуализацию скорости/ачивок/стиля)
                     updateUserLocationMarker();
