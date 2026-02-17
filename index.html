@@ -2590,7 +2590,7 @@
     async function notifyHelpBotAboutMarker(marker) {
         try {
             if (!marker || !marker.type) return;
-            const helpTypes = new Set(['sos', 'dtp', 'danger', 'traffic_jam', 'works']);
+            const helpTypes = new Set(['sos', 'dps', 'specbat', 'dtp', 'danger', 'traffic_jam', 'works']);
             if (!helpTypes.has(String(marker.type))) return;
 
             let token = localStorage.getItem('sb_jwt') || '';
@@ -5054,6 +5054,25 @@
 
     // ============= ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ЗБТ КОДАМИ =============
 
+    async function invokeAdminFunction(functionName, payload = {}) {
+        if (!_sb) {
+            throw new Error('Supabase client не инициализирован');
+        }
+        const { data, error } = await _sb.functions.invoke(functionName, {
+            body: payload,
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (error) {
+            const errMsg = String(error?.message || error || `Edge Function ${functionName} error`);
+            throw new Error(errMsg);
+        }
+        if (data && typeof data === 'object' && 'error' in data && data.error) {
+            const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+            throw new Error(errMsg || `Edge Function ${functionName} error`);
+        }
+        return data;
+    }
+
     async function generateBetaCode() {
         const countInput = document.getElementById('betaCodeCountInput');
         const descInput = document.getElementById('betaCodeDescInput');
@@ -5074,30 +5093,28 @@
             let code = '';
             let inserted = false;
             let lastError = null;
+            let createdResponse = null;
             const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
             // Делаем несколько попыток, чтобы не падать на редкой коллизии уникального code
             for (let attempt = 1; attempt <= 7; attempt++) {
                 code = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
 
-                const { error } = await _sb.from('beta_invites').insert({
-                    code: code,
-                    created_by: String(uid || ADMIN_ID),
-                    max_uses: count,
-                    description: desc
-                });
-
-                if (!error) {
+                try {
+                    createdResponse = await invokeAdminFunction('beta-invite', {
+                        code,
+                        maxUses: count,
+                        description: desc
+                    });
                     inserted = true;
                     break;
-                }
-
-                lastError = error;
-                const msg = String(error?.message || '');
-                const codeErr = String(error?.code || '');
-                const isDuplicate = codeErr === '23505' || /duplicate key|unique/i.test(msg);
-                if (!isDuplicate) {
-                    throw error;
+                } catch (fnError) {
+                    lastError = fnError;
+                    const msg = String(fnError?.message || '');
+                    const isDuplicate = /duplicate key|unique constraint|already exists|409/.test(msg);
+                    if (!isDuplicate) {
+                        throw fnError;
+                    }
                 }
             }
 
@@ -5105,7 +5122,8 @@
                 throw lastError || new Error('Не удалось создать уникальный код');
             }
 
-            status.textContent = `✅ Код создан: ${code}`;
+            const createdCode = createdResponse?.code || code;
+            status.textContent = `✅ Код создан: ${createdCode}`;
             status.style.color = '#28a745';
             
             countInput.value = '1';
@@ -5117,9 +5135,8 @@
         } catch (err) {
             console.error('Ошибка при создании кода:', err);
             const msg = String(err?.message || 'Ошибка сервера');
-            const codeErr = String(err?.code || '');
-            if (codeErr === '42501' || /row-level security|permission denied|violates row-level/i.test(msg)) {
-                status.textContent = '❌ Нет прав на INSERT в beta_invites (RLS). Примените SQL-фикс из fix_rls.sql';
+            if (/admin|доступ|permission denied|forbidden|Access denied/i.test(msg)) {
+                status.textContent = '❌ Edge Function beta-invite отклонила запрос (нет прав)';
             } else {
                 status.textContent = '❌ ' + msg;
             }
@@ -5374,33 +5391,21 @@
         const message = document.getElementById('maintenanceMessage').value || '⚠️ Техническое обслуживание. Приносим извинения.';
         
         try {
-            // Сохраняем статус ТО в app_maintenance
-            const { error } = await _sb
-                .from('app_maintenance')
-                .upsert({
-                    key: 'maintenance_mode',
-                    value: JSON.stringify({ active: true, message: message, timestamp: Date.now() })
-                }, { onConflict: 'key' });
-
-            if (error) throw error;
-            
+            await invokeAdminFunction('maintenance-toggle', {
+                active: true,
+                message: message,
+                timestamp: Date.now()
+            });
             alert('✅ Карта закрыта на техническое обслуживание!');
             await refreshMaintenanceStatus();
         } catch (err) {
-            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+            alert('❌ Ошибка Edge Function maintenance-toggle: ' + (err?.message || 'Неизвестная ошибка'));
         }
     }
 
     async function disableMaintenance() {
         try {
-            // Удаляем статус ТО из app_maintenance
-            const { error } = await _sb
-                .from('app_maintenance')
-                .delete()
-                .eq('key', 'maintenance_mode');
-
-            if (error) throw error;
-            
+            await invokeAdminFunction('maintenance-toggle', { active: false });
             alert('✅ Карта открыта для пользователей!');
             
             // Скрываем оверлей ТО
@@ -5416,7 +5421,7 @@
             location.reload();
             
         } catch (err) {
-            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+            alert('❌ Ошибка Edge Function maintenance-toggle: ' + (err?.message || 'Неизвестная ошибка'));
         }
     }
 
@@ -6042,23 +6047,12 @@
 
             if (error) throw error;
 
-            // Гарантированно снимаем бан админ-функцией (не зависит от RLS на таблице bans)
+            // Снимаем бан через Edge Function (внутри вызов SECURITY DEFINER)
             if (targetUserId) {
-                const { error: unbanRpcError } = await _sb.rpc('unban_user_admin', {
-                    p_admin_user_id: adminIdString,
-                    p_target_user_id: targetUserId
-                });
-
-                if (unbanRpcError) {
-                    console.warn('unban_user_admin RPC error:', unbanRpcError?.message || unbanRpcError);
-                    // Фоллбек: прямое удаление (сработает, если есть policy для админа)
-                    const { error: unbanDeleteError } = await _sb
-                        .from('bans')
-                        .delete()
-                        .eq('user_id', targetUserId);
-                    if (unbanDeleteError && unbanDeleteError.code !== 'PGRST116') {
-                        console.warn('Fallback delete bans error:', unbanDeleteError?.message || unbanDeleteError);
-                    }
+                try {
+                    await invokeAdminFunction('unban-user', { targetUserId });
+                } catch (unbanError) {
+                    console.warn('unban-user Edge Function error:', unbanError?.message || unbanError);
                 }
             }
 
@@ -6200,11 +6194,11 @@
                 await expireMarkersByAuthor(driverId);
                 // Удаляем водителя
                 await _sb.from('drivers').delete().eq('user_id', driverId);
-                // Пытаемся удалить из бана (если таблица существует)
+                // Пытаемся снять бан через Edge Function (без прямых прав)
                 try {
-                    await _sb.from('bans').delete().eq('user_id', driverId);
+                    await invokeAdminFunction('unban-user', { targetUserId: String(driverId) });
                 } catch (e) {
-                    console.warn('Ошибка при удалении из bans (возможно, таблица не существует):', e?.message);
+                    console.warn('Edge Function unban-user недоступна:', e?.message || e);
                 }
                 alert('Водитель удален');
                 openAdminModal(); // Обновляем список
@@ -8418,17 +8412,13 @@
                 // Определяем дату окончания бана
                 const bannedUntil = new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
                 const targetUserId = String(currentModeratingUserId);
-                const adminIdString = String(uid);
 
-                // Бан через SECURITY DEFINER RPC, чтобы не зависеть от прямых RLS-прав на таблицу bans
-                const { error: banError } = await _sb.rpc('ban_user_admin', {
-                    p_admin_user_id: adminIdString,
-                    p_target_user_id: targetUserId,
-                    p_banned_until: bannedUntil,
-                    p_ban_type: 'temp',
-                    p_reason: `Временный бан на ${durationText}`
+                await invokeAdminFunction('ban-user', {
+                    targetUserId,
+                    bannedUntil,
+                    banType: 'temp',
+                    reason: `Временный бан на ${durationText}`
                 });
-                if (banError) throw banError;
 
                 alert(`✅ Пользователь "${userName}" забанен на ${durationText}`);
                 currentModeratingUserId = null;
@@ -8451,11 +8441,7 @@
             } catch (error) {
                 console.error('Ошибка при бане пользователя:', error);
                 const msg = String(error?.message || 'Неизвестная ошибка');
-                if (/ban_user_admin|function .* does not exist|permission denied|row-level security/i.test(msg)) {
-                    alert('❌ Бан не выполнен: проверьте SQL-функцию ban_user_admin и права EXECUTE для authenticated.');
-                } else {
-                    alert('❌ Произошла ошибка при попытке забанить пользователя: ' + msg);
-                }
+                alert('❌ Edge Function ban-user отклонила запрос: ' + msg);
                 // Возвращаемся к модальному окну модерации
                 document.getElementById('moderatorModal').classList.add('active');
             }
@@ -8483,17 +8469,13 @@
 
                 // Преобразуем user_id в строку для совместимости с TEXT типом в БД
                 const userIdString = String(currentModeratingUserId);
-                const adminIdString = String(uid);
 
-                // Бан через SECURITY DEFINER RPC
-                const { error: banError } = await _sb.rpc('ban_user_admin', {
-                    p_admin_user_id: adminIdString,
-                    p_target_user_id: userIdString,
-                    p_banned_until: bannedUntil,
-                    p_ban_type: banType,
-                    p_reason: banType === 'temp' ? 'Временный бан (24ч)' : 'Постоянный бан'
+                await invokeAdminFunction('ban-user', {
+                    targetUserId: userIdString,
+                    bannedUntil,
+                    banType,
+                    reason: banType === 'temp' ? 'Временный бан (24ч)' : 'Постоянный бан'
                 });
-                if (banError) throw banError;
 
                 const successMessage = banType === 'temp'
                     ? `✅ Пользователь "${userName}" забанен на 24 часа`
@@ -8520,11 +8502,7 @@
             } catch (error) {
                 console.error('Ошибка при бане пользователя:', error);
                 const msg = String(error?.message || 'Неизвестная ошибка');
-                if (/ban_user_admin|function .* does not exist|permission denied|row-level security/i.test(msg)) {
-                    alert('❌ Бан не выполнен: проверьте SQL-функцию ban_user_admin и права EXECUTE для authenticated.');
-                } else {
-                    alert('❌ Ошибка при бане пользователя: ' + msg);
-                }
+                alert('❌ Edge Function ban-user отклонила запрос: ' + msg);
             }
         }
 
