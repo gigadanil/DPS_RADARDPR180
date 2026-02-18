@@ -3394,14 +3394,14 @@
         }
     }
     
-    async function speakWarning(distance, type, comment) {
+    async function speakWarning(distance, type, comment, markerCoords = null) {
         if (!voiceStyle) voiceStyle = 'standard';
         stopWarningOutput();
 
         // v2: по умолчанию используем «живую» озвучку на лету (можно подставлять улицы/время/любые фразы).
         // MP3 оставляем как запасной вариант (на случай, если Web Speech API недоступен).
         if (window.speechSynthesis) {
-            useWebSpeechAPI(distance, type);
+            await useWebSpeechAPI(distance, type, markerCoords);
             return;
         }
         
@@ -3426,7 +3426,7 @@
                     audio.volume = 1.0;
                     audio.play().catch(e => {
                         console.warn('Не удалось воспроизвести MP3:', e);
-                        useWebSpeechAPI(distance, type);
+                        useWebSpeechAPI(distance, type, markerCoords);
                     });
                     console.log(`🔊 Проигрывается: ${audioFile}`);
                     return;
@@ -3442,7 +3442,81 @@
     /**
      * Использует Web Speech API как fallback (с новым текстом озвучки)
      */
-    function useWebSpeechAPI(distance, type) {
+    const TTS_STREET_CACHE = new Map();
+    async function getStreetForCoords(lat, lon) {
+        const a = Number(lat);
+        const b = Number(lon);
+        if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+        if (!window.ymaps || !ymaps.geocode) return null;
+
+        const key = `${a.toFixed(4)},${b.toFixed(4)}`;
+        const cached = TTS_STREET_CACHE.get(key);
+        if (cached) return cached;
+
+        try {
+            const res = await ymaps.geocode([a, b]);
+            const obj = res?.geoObjects?.get?.(0);
+            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
+            if (!line) return null;
+
+            const parts = line.split(',').map(s => s.trim()).filter(Boolean);
+            let street = parts.length ? parts[parts.length - 1] : line;
+            let streetHint = '';
+            for (let i = parts.length - 1; i >= 0; i--) {
+                const p = parts[i];
+                if (/улиц|просп|пр\.|бульвар|шоссе|переулок|пл\.|площад|набереж/i.test(p)) {
+                    streetHint = p;
+                    break;
+                }
+            }
+            if (streetHint) street = streetHint;
+
+            // Чистим частые приставки/суффиксы
+            street = street
+                .replace(/^улица\s+/i, '')
+                .replace(/\s+улица$/i, '')
+                .replace(/^проспект\s+/i, 'просп. ')
+                .replace(/^просп\.\s+/i, 'просп. ')
+                .replace(/^бульвар\s+/i, 'бульв. ');
+
+            // Кэшируем на сессию
+            TTS_STREET_CACHE.set(key, street);
+            return street;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function formatDistanceRuPhrase(distanceMeters) {
+        const d = Number(distanceMeters);
+        if (!Number.isFinite(d)) return '';
+        let distancePretty;
+        if (d > 1000) distancePretty = Math.round(d / 100) * 100;
+        else if (d > 100) distancePretty = Math.round(d / 10) * 10;
+        else distancePretty = Math.round(d);
+
+        if (distancePretty >= 1000) {
+            const km = (distancePretty / 1000);
+            const kmText = km % 1 === 0 ? String(km) : km.toFixed(1);
+            return `через ${kmText} км`;
+        }
+
+        const wordMap = {
+            100: 'сто',
+            200: 'двести',
+            300: 'триста',
+            400: 'четыреста',
+            500: 'пятьсот',
+            600: 'шестьсот',
+            700: 'семьсот',
+            800: 'восемьсот',
+            900: 'девятьсот'
+        };
+        const w = wordMap[distancePretty];
+        return w ? `через ${w} метров` : `через ${distancePretty} метров`;
+    }
+
+    async function useWebSpeechAPI(distance, type, markerCoords = null) {
         if (!window.speechSynthesis) {
             console.warn('Web Speech API не поддерживается');
             console.warn('Попробуйте проверить браузер, возможно, нужен Chrome, Edge или Safari');
@@ -3481,35 +3555,36 @@
             }
         }
         
-        // Округляем расстояние
-        let distancePretty;
-        if (distance > 1000) {
-            distancePretty = Math.round(distance / 100) * 100;
-        } else if (distance > 100) {
-            distancePretty = Math.round(distance / 10) * 10;
-        } else {
-            distancePretty = Math.round(distance);
-        }
+        const distPhrase = formatDistanceRuPhrase(distance);
         
         let text;
         const messageByType = {
-            dps: `Впереди пост ДПС через ${distancePretty} метров. Соблюдайте правила и будьте внимательны.`,
-            patrol: `Впереди дорожный рейд через ${distancePretty} метров. Двигайтесь спокойно и без нарушений.`,
-            specbat: `Впереди усиленный контроль (спецбат) через ${distancePretty} метров. Соблюдайте требования инспекторов.`,
-            motobat: `Впереди патруль мотобата через ${distancePretty} метров. Снизьте скорость и держите дистанцию.`,
-            cargo_control: `Впереди грузовой контроль через ${distancePretty} метров. Проверьте документы и параметры груза.`,
-            camera: `Впереди участок наблюдения через ${distancePretty} метров. Будьте внимательны.`,
-            dtp: `Впереди ДТП через ${distancePretty} метров. Снизьте скорость и соблюдайте дистанцию.`,
-            works: `Впереди дорожные работы через ${distancePretty} метров. Двигайтесь внимательно.`,
-            sos: `Впереди SOS-запрос помощи через ${distancePretty} метров. При возможности окажите поддержку.`,
-            danger: `Впереди опасность на дороге через ${distancePretty} метров. Будьте особенно осторожны.`,
-            traffic_jam: `Впереди пробка через ${distancePretty} метров. По возможности выберите объезд.`
+            dps: `Пост ДПС ${distPhrase}.`,
+            patrol: `Дорожный рейд ${distPhrase}.`,
+            specbat: `Спецполк ${distPhrase}.`,
+            motobat: `Патруль мотобата ${distPhrase}.`,
+            cargo_control: `Грузовой контроль ${distPhrase}.`,
+            camera: `Участок наблюдения ${distPhrase}.`,
+            dtp: `ДТП ${distPhrase}.`,
+            works: `Дорожные работы ${distPhrase}.`,
+            sos: `SOS ${distPhrase}.`,
+            danger: `Опасность ${distPhrase}.`,
+            traffic_jam: `Пробка ${distPhrase}.`
         };
 
+        // Шаблон 1: [Тип] + [Улица] + [Расстояние] (для ДПС/Спецполк)
+        if ((type === 'dps' || type === 'specbat') && markerCoords && Array.isArray(markerCoords) && markerCoords.length >= 2) {
+            const street = await getStreetForCoords(Number(markerCoords[0]), Number(markerCoords[1]));
+            if (street) {
+                const typeLabel = type === 'specbat' ? 'Спецполк' : 'ДПС';
+                text = `${typeLabel} на ${street}, ${distPhrase}.`;
+            }
+        }
+
         if (voiceStyle === 'cheeky') {
-            text = messageByType[type] || `Впереди дорожное событие через ${distancePretty} метров. Будьте внимательны.`;
+            text = messageByType[type] || `Дорожное событие ${distPhrase}.`;
         } else {
-            text = messageByType[type] || `Впереди дорожное событие через ${distancePretty} метров. Будьте внимательны.`;
+            text = messageByType[type] || `Дорожное событие ${distPhrase}.`;
         }
         
         // Отменяем предыдущую речь если есть
@@ -3545,7 +3620,7 @@
             if (!userCoords || userCoords.length < 2) return;
             if (proximityRequiresFollow && !autoFollow) return;
 
-            // Поддерживаем разные форматы координат маркера: coords: [lat,lon] или latitude/longitude
+            // Поддерживаем разные форматы координат маркера: coords: [lat,lon] (основной) или latitude/longitude (legacy)
             let mLat = null, mLon = null;
             if (marker.coords && Array.isArray(marker.coords) && marker.coords.length >= 2) {
                 // Некоторые маркеры хранят координаты в виде [lon, lat] или [lat, lon] — попробуем угадать.
@@ -3604,13 +3679,13 @@
 
         // Первое уведомление: зона предупреждения
         if (distance >= warningMin && distance <= warningMax && currentNotification !== 'far') {
-            speakWarning(distance, marker.type, marker.comment);
+            speakWarning(distance, marker.type, marker.comment, [mLat, mLon]);
             distanceNotifications.set(markerId, 'far');
             console.log(`📍 Первое уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
         }
         // Второе уведомление: ближняя зона
         else if (distance < nearThreshold && currentNotification !== 'near') {
-            speakWarning(distance, marker.type, marker.comment);
+            speakWarning(distance, marker.type, marker.comment, [mLat, mLon]);
             distanceNotifications.set(markerId, 'near');
             console.log(`📍 Второе уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
         }
