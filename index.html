@@ -7262,21 +7262,24 @@
                 token = refreshed || localStorage.getItem('sb_jwt') || '';
             }
 
-            // Пишем напрямую в таблицу (идемпотентно: повтор не создаст дубль)
-            const { error } = await _sb.from('sos_enroute').upsert([
-                {
-                    marker_id: Number(markerId),
-                    user_id: String(uid)
-                }
-            ], { onConflict: 'marker_id,user_id', ignoreDuplicates: true });
+            if (!token) {
+                alert('Ошибка: нет токена авторизации');
+                return;
+            }
 
-            if (error) {
-                const msg = String(error?.message || error || 'Ошибка');
-                if (/does not exist|relation.*sos_enroute/i.test(msg)) {
-                    alert('⚠️ Функция "Я в пути" ещё не включена в базе. Запусти SQL: sos_enroute_setup.sql');
-                    return;
-                }
-                alert('Ошибка: ' + msg);
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/sos-enroute?action=add`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ markerId: Number(markerId) })
+            });
+
+            if (!resp.ok) {
+                let txt = '';
+                try { txt = await resp.text(); } catch(e) { txt = ''; }
+                alert('Ошибка: ' + (txt || String(resp.status)));
                 return;
             }
 
@@ -8355,48 +8358,54 @@
             }
         }
 
-        // SOS: кто "в пути" (подгружаем пачкой для всех SOS-меток)
+        // SOS: кто "в пути" (Edge Function, чтобы не упираться в RLS таблицы)
         const sosEnrouteByMarker = {}; // marker_id -> user_id[]
         const sosResponderNames = {}; // user_id -> name
         try {
-            const sosIds = activeMarkers.filter(x => String(x?.type) === 'sos').map(x => Number(x?.id)).filter(n => Number.isFinite(n) && n > 0);
-            if (sosIds.length > 0) {
-                const { data: enrouteRows, error: enrouteErr } = await _sb
-                    .from('sos_enroute')
-                    .select('marker_id,user_id,created_at')
-                    .in('marker_id', sosIds)
-                    .order('created_at', { ascending: false })
-                    .limit(2000);
+            const sosIds = activeMarkers
+                .filter(x => String(x?.type) === 'sos')
+                .map(x => Number(x?.id))
+                .filter(n => Number.isFinite(n) && n > 0);
 
-                if (!enrouteErr && Array.isArray(enrouteRows)) {
-                    const responderIds = new Set();
-                    enrouteRows.forEach(r => {
-                        const mid = Number(r.marker_id);
-                        const rid = String(r.user_id || '').trim();
-                        if (!Number.isFinite(mid) || mid <= 0 || !rid) return;
-                        if (!sosEnrouteByMarker[mid]) sosEnrouteByMarker[mid] = [];
-                        if (!sosEnrouteByMarker[mid].includes(rid)) sosEnrouteByMarker[mid].push(rid);
-                        responderIds.add(rid);
+            if (sosIds.length > 0) {
+                let token = localStorage.getItem('sb_jwt') || '';
+                if (!token) {
+                    const refreshed = await ensureSupabaseAuth();
+                    token = refreshed || localStorage.getItem('sb_jwt') || '';
+                }
+
+                if (token) {
+                    const resp = await fetch(`${SUPABASE_URL}/functions/v1/sos-enroute?action=list`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ markerIds: sosIds })
                     });
 
-                    const ids = [...responderIds];
-                    if (ids.length) {
-                        try {
-                            const { data: drivers } = await _sb.from('drivers').select('user_id,name').in('user_id', ids);
-                            if (Array.isArray(drivers)) {
-                                drivers.forEach(d => {
-                                    const id = String(d.user_id || '').trim();
-                                    if (!id) return;
-                                    sosResponderNames[id] = String(d.name || '').trim() || id;
-                                });
-                            }
-                        } catch(e) {}
+                    if (resp.ok) {
+                        const payload = await resp.json();
+                        const byMarker = payload?.byMarker || {};
+
+                        Object.keys(byMarker).forEach(midStr => {
+                            const mid = Number(midStr);
+                            const list = Array.isArray(byMarker[midStr]) ? byMarker[midStr] : [];
+                            if (!Number.isFinite(mid) || mid <= 0) return;
+
+                            sosEnrouteByMarker[mid] = [];
+                            list.forEach(item => {
+                                const rid = String(item?.userId || '').trim();
+                                const name = String(item?.name || '').trim();
+                                if (!rid) return;
+                                if (!sosEnrouteByMarker[mid].includes(rid)) sosEnrouteByMarker[mid].push(rid);
+                                if (name) sosResponderNames[rid] = name;
+                            });
+                        });
                     }
                 }
             }
-        } catch (e) {
-            // ignore (table may not exist yet)
-        }
+        } catch (e) {}
 
         // Для каждого маркера создаем объект на карте
         activeMarkers.forEach(m => {
