@@ -277,6 +277,10 @@
         .markers-counter { font-size: 11px; color: var(--gray); margin-bottom: 10px; text-align: center; padding: 8px; background: #f9f9f9; border-radius: 10px; }
         .counter-item { display: inline-block; margin: 0 6px; }
         .counter-item span:first-child { font-weight: 700; color: var(--blue); }
+
+        /* Погодный виджет (1 строка) */
+        .weather-widget { font-size: 11px; color: var(--gray); margin-bottom: 10px; text-align: center; padding: 8px; background: #f9f9f9; border-radius: 10px; }
+        .weather-widget .weather-warn { font-weight: 800; }
         .main-btn { width: 100%; background: var(--blue); color: white; border: none; border-radius: 16px; padding: 14px; font-size: 15px; font-weight: 800; cursor: pointer; }
         .b-cont { font-size: 14px; line-height: 1.4; min-width: 170px; }
         .b-poll { display: flex; gap: 8px; margin-top: 10px; }
@@ -1485,6 +1489,7 @@
             <button class="action-card-close" onclick="toggleActionCard()">✕</button>
             <span class="addr-label" id="addr-text">Определение адреса...</span>
             <div class="markers-counter" id="markersCounter">Загрузка...</div>
+            <div class="weather-widget" id="weatherWidget">🌦 Погода: загрузка...</div>
             <div class="type-selector">
                 <div class="type-tabs">
                     <button class="type-tab-btn active" data-category="patrol" onclick="switchTypeCategory('patrol', this)">🛡️ ПАТРУЛЬ</button>
@@ -2584,6 +2589,48 @@
         }
     }
 
+    function buildWeatherWidgetLine(alert) {
+        const full = String(alert?.full_text || '');
+        const hazardText = String(alert?.hazard_text || '');
+
+        const t = full.match(/🌡\s*ТЕМПЕРАТУРА:\s*([+\-]?\d+)\s*°C/i)?.[1] || null;
+        const wind = full.match(/💨\s*ВЕТЕР:\s*(\d+)\s*км\/ч/i)?.[1] || null;
+        const vis = full.match(/👁\s*ВИДИМОСТЬ:\s*(\d+)\s*м/i)?.[1] || null;
+
+        const isIce = /ГОЛОЛЕД/i.test(hazardText) || /ГОЛОЛЕД/i.test(full);
+        const roadPart = isIce ? '⚠️ Гололёд' : (/✅\s*НОРМА/i.test(hazardText) ? '✅ Норма' : '');
+
+        const parts = [];
+        parts.push(`🌦 ${t !== null ? `${t}°C` : '—'}`);
+        if (wind !== null) parts.push(`💨 ${wind} км/ч`);
+        if (vis !== null) parts.push(`👁 ${vis} м`);
+        if (roadPart) parts.push(`<span class="weather-warn">${roadPart}</span>`);
+
+        return parts.join(' • ');
+    }
+
+    async function syncWeatherWidget() {
+        const el = document.getElementById('weatherWidget');
+        if (!el) return;
+
+        try {
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/mchs-auto?action=feed&limit=3`, { method: 'GET' });
+            if (!resp.ok) return;
+            const payload = await resp.json();
+            const alerts = Array.isArray(payload?.alerts) ? payload.alerts : [];
+
+            const weather = alerts.find(a => /open-meteo\.com/i.test(String(a?.source_link || '')) || /\bпогода\b/i.test(String(a?.title || '')));
+            if (!weather) {
+                el.textContent = '🌦 Погода: нет данных';
+                return;
+            }
+
+            el.innerHTML = buildWeatherWidgetLine(weather);
+        } catch (e) {
+            // Не шумим — виджет не критичен
+        }
+    }
+
     async function syncNearbyImportantMarkersToNotifications({ silent = true } = {}) {
         try {
             const sinceIso = new Date(Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS).toISOString();
@@ -2630,6 +2677,7 @@
 
     async function syncImportantNotificationsFeed({ silent = true } = {}) {
         await syncMchsFeedToNotifications({ silent });
+        await syncWeatherWidget();
         await syncNearbyImportantMarkersToNotifications({ silent });
         pruneOldMchsNotifications();
     }
@@ -7199,6 +7247,49 @@
         }
     };
 
+    // SOS: отметить "Я в пути" (кто едет помогать)
+    window.sosEnroute = async (markerId) => {
+        if (!uid) {
+            alert('Пожалуйста, авторизуйтесь через Telegram');
+            const overlay = document.getElementById('tgAuthOverlay'); if (overlay) overlay.style.display = 'flex';
+            return;
+        }
+
+        try {
+            let token = localStorage.getItem('sb_jwt') || '';
+            if (!token) {
+                const refreshed = await ensureSupabaseAuth();
+                token = refreshed || localStorage.getItem('sb_jwt') || '';
+            }
+
+            // Пишем напрямую в таблицу (RLS проверит, что user_id совпадает с sub)
+            const { error } = await _sb.from('sos_enroute').upsert([
+                {
+                    marker_id: Number(markerId),
+                    user_id: String(uid),
+                    created_at: new Date().toISOString()
+                }
+            ], { onConflict: 'marker_id,user_id' });
+
+            if (error) {
+                const msg = String(error?.message || error || 'Ошибка');
+                if (/does not exist|relation.*sos_enroute/i.test(msg)) {
+                    alert('⚠️ Функция "Я в пути" ещё не включена в базе. Запусти SQL: sos_enroute_setup.sql');
+                    return;
+                }
+                alert('Ошибка: ' + msg);
+                return;
+            }
+
+            alert('🚑 Отмечено! Вы в пути.');
+            try { if (myMap && myMap.balloon) myMap.balloon.close(); } catch(e) {}
+            loadMarkers();
+        } catch (e) {
+            console.warn('sosEnroute error:', e?.message || e);
+            alert('Ошибка: ' + (e?.message || e));
+        }
+    };
+
     // Функция удаления маркера (только для автора)
     window.delMarker = async (id) => {
         if (confirm("Удалить вашу метку?")) {
@@ -8265,6 +8356,49 @@
             }
         }
 
+        // SOS: кто "в пути" (подгружаем пачкой для всех SOS-меток)
+        const sosEnrouteByMarker = {}; // marker_id -> user_id[]
+        const sosResponderNames = {}; // user_id -> name
+        try {
+            const sosIds = activeMarkers.filter(x => String(x?.type) === 'sos').map(x => Number(x?.id)).filter(n => Number.isFinite(n) && n > 0);
+            if (sosIds.length > 0) {
+                const { data: enrouteRows, error: enrouteErr } = await _sb
+                    .from('sos_enroute')
+                    .select('marker_id,user_id,created_at')
+                    .in('marker_id', sosIds)
+                    .order('created_at', { ascending: false })
+                    .limit(2000);
+
+                if (!enrouteErr && Array.isArray(enrouteRows)) {
+                    const responderIds = new Set();
+                    enrouteRows.forEach(r => {
+                        const mid = Number(r.marker_id);
+                        const rid = String(r.user_id || '').trim();
+                        if (!Number.isFinite(mid) || mid <= 0 || !rid) return;
+                        if (!sosEnrouteByMarker[mid]) sosEnrouteByMarker[mid] = [];
+                        if (!sosEnrouteByMarker[mid].includes(rid)) sosEnrouteByMarker[mid].push(rid);
+                        responderIds.add(rid);
+                    });
+
+                    const ids = [...responderIds];
+                    if (ids.length) {
+                        try {
+                            const { data: drivers } = await _sb.from('drivers').select('user_id,name').in('user_id', ids);
+                            if (Array.isArray(drivers)) {
+                                drivers.forEach(d => {
+                                    const id = String(d.user_id || '').trim();
+                                    if (!id) return;
+                                    sosResponderNames[id] = String(d.name || '').trim() || id;
+                                });
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+        } catch (e) {
+            // ignore (table may not exist yet)
+        }
+
         // Для каждого маркера создаем объект на карте
         activeMarkers.forEach(m => {
             // Получаем ID автора в начале цикла
@@ -8313,6 +8447,21 @@
                 ? adminConfirmHtml
                 : `<button class="b-del" style="background: #ff9500; color:white;" onclick="window.reportUser(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')" title="Пожаловаться на автора метки">⚠️ Пожаловаться</button>`;
 
+            const sosEnrouteIds = (String(m.type) === 'sos') ? (sosEnrouteByMarker[Number(m.id)] || []) : [];
+            const sosEnrouteCount = Array.isArray(sosEnrouteIds) ? sosEnrouteIds.length : 0;
+            const sosEnrouteNames = (sosEnrouteIds || [])
+                .map(id => sosResponderNames[id] || id)
+                .filter(Boolean)
+                .slice(0, 6);
+            const sosEnrouteNamesText = sosEnrouteNames.length ? ` — ${sosEnrouteNames.join(', ')}` : '';
+            const sosEnrouteInfoHtml = (String(m.type) === 'sos')
+                ? `<div style="margin-top: 8px; font-size: 11px; color: #666;">🚑 В пути: ${sosEnrouteCount}${sosEnrouteNamesText}</div>`
+                : '';
+            const canEnroute = String(m.type) === 'sos' && uid && String(uid) !== String(m.author_id);
+            const sosEnrouteBtnHtml = canEnroute
+                ? `<button class="b-poll-btn" onclick="window.sosEnroute(${m.id})" style="flex: 1; background: var(--blue); color: white; font-weight: 900;">🚑 Я в пути</button>`
+                : '';
+
             const bHtml = `<div class="b-cont">
                 <div style="font-size:13px; margin-bottom:6px; color:#222; cursor: ${window.isAdmin ? 'pointer' : 'default'}; padding: 4px; border-radius: 4px; transition: all 0.2s;" onmouseover="${window.isAdmin ? `this.style.background='#f0f0f5'; this.style.transform='scale(1.02)'` : ''}" onmouseout="${window.isAdmin ? `this.style.background=''; this.style.transform='scale(1)'` : ''}" onclick="${window.isAdmin ? `window.showUserModeratorMenuFromMarker(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')` : ''}">${authorNameHtml} ${authorBadgesHtml}</div>
                 ${adminOnlineHtml}
@@ -8326,7 +8475,9 @@
                     <button class="b-poll-btn" onclick="window.confirmMarker(${m.id}, 'stay')" style="flex: 1; background: #34c759; color: white; font-weight: bold;">✅ Стоят</button>
                     <button class="b-poll-btn" onclick="window.confirmMarker(${m.id}, 'leave')" style="flex: 1; background: #ff3b30; color: white; font-weight: bold;">🚗 Уехали</button>
                 </div>
+                ${sosEnrouteBtnHtml ? `<div style="margin-top: 8px; display: flex; gap: 5px;">${sosEnrouteBtnHtml}</div>` : ''}
                 ${confirmationBar}
+                ${sosEnrouteInfoHtml}
                 ${isOwner ? `<button class="b-del" onclick="window.delMarker(${m.id})">Удалить</button>` : ''}
                 ${reportButtonHtml}
             </div>`;
