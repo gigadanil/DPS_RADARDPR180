@@ -7262,14 +7262,13 @@
                 token = refreshed || localStorage.getItem('sb_jwt') || '';
             }
 
-            // Пишем напрямую в таблицу (RLS проверит, что user_id совпадает с sub)
+            // Пишем напрямую в таблицу (идемпотентно: повтор не создаст дубль)
             const { error } = await _sb.from('sos_enroute').upsert([
                 {
                     marker_id: Number(markerId),
-                    user_id: String(uid),
-                    created_at: new Date().toISOString()
+                    user_id: String(uid)
                 }
-            ], { onConflict: 'marker_id,user_id' });
+            ], { onConflict: 'marker_id,user_id', ignoreDuplicates: true });
 
             if (error) {
                 const msg = String(error?.message || error || 'Ошибка');
