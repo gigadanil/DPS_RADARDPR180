@@ -1541,6 +1541,7 @@
     function clearSupabaseAuth() {
         closeRealtimeChannels();
         _sb = createSupabaseClient();
+        try { window._sb = _sb; } catch(e) {}
         try {
             localStorage.removeItem('sb_jwt');
             localStorage.removeItem('sb_jwt_exp');
@@ -1554,6 +1555,8 @@
 
     // Клиент Supabase для работы с БД
     let _sb = createSupabaseClient();
+    // Удобно для диагностики из DevTools: в некоторых WebView глобальный `let` не виден как переменная.
+    try { window._sb = _sb; } catch(e) {}
 
     function setSupabaseAuth(token) {
         if (!token || typeof token !== 'string' || token.split('.').length !== 3) {
@@ -1562,6 +1565,7 @@
         }
         closeRealtimeChannels();
         _sb = createSupabaseClient(token);
+        try { window._sb = _sb; } catch(e) {}
         initRealtimeChannels();
     }
 
@@ -2965,6 +2969,78 @@
         }
     }
 
+    function speakSmartHintText(text) {
+        const t = String(text || '').trim();
+        if (!t) return;
+        try { stopWarningOutput(); } catch(e) {}
+        if (!window.speechSynthesis) return;
+        try {
+            if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(t);
+            utterance.lang = 'ru-RU';
+            utterance.rate = 0.92;
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+            window.speechSynthesis.speak(utterance);
+        } catch (e) {
+            console.warn('Не удалось озвучить подсказку:', e?.message || e);
+        }
+    }
+
+    let lastSmartHintCheckAt = 0;
+    async function maybeCheckSmartHint(lat, lon) {
+        try {
+            if (!uid) return;
+            if (!gpsReliable) return;
+            const speed = Number(userSpeedKmh) || 0;
+            if (speed < 10) return;
+
+            const now = Date.now();
+            if (now - lastSmartHintCheckAt < 45000) return;
+            lastSmartHintCheckAt = now;
+
+            let token = localStorage.getItem('sb_jwt') || '';
+            if (!token) {
+                const refreshed = await ensureSupabaseAuth();
+                token = refreshed || localStorage.getItem('sb_jwt') || '';
+            }
+            if (!token) return;
+
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/smart-hints?action=check`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({ lat: Number(lat), lon: Number(lon), ts_ms: now })
+            });
+
+            if (!resp.ok) return;
+            const data = await resp.json().catch(()=>null);
+            const hint = data?.hint;
+            if (!hint || !hint.key) return;
+
+            const hintKey = String(hint.key || '').trim();
+            if (!hintKey) return;
+
+            const lastKey = String(localStorage.getItem('last_smart_hint_key') || '').trim();
+            const lastTs = Number(localStorage.getItem('last_smart_hint_ts') || 0);
+            if (lastKey === hintKey && (now - lastTs) < 60 * 60 * 1000) return; // 1h cooldown per same hint
+
+            localStorage.setItem('last_smart_hint_key', hintKey);
+            localStorage.setItem('last_smart_hint_ts', String(now));
+
+            showInAppNotification({
+                title: String(hint.title || '🧠 Подсказка'),
+                body: String(hint.body || ''),
+                priority: 'high'
+            });
+            speakSmartHintText(String(hint.voice || ''));
+        } catch (e) {
+            console.warn('maybeCheckSmartHint error:', e?.message || e);
+        }
+    }
+
     function setActiveProximityMarker(markerId, markerType, markerCoords, distance) {
         if (!markerId) return;
         if (!markerCoords || !Array.isArray(markerCoords) || markerCoords.length < 2) return;
@@ -3453,6 +3529,9 @@
                     // Обновляем маркер на карте (включая визуализацию скорости/ачивок/стиля)
                     updateUserLocationMarker();
                     updateSpeedometerUI(userSpeedKmh);
+
+                    // Интеллектуальные подсказки по истории меток ДПС/Спецбат
+                    maybeCheckSmartHint(latitude, longitude);
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
