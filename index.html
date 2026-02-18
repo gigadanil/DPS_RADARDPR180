@@ -366,10 +366,12 @@
         .chat-btn:active { transform: scale(0.95); }
         .fab-chat { bottom: calc(100px + var(--safe-area-inset-bottom)); }
         .fab-heatmap { bottom: calc(220px + var(--safe-area-inset-bottom)); }
+        .fab-heatmap-patrol { bottom: calc(160px + var(--safe-area-inset-bottom)); }
         .fab-notif { bottom: calc(280px + var(--safe-area-inset-bottom)); }
         .fab-activity { bottom: calc(340px + var(--safe-area-inset-bottom)); }
         @media (max-height: 760px) {
             .fab-heatmap { bottom: calc(205px + var(--safe-area-inset-bottom)); }
+            .fab-heatmap-patrol { bottom: calc(150px + var(--safe-area-inset-bottom)); }
             .fab-notif { bottom: calc(260px + var(--safe-area-inset-bottom)); }
             .fab-activity { bottom: calc(315px + var(--safe-area-inset-bottom)); }
         }
@@ -698,7 +700,7 @@
     <!-- Кнопка тепловой карты -->
     <button class="chat-btn heatmap-toggle-btn fab-heatmap" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" title="Тепловая карта ДТП">🗂️🔥</button>
     <!-- Зоркий глаз: тепловая карта "засад" ДПС/Спецбат -->
-    <button class="chat-btn heatmap-toggle-btn fab-heatmap" id="patrolHeatmapBtn" onclick="togglePatrolHeatmap()" title="Зоркий глаз: засады ДПС/Спецбат">👁️</button>
+    <button class="chat-btn heatmap-toggle-btn fab-heatmap-patrol" id="patrolHeatmapBtn" onclick="togglePatrolHeatmap()" title="Зоркий глаз: засады ДПС/Спецбат">👁️</button>
     <!-- Кнопка уведомлений -->
     <button class="chat-btn notif-btn fab-notif" onclick="openNotificationsDrawer()" title="Уведомления">
         🔔
