@@ -2041,7 +2041,7 @@
 
         const { data, error } = await _sb
             .from('markers')
-            .select('id,type,ts,coords,latitude,longitude,leave_confirmations')
+            .select('id,type,ts,coords,leave_confirmations')
             .eq('type', 'dtp')
             .order('ts', { ascending: false })
             .limit(DTP_HEATMAP_MAX_POINTS);
@@ -2640,7 +2640,7 @@
             const sinceIso = new Date(Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS).toISOString();
             const { data: markers, error } = await _sb
                 .from('markers')
-                .select('id,type,ts,comment,coords,latitude,longitude,leave_confirmations,author_id')
+                .select('id,type,ts,comment,coords,leave_confirmations,author_id')
                 .in('type', ['sos', 'dtp'])
                 .gte('ts', sinceIso)
                 .order('ts', { ascending: false })
@@ -8585,9 +8585,12 @@
             
             // Очищаем уведомления для маркеров которые уже далеко (более 800м)
             if (distanceNotifications.has(m.id)) {
-                const distance = calculateDistance(userCoords[0], userCoords[1], m.latitude, m.longitude);
-                if (distance > 800) {
-                    distanceNotifications.delete(m.id);
+                const mc = extractMarkerCoordsForNotif(m);
+                if (mc) {
+                    const distance = calculateDistance(userCoords[0], userCoords[1], mc.lat, mc.lon);
+                    if (distance > 800) {
+                        distanceNotifications.delete(m.id);
+                    }
                 }
             }
         });
