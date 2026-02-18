@@ -3397,6 +3397,13 @@
     async function speakWarning(distance, type, comment) {
         if (!voiceStyle) voiceStyle = 'standard';
         stopWarningOutput();
+
+        // v2: по умолчанию используем «живую» озвучку на лету (можно подставлять улицы/время/любые фразы).
+        // MP3 оставляем как запасной вариант (на случай, если Web Speech API недоступен).
+        if (window.speechSynthesis) {
+            useWebSpeechAPI(distance, type);
+            return;
+        }
         
         // Определяем категорию расстояния
         const distanceCategory = distance < 200 ? 'close' : 'far';
@@ -3429,9 +3436,7 @@
             console.warn(`⚠️ Ошибка загрузки ${audioFile}:`, e?.message);
         }
         
-        // Fallback: Web Speech API
-        console.log('📢 Используем Web Speech API вместо MP3');
-        useWebSpeechAPI(distance, type);
+        // Если синтез речи недоступен, и MP3 тоже не удалось — просто молча выходим.
     }
     
     /**
@@ -3442,6 +3447,38 @@
             console.warn('Web Speech API не поддерживается');
             console.warn('Попробуйте проверить браузер, возможно, нужен Chrome, Edge или Safari');
             return;
+        }
+
+        // Пытаемся выбрать русский голос (если он установлен в системе)
+        try {
+            if (!window.__ttsVoicesReady) {
+                window.__ttsVoicesReady = true;
+                try {
+                    // Инициируем загрузку списка голосов
+                    window.speechSynthesis.getVoices();
+                } catch(e) {}
+                try {
+                    window.speechSynthesis.onvoiceschanged = () => {
+                        try { window.__ttsVoices = window.speechSynthesis.getVoices() || []; } catch(e) {}
+                    };
+                } catch(e) {}
+                try { window.__ttsVoices = window.speechSynthesis.getVoices() || []; } catch(e) {}
+            }
+        } catch (e) {}
+
+        function pickRussianVoice() {
+            try {
+                const voices = (window.__ttsVoices && Array.isArray(window.__ttsVoices))
+                    ? window.__ttsVoices
+                    : (window.speechSynthesis.getVoices() || []);
+                const ru = voices.filter(v => String(v?.lang || '').toLowerCase().startsWith('ru'));
+                if (!ru.length) return null;
+                // Стараемся выбрать наиболее "приятный" (часто Google/Яндекс/Windows)
+                const preferred = ru.find(v => /google|yandex|windows|microsoft/i.test(String(v?.name || '')));
+                return preferred || ru[0];
+            } catch (e) {
+                return null;
+            }
         }
         
         // Округляем расстояние
@@ -3482,6 +3519,8 @@
         
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'ru-RU';
+        const ruVoice = pickRussianVoice();
+        if (ruVoice) utterance.voice = ruVoice;
         utterance.rate = 0.9;  // Немного медленнее
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
