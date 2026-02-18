@@ -26,31 +26,43 @@
             -webkit-touch-callout: none;
         }
         
+        body, html {
+            position: fixed;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        
+        /* ============= ЭКРАН ПРИВЕТСТВИЯ ============= */
         #splashScreen {
             position: fixed;
-            inset: 0;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #007aff 0%, #0051d5 100%);
+            z-index: 10000;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            background: radial-gradient(circle at top, rgba(0, 122, 255, 0.35), rgba(0, 0, 0, 0.85));
-            z-index: 10000;
-            transition: opacity 0.35s ease, visibility 0.35s ease;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         }
-
+        
         #splashScreen.hidden {
             opacity: 0;
             visibility: hidden;
             pointer-events: none;
         }
-
+        
         .splash-logo {
-            width: min(320px, 60vw);
-            max-width: 360px;
-            animation: logoFadeIn 0.9s ease, logoPulse 2.5s ease-in-out infinite 1.3s;
+            width: 180px;
+            height: 180px;
+            margin-bottom: 30px;
+            animation: logoFadeIn 0.8s ease-out, logoPulse 2s ease-in-out infinite 1s;
+            filter: drop-shadow(0 10px 30px rgba(0,0,0,0.3));
         }
-
+        
         .splash-greeting {
             color: white;
             font-size: 24px;
@@ -363,151 +375,9 @@
             .fab-notif { bottom: calc(260px + var(--safe-area-inset-bottom)); }
             .fab-activity { bottom: calc(315px + var(--safe-area-inset-bottom)); }
         }
-        .settings-inline-btn {
-            min-width: 150px;
-            border: none;
-            border-radius: 14px;
-            padding: 10px 14px;
-            font-weight: 800;
-            font-size: 13px;
-            letter-spacing: 0.4px;
-            background: #111;
-            color: #fff;
-            cursor: pointer;
-            transition: background 0.2s ease, transform 0.1s ease;
-            text-transform: uppercase;
-        }
-        .settings-inline-btn.active {
-            background: linear-gradient(135deg, #0a7cff, #00c2ff);
-            box-shadow: 0 10px 24px rgba(0,122,255,0.28);
-        }
-        .settings-inline-btn:active {
-            transform: scale(0.97);
-        }
-        .settings-inline-btn.disabled,
-        .settings-inline-btn:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
         .notif-btn { background: #5856d6; }
         .notif-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; border: 2px solid #fff; display: none; padding: 0 4px; box-sizing: border-box; }
         .notif-toast-wrap { position: absolute; top: calc(58px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 1900; width: min(92vw, 440px); pointer-events: none; }
-        .settings-card {
-            background: #f8f8fb;
-            border-radius: 14px;
-            padding: 14px;
-            margin-bottom: 15px;
-            border: 1px solid #ededf5;
-        }
-        .settings-card-title {
-            font-size: 13px;
-            font-weight: 800;
-            color: #111;
-            margin-bottom: 10px;
-        }
-        .settings-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 12px;
-        }
-        .settings-row:last-child { margin-bottom: 0; }
-        .settings-row-text { flex: 1; }
-        .settings-row-title {
-            font-size: 13px;
-            font-weight: 700;
-            color: #000;
-        }
-        .settings-row-subtitle {
-            font-size: 11px;
-            color: #7a7a85;
-            display: block;
-            line-height: 1.4;
-        }
-        .settings-chip-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        .settings-chip {
-            flex: 1;
-            min-width: 120px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid #d7d7e3;
-            background: #fff;
-            font-size: 12px;
-            font-weight: 700;
-            color: #1c1c1e;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .settings-chip.active {
-            border-color: #34c759;
-            background: #e9fbef;
-            color: #0b7d2a;
-            box-shadow: inset 0 0 0 1px rgba(52,199,89,0.3);
-        }
-        .settings-chip:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
-        .settings-chip:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .settings-range {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex: 1;
-        }
-        .settings-range input[type="range"] {
-            flex: 1;
-        }
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 46px;
-            height: 26px;
-        }
-        .switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .switch-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #cfcfd9;
-            transition: 0.2s;
-            border-radius: 26px;
-        }
-        .switch-slider:before {
-            position: absolute;
-            content: "";
-            height: 22px;
-            width: 22px;
-            left: 2px;
-            bottom: 2px;
-            background-color: white;
-            transition: 0.2s;
-            border-radius: 50%;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-        }
-        .switch input:checked + .switch-slider {
-            background-color: #34c759;
-        }
-        .switch input:checked + .switch-slider:before {
-            transform: translateX(20px);
-        }
         .notif-toast { background: rgba(17,17,17,0.95); color: #fff; border-radius: 12px; padding: 10px 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.25); font-size: 12px; margin-bottom: 8px; opacity: 0; transform: translateY(-8px); transition: all .2s ease; }
         .notif-toast.visible { opacity: 1; transform: translateY(0); }
         .notif-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid #ececf1; border-radius: 12px; margin-bottom: 8px; background: #fff; cursor: pointer; }
@@ -519,44 +389,6 @@
         .heatmap-toggle-btn { background: #ff9f0a; font-size: 18px; }
         .heatmap-toggle-btn.active { background: #ff3b30; box-shadow: 0 0 0 3px rgba(255,59,48,0.18), 0 8px 22px rgba(255,59,48,0.28); }
         .activity-btn { background: #007aff; font-size: 18px; }
-        .dark-mode-shade {
-            position: fixed;
-            inset: 0;
-            background: #000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.25s ease;
-            z-index: 4000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .dark-mode-shade.active {
-            opacity: 0.94;
-            pointer-events: auto;
-        }
-        .dark-mode-message {
-            text-align: center;
-            color: rgba(255,255,255,0.85);
-            line-height: 1.6;
-            font-size: 14px;
-            background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 18px;
-            padding: 22px 26px;
-            max-width: 280px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.45);
-        }
-        .dark-mode-message button {
-            margin-top: 14px;
-            border: 1px solid rgba(255,255,255,0.25);
-            border-radius: 12px;
-            padding: 10px 24px;
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            font-weight: 700;
-            cursor: pointer;
-        }
         #mapDimmingOverlay {
             position: absolute;
             inset: 0;
@@ -875,13 +707,6 @@
         <span id="notifUnreadBadge" class="notif-badge">0</span>
     </button>
     <div id="inAppNotifWrap" class="notif-toast-wrap"></div>
-    <div id="darkModeShade" class="dark-mode-shade">
-        <div class="dark-mode-message">
-            <div style="font-size:16px; font-weight:800; margin-bottom:6px;">🌙 Темный режим</div>
-            <div>Экран приглушен, радар и голосовые подсказки продолжают работать.</div>
-            <button type="button" onclick="toggleDarkMode(false)">Включить экран</button>
-        </div>
-    </div>
     
     <!-- Модальное окно чата -->
     <div id="chatModal" class="modal">
@@ -1494,51 +1319,19 @@
             <button class="main-btn" onclick="openRatingsModal()" style="margin-bottom: 10px; background: #34c759;">ГЛОБАЛЬНЫЙ УРОВЕНЬ ВЗАИМОВЫРУЧКИ</button>
             
             <!-- Настройки озвучки уведомлений -->
-            <div class="settings-card">
-                <div class="settings-card-title">🧠 Голосовой ассистент (ИИ)</div>
-                <div class="settings-row">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Голосовые уведомления</div>
-                        <span class="settings-row-subtitle">Озвучка радарных подсказок и советов ИИ.</span>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="voiceToggle" onchange="toggleVoiceNotifications(this.checked)">
-                        <span class="switch-slider"></span>
-                    </label>
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">🔊 Стиль озвучки уведомлений</div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="setVoiceStyle('standard')" id="voiceStyleStandard" class="main-btn" style="flex: 1; background: #34c759; padding: 10px; font-size: 12px; border-radius: 8px;">
+                        📢 Стандартный
+                    </button>
+                    <button onclick="setVoiceStyle('cheeky')" id="voiceStyleCheeky" class="main-btn" style="flex: 1; background: #9c9c9c; padding: 10px; font-size: 12px; border-radius: 8px;">
+                        😎 Дерзкий
+                    </button>
                 </div>
-                <div class="settings-row">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Громкость ассистента</div>
-                        <span class="settings-row-subtitle">Подстройте под музыку в машине.</span>
-                    </div>
-                    <div class="settings-range">
-                        <input type="range" id="voiceVolumeRange" min="30" max="100" value="80" oninput="setVoiceVolume(this.value)">
-                        <span class="settings-row-title" id="voiceVolumeValue">80%</span>
-                    </div>
+                <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
+                    <span id="voiceStyleDescription">Выбран: Стандартный стиль</span>
                 </div>
-                <div class="settings-row" style="margin-bottom: 6px;">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Выбор голоса</div>
-                        <span class="settings-row-subtitle">«Системный» доступен сразу, «Премиум» подготовлен под Яндекс-озвучку.</span>
-                    </div>
-                </div>
-                <div class="settings-chip-group">
-                    <button class="settings-chip" id="voiceStyleStandard" onclick="setVoiceStyle('standard')">🛰 Системный</button>
-                    <button class="settings-chip" id="voiceStyleCheeky" onclick="setVoiceStyle('cheeky')">✨ Премиум (эксперимент)</button>
-                </div>
-                <div class="settings-row-subtitle" id="voiceStyleDescription" style="text-align: center; margin-bottom: 10px;">Системный голос активен.</div>
-                <div class="settings-row" style="margin-bottom: 6px;">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Дистанция срабатывания</div>
-                        <span class="settings-row-subtitle">Когда предупреждать о постах ДПС.</span>
-                    </div>
-                </div>
-                <div class="settings-chip-group" id="warningDistancePresets">
-                    <button class="settings-chip" data-warning-distance="500" onclick="setWarningDistancePreset(500)">500 м</button>
-                    <button class="settings-chip" data-warning-distance="1000" onclick="setWarningDistancePreset(1000)">1 км</button>
-                    <button class="settings-chip" data-warning-distance="1500" onclick="setWarningDistancePreset(1500)">1.5 км</button>
-                </div>
-                <div class="settings-row-subtitle" style="text-align: center;">Текущее значение: <span id="warningDistanceLabel">800 м</span></div>
             </div>
 
             <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
@@ -1556,43 +1349,16 @@
                 </div>
             </div>
 
-            <div class="settings-card">
-                <div class="settings-card-title">⚡ Экран и энергия</div>
-                <div class="settings-row">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Радар на трассе</div>
-                        <span class="settings-row-subtitle">Включает GPS, голосовые оповещения и удержание экрана.</span>
-                    </div>
-                    <button type="button" class="settings-inline-btn" id="radarActionBtn" onclick="toggleRadar()" aria-pressed="false">🚦 ВКЛЮЧИТЬ</button>
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 8px;">🧭 Дистанция предупреждения</div>
+                <div style="font-size: 11px; color: var(--gray); margin-bottom: 8px; text-align: center;">
+                    <span id="warningDistanceLabel">800 м</span>
                 </div>
-                <div class="settings-row-subtitle" id="radarStatusText" style="margin-bottom: 10px;">Радар выключен.</div>
-                <div class="settings-row">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Тёмный режим</div>
-                        <span class="settings-row-subtitle">Приглушает экран, когда радар уже активен.</span>
-                    </div>
-                    <button type="button" class="settings-inline-btn disabled" id="darkModeToggleBtn" onclick="toggleDarkMode()" disabled>🌙 ТЕМНЫЙ РЕЖИМ</button>
-                </div>
-                <div class="settings-row-subtitle" id="radarStatusHint" style="margin-bottom: 12px;">Нажмите радар, чтобы включить GPS и подсказки.</div>
-                <div class="settings-row">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Режим «Не гаснуть»</div>
-                        <span class="settings-row-subtitle">При активном радаре удерживаем экран включённым.</span>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="wakeLockPrefToggle" onchange="toggleWakeLockPreference(this.checked)">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-                <div class="settings-row" style="margin-bottom: 0;">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Авто-темный режим</div>
-                        <span class="settings-row-subtitle">После 18:00 затемняет карту, чтобы не слепить в дороге.</span>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="autoDarkModeToggle" onchange="toggleAutoDarkMode(this.checked)">
-                        <span class="switch-slider"></span>
-                    </label>
+                <input id="warningDistanceRange" type="range" min="300" max="2000" step="100" value="800"
+                    oninput="setWarningDistance(this.value)"
+                    style="width: 100%;">
+                <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--gray); margin-top: 6px;">
+                    <span>300 м</span><span>2.0 км</span>
                 </div>
             </div>
             
@@ -2100,7 +1866,6 @@
     const NOTIF_FEED_SYNC_INTERVAL_MS = 5 * 60 * 1000;
     const CRITICAL_DTP_CONFIRMATIONS = 3;
     const PATROL_TYPES = new Set(['dps', 'patrol', 'specbat', 'motobat', 'cargo_control']);
-    const wakeLockSupported = 'wakeLock' in navigator;
     const TARGET_MIN_TOP_PX = 120;
     const TARGET_CARD_GAP_PX = 90;
     let dtpHeatmapEnabled = false;
@@ -2111,7 +1876,6 @@
     const DTP_HEATMAP_CACHE_MS = 2 * 60 * 1000;
     const DTP_HEATMAP_LOOKBACK_DAYS = 30;
     const DTP_HEATMAP_MAX_POINTS = 1200;
-    const AUTO_DARK_RECHECK_MS = 5 * 60 * 1000;
 
     // "Зоркий глаз": точная теплокарта засад ДПС/Спецбат (свежесть 2–3 часа)
     let patrolHeatmapEnabled = false;
@@ -2136,20 +1900,10 @@
     ];
     // Стиль озвучки: 'standard' (стандартный) или 'cheeky' (дерзкий)
     let voiceStyle = 'standard';
-    let voiceNotificationsEnabled = true;
-    let voiceVolume = 0.85; // 0..1
     // Оповещения по расстоянию только при автослежении
     let proximityRequiresFollow = false;
     // Дистанция предупреждения (в метрах)
     let warningDistanceMeters = 800;
-    let radarActive = false;
-    let wakeLockSentinel = null;
-    let darkModeEnabled = false;
-    let wakeLockPreferenceEnabled = true;
-    let autoDarkModeEnabled = false;
-    let autoDarkModeTimerId = null;
-    let autoDarkModeLastApplied = null;
-    let autoDarkModeAdjusting = false;
     // Флаг видимости нижнего виджета
     let actionCardVisible = true;
     // Флаг для отключения автосцентрирования GPS после размещения метки
@@ -2182,258 +1936,61 @@
         actionCardVisible = !actionCardVisible;
         const card = document.getElementById('actionCard');
         const openBtn = document.getElementById('openActionBtn');
-        if (card) card.classList.toggle('hidden', !actionCardVisible);
-        if (openBtn) {
-            if (actionCardVisible) openBtn.classList.remove('visible');
-            else openBtn.classList.add('visible');
+        if (actionCardVisible) {
+            card.classList.remove('hidden');
+            if (openBtn) openBtn.classList.remove('visible');
+        } else {
+            card.classList.add('hidden');
+            if (openBtn) openBtn.classList.add('visible');
         }
+        updateTargetAnchorPosition();
     }
 
-    function setVoiceStyle(style) {
-        if (!style || !isViewingOwnProfile) return;
-        voiceStyle = style === 'cheeky' ? 'cheeky' : 'standard';
-        const standardBtn = document.getElementById('voiceStyleStandard');
-        const cheekyBtn = document.getElementById('voiceStyleCheeky');
-        const descriptionEl = document.getElementById('voiceStyleDescription');
+    function updateTargetAnchorPosition() {
+        const target = document.querySelector('.target');
+        if (!target) return;
 
-        if (standardBtn) standardBtn.classList.toggle('active', voiceStyle === 'standard');
-        if (cheekyBtn) cheekyBtn.classList.toggle('active', voiceStyle === 'cheeky');
-        if (descriptionEl) {
-            descriptionEl.textContent = voiceStyle === 'cheeky'
-                ? 'Премиум голос активен (эксперимент).'
-                : 'Системный голос активен.';
+        target.style.transform = 'translate(-50%, -50%)';
+
+        const card = document.getElementById('actionCard');
+        if (!actionCardVisible || !card || card.classList.contains('hidden')) {
+            target.style.top = '50%';
+            return;
         }
 
+        const cardRect = card.getBoundingClientRect();
+        const desiredTop = Math.max(
+            TARGET_MIN_TOP_PX,
+            Math.min(window.innerHeight * 0.5, cardRect.top - TARGET_CARD_GAP_PX)
+        );
+        target.style.top = `${Math.round(desiredTop)}px`;
+    }
+
+    function getTargetPlacementCoords() {
+        if (!myMap) return [48.01, 37.80];
+
+        const fallback = myMap.getCenter();
         try {
-            localStorage.setItem('voiceStyle', voiceStyle);
-        } catch (e) {
-            console.warn('Не удалось сохранить стиль озвучки:', e);
-        }
-        try { updateUserLocationMarker(); } catch(e){}
+            const target = document.querySelector('.target');
+            const projection = myMap.options?.get?.('projection');
+            if (!target || !projection || !myMap.converter?.pageToGlobal) return fallback;
 
-        console.log(`🔊 Стиль озвучки изменен на: ${voiceStyle}`);
-    }
+            const rect = target.getBoundingClientRect();
+            const pixelPoint = [
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2
+            ];
 
-    function updateVoiceAssistUI() {
-        const toggle = document.getElementById('voiceToggle');
-        if (toggle) toggle.checked = !!voiceNotificationsEnabled;
-        const range = document.getElementById('voiceVolumeRange');
-        const label = document.getElementById('voiceVolumeValue');
-        const percent = Math.round((voiceVolume || 0.85) * 100);
-        if (range && String(range.value) !== String(percent)) {
-            range.value = percent;
-        }
-        if (label) label.textContent = `${percent}%`;
-    }
+            const globalPixels = myMap.converter.pageToGlobal(pixelPoint);
+            const coords = projection.fromGlobalPixels(globalPixels, myMap.getZoom());
 
-    function toggleVoiceNotifications(state) {
-        if (!isViewingOwnProfile) return;
-        voiceNotificationsEnabled = !!state;
-        updateVoiceAssistUI();
-        try {
-            localStorage.setItem('voiceNotificationsEnabled', voiceNotificationsEnabled ? 'true' : 'false');
-        } catch (e) {
-            console.warn('Не удалось сохранить настройку озвучки:', e);
-        }
-        if (!voiceNotificationsEnabled) {
-            stopWarningOutput();
-        }
-    }
-
-    function setVoiceVolume(value) {
-        if (!isViewingOwnProfile) return;
-        const percent = Math.max(30, Math.min(100, Number(value) || 80));
-        voiceVolume = percent / 100;
-        updateVoiceAssistUI();
-        try {
-            localStorage.setItem('voiceVolume', String(voiceVolume));
-        } catch (e) {
-            console.warn('Не удалось сохранить громкость озвучки:', e);
-        }
-    }
-
-    function loadVoiceStyle() {
-        try {
-            const savedStyle = localStorage.getItem('voiceStyle');
-            if (savedStyle === 'cheeky' || savedStyle === 'standard') {
-                voiceStyle = savedStyle;
+            if (Array.isArray(coords) && coords.length >= 2 && Number.isFinite(Number(coords[0])) && Number.isFinite(Number(coords[1]))) {
+                return [Number(coords[0]), Number(coords[1])];
             }
         } catch (e) {
-            console.warn('Не удалось загрузить стиль озвучки:', e);
+            console.warn('Не удалось вычислить координаты по центральной метке:', e?.message || e);
         }
-        setVoiceStyle(voiceStyle);
-    }
-
-    function loadVoiceAssistSettings() {
-        try {
-            const savedToggle = localStorage.getItem('voiceNotificationsEnabled');
-            if (savedToggle === 'false') voiceNotificationsEnabled = false;
-            if (savedToggle === 'true') voiceNotificationsEnabled = true;
-            const savedVolume = localStorage.getItem('voiceVolume');
-            if (savedVolume) {
-                const vol = Number(savedVolume);
-                if (Number.isFinite(vol)) {
-                    voiceVolume = Math.min(1, Math.max(0.3, vol));
-                }
-            }
-        } catch (e) {
-            console.warn('Не удалось загрузить настройки озвучки:', e);
-        }
-        updateVoiceAssistUI();
-    }
-
-    function updateWarningDistanceUI() {
-        const label = document.getElementById('warningDistanceLabel');
-        const meters = Math.max(300, Number(warningDistanceMeters) || 800);
-        if (label) {
-            label.textContent = meters >= 1000 ? `${(meters / 1000).toFixed(1)} км` : `${meters} м`;
-        }
-        document.querySelectorAll('[data-warning-distance]').forEach(btn => {
-            const val = Number(btn.dataset.warningDistance);
-            btn.classList.toggle('active', val === meters);
-        });
-    }
-
-    function setWarningDistancePreset(value) {
-        setWarningDistance(value);
-    }
-
-    function setSwitchEnabled(inputId, enabled) {
-        const input = document.getElementById(inputId);
-        if (!input) return;
-        input.disabled = !enabled;
-        const wrap = (typeof input.closest === 'function') ? input.closest('.switch') : input.parentElement;
-        if (wrap && wrap.classList && wrap.classList.contains('switch')) {
-            wrap.style.opacity = enabled ? '1' : '0.45';
-            wrap.style.pointerEvents = enabled ? 'auto' : 'none';
-        }
-    }
-
-    function setProfileSettingsEnabled(enabled) {
-        const opacity = enabled ? '1' : '0.45';
-        ['voiceStyleStandard','voiceStyleCheeky','proximityModeAlways','proximityModeFollow'].forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.disabled = !enabled;
-            el.style.opacity = opacity;
-        });
-        document.querySelectorAll('#warningDistancePresets .settings-chip').forEach(btn => {
-            btn.disabled = !enabled;
-            btn.style.opacity = opacity;
-        });
-        const volumeRange = document.getElementById('voiceVolumeRange');
-        if (volumeRange) {
-            volumeRange.disabled = !enabled;
-            volumeRange.style.opacity = opacity;
-        }
-        ['radarActionBtn','darkModeToggleBtn'].forEach(id => {
-            const btn = document.getElementById(id);
-            if (!btn) return;
-            const isDark = id === 'darkModeToggleBtn';
-            const shouldDisable = !enabled || (isDark && !radarActive);
-            btn.disabled = shouldDisable;
-            btn.classList.toggle('disabled', btn.disabled);
-        });
-        setSwitchEnabled('voiceToggle', enabled);
-        setSwitchEnabled('wakeLockPrefToggle', enabled);
-        setSwitchEnabled('autoDarkModeToggle', enabled);
-        if (enabled) {
-            try { updateRadarUi(); } catch(e) {}
-            try { updateDarkModeUi(); } catch(e) {}
-        }
-    }
-
-    function updateScreenEnergyUi() {
-        const wakeToggle = document.getElementById('wakeLockPrefToggle');
-        if (wakeToggle) wakeToggle.checked = !!wakeLockPreferenceEnabled;
-        const autoToggle = document.getElementById('autoDarkModeToggle');
-        if (autoToggle) autoToggle.checked = !!autoDarkModeEnabled;
-    }
-
-    function toggleWakeLockPreference(state) {
-        if (!isViewingOwnProfile) return;
-        wakeLockPreferenceEnabled = !!state;
-        updateScreenEnergyUi();
-        try {
-            localStorage.setItem('wakeLockPreferenceEnabled', wakeLockPreferenceEnabled ? 'true' : 'false');
-        } catch (e) {
-            console.warn('Не удалось сохранить настройку Wake Lock:', e);
-        }
-        if (!wakeLockPreferenceEnabled) {
-            releaseWakeLock().catch(() => {});
-        } else if (radarActive && wakeLockSupported && document.visibilityState === 'visible' && !wakeLockSentinel) {
-            requestWakeLock().catch(() => {});
-        }
-    }
-
-    function toggleAutoDarkMode(state) {
-        if (!isViewingOwnProfile) return;
-        autoDarkModeEnabled = !!state;
-        updateScreenEnergyUi();
-        try {
-            localStorage.setItem('autoDarkModeEnabled', autoDarkModeEnabled ? 'true' : 'false');
-        } catch (e) {
-            console.warn('Не удалось сохранить авто-темный режим:', e);
-        }
-        if (autoDarkModeEnabled) {
-            startAutoDarkModeWatcher();
-            evaluateAutoDarkMode(true);
-        } else {
-            stopAutoDarkModeWatcher();
-            autoDarkModeLastApplied = false;
-        }
-    }
-
-    function loadScreenEnergyPreferences() {
-        try {
-            const savedWake = localStorage.getItem('wakeLockPreferenceEnabled');
-            if (savedWake === 'false') wakeLockPreferenceEnabled = false;
-            if (savedWake === 'true') wakeLockPreferenceEnabled = true;
-            const savedAutoDark = localStorage.getItem('autoDarkModeEnabled');
-            if (savedAutoDark === 'true') autoDarkModeEnabled = true;
-            if (savedAutoDark === 'false') autoDarkModeEnabled = false;
-        } catch (e) {
-            console.warn('Не удалось загрузить настройки экрана/энергии:', e);
-        }
-        updateScreenEnergyUi();
-        if (autoDarkModeEnabled) {
-            startAutoDarkModeWatcher();
-        } else {
-            stopAutoDarkModeWatcher();
-        }
-    }
-
-    function startAutoDarkModeWatcher() {
-        stopAutoDarkModeWatcher();
-        if (!autoDarkModeEnabled) return;
-        evaluateAutoDarkMode(true);
-        autoDarkModeTimerId = setInterval(() => {
-            evaluateAutoDarkMode();
-        }, AUTO_DARK_RECHECK_MS);
-    }
-
-    function stopAutoDarkModeWatcher() {
-        if (autoDarkModeTimerId) {
-            clearInterval(autoDarkModeTimerId);
-            autoDarkModeTimerId = null;
-        }
-    }
-
-    function evaluateAutoDarkMode(force = false) {
-        if (!autoDarkModeEnabled) return;
-        const hour = new Date().getHours();
-        const shouldBeDark = (hour >= 18 || hour < 6);
-        if (shouldBeDark && radarActive && !darkModeEnabled) {
-            autoDarkModeAdjusting = true;
-            toggleDarkMode(true);
-            autoDarkModeAdjusting = false;
-            autoDarkModeLastApplied = true;
-        } else if ((!shouldBeDark || !radarActive) && darkModeEnabled && (autoDarkModeLastApplied || force)) {
-            autoDarkModeAdjusting = true;
-            toggleDarkMode(false);
-            autoDarkModeAdjusting = false;
-            autoDarkModeLastApplied = false;
-        }
+        return fallback;
     }
 
     function setDtpHeatmapUiState(enabled) {
@@ -3678,7 +3235,6 @@
     }
 
     function speakSmartHintText(text) {
-        if (!voiceNotificationsEnabled) return;
         const t = String(text || '').trim();
         if (!t) return;
         try { stopWarningOutput(); } catch(e) {}
@@ -3689,7 +3245,7 @@
             utterance.lang = 'ru-RU';
             utterance.rate = 0.92;
             utterance.pitch = 1.0;
-            utterance.volume = voiceVolume;
+            utterance.volume = 1.0;
             window.speechSynthesis.speak(utterance);
         } catch (e) {
             console.warn('Не удалось озвучить подсказку:', e?.message || e);
@@ -3823,12 +3379,11 @@
      * @param {string} audioUrl - URL аудиофайла
      */
     function playAudioWarning(audioUrl) {
-        if (!voiceNotificationsEnabled) return;
         try {
             stopWarningOutput();
             const audio = new Audio(audioUrl);
             currentWarningAudio = audio;
-            audio.volume = voiceVolume;
+            audio.volume = 1;
             audio.play().catch(err => {
                 console.warn('Ошибка воспроизведения аудио:', err);
                 // Если аудио не работает, пытаемся синтез речи
@@ -3839,18 +3394,14 @@
         }
     }
     
-    async function speakWarning(distance, type, comment, markerCoords = null) {
-        if (!voiceNotificationsEnabled) {
-            console.log('🔇 Голосовые уведомления отключены пользователем');
-            return;
-        }
+    async function speakWarning(distance, type, comment) {
         if (!voiceStyle) voiceStyle = 'standard';
         stopWarningOutput();
 
         // v2: по умолчанию используем «живую» озвучку на лету (можно подставлять улицы/время/любые фразы).
         // MP3 оставляем как запасной вариант (на случай, если Web Speech API недоступен).
         if (window.speechSynthesis) {
-            await useWebSpeechAPI(distance, type, markerCoords);
+            useWebSpeechAPI(distance, type);
             return;
         }
         
@@ -3872,10 +3423,10 @@
                 if (data?.signedUrl) {
                     const audio = new Audio(data.signedUrl);
                     currentWarningAudio = audio;
-                    audio.volume = voiceVolume;
+                    audio.volume = 1.0;
                     audio.play().catch(e => {
                         console.warn('Не удалось воспроизвести MP3:', e);
-                        useWebSpeechAPI(distance, type, markerCoords);
+                        useWebSpeechAPI(distance, type);
                     });
                     console.log(`🔊 Проигрывается: ${audioFile}`);
                     return;
@@ -3891,81 +3442,7 @@
     /**
      * Использует Web Speech API как fallback (с новым текстом озвучки)
      */
-    const TTS_STREET_CACHE = new Map();
-    async function getStreetForCoords(lat, lon) {
-        const a = Number(lat);
-        const b = Number(lon);
-        if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-        if (!window.ymaps || !ymaps.geocode) return null;
-
-        const key = `${a.toFixed(4)},${b.toFixed(4)}`;
-        const cached = TTS_STREET_CACHE.get(key);
-        if (cached) return cached;
-
-        try {
-            const res = await ymaps.geocode([a, b]);
-            const obj = res?.geoObjects?.get?.(0);
-            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
-            if (!line) return null;
-
-            const parts = line.split(',').map(s => s.trim()).filter(Boolean);
-            let street = parts.length ? parts[parts.length - 1] : line;
-            let streetHint = '';
-            for (let i = parts.length - 1; i >= 0; i--) {
-                const p = parts[i];
-                if (/улиц|просп|пр\.|бульвар|шоссе|переулок|пл\.|площад|набереж/i.test(p)) {
-                    streetHint = p;
-                    break;
-                }
-            }
-            if (streetHint) street = streetHint;
-
-            // Чистим частые приставки/суффиксы
-            street = street
-                .replace(/^улица\s+/i, '')
-                .replace(/\s+улица$/i, '')
-                .replace(/^проспект\s+/i, 'просп. ')
-                .replace(/^просп\.\s+/i, 'просп. ')
-                .replace(/^бульвар\s+/i, 'бульв. ');
-
-            // Кэшируем на сессию
-            TTS_STREET_CACHE.set(key, street);
-            return street;
-        } catch (e) {
-            return null;
-        }
-    }
-
-    function formatDistanceRuPhrase(distanceMeters) {
-        const d = Number(distanceMeters);
-        if (!Number.isFinite(d)) return '';
-        let distancePretty;
-        if (d > 1000) distancePretty = Math.round(d / 100) * 100;
-        else if (d > 100) distancePretty = Math.round(d / 10) * 10;
-        else distancePretty = Math.round(d);
-
-        if (distancePretty >= 1000) {
-            const km = (distancePretty / 1000);
-            const kmText = km % 1 === 0 ? String(km) : km.toFixed(1);
-            return `через ${kmText} км`;
-        }
-
-        const wordMap = {
-            100: 'сто',
-            200: 'двести',
-            300: 'триста',
-            400: 'четыреста',
-            500: 'пятьсот',
-            600: 'шестьсот',
-            700: 'семьсот',
-            800: 'восемьсот',
-            900: 'девятьсот'
-        };
-        const w = wordMap[distancePretty];
-        return w ? `через ${w} метров` : `через ${distancePretty} метров`;
-    }
-
-    async function useWebSpeechAPI(distance, type, markerCoords = null) {
+    function useWebSpeechAPI(distance, type) {
         if (!window.speechSynthesis) {
             console.warn('Web Speech API не поддерживается');
             console.warn('Попробуйте проверить браузер, возможно, нужен Chrome, Edge или Safari');
@@ -4004,36 +3481,35 @@
             }
         }
         
-        const distPhrase = formatDistanceRuPhrase(distance);
+        // Округляем расстояние
+        let distancePretty;
+        if (distance > 1000) {
+            distancePretty = Math.round(distance / 100) * 100;
+        } else if (distance > 100) {
+            distancePretty = Math.round(distance / 10) * 10;
+        } else {
+            distancePretty = Math.round(distance);
+        }
         
         let text;
         const messageByType = {
-            dps: `Пост ДПС ${distPhrase}.`,
-            patrol: `Дорожный рейд ${distPhrase}.`,
-            specbat: `Спецполк ${distPhrase}.`,
-            motobat: `Патруль мотобата ${distPhrase}.`,
-            cargo_control: `Грузовой контроль ${distPhrase}.`,
-            camera: `Участок наблюдения ${distPhrase}.`,
-            dtp: `ДТП ${distPhrase}.`,
-            works: `Дорожные работы ${distPhrase}.`,
-            sos: `SOS ${distPhrase}.`,
-            danger: `Опасность ${distPhrase}.`,
-            traffic_jam: `Пробка ${distPhrase}.`
+            dps: `Впереди пост ДПС через ${distancePretty} метров. Соблюдайте правила и будьте внимательны.`,
+            patrol: `Впереди дорожный рейд через ${distancePretty} метров. Двигайтесь спокойно и без нарушений.`,
+            specbat: `Впереди усиленный контроль (спецбат) через ${distancePretty} метров. Соблюдайте требования инспекторов.`,
+            motobat: `Впереди патруль мотобата через ${distancePretty} метров. Снизьте скорость и держите дистанцию.`,
+            cargo_control: `Впереди грузовой контроль через ${distancePretty} метров. Проверьте документы и параметры груза.`,
+            camera: `Впереди участок наблюдения через ${distancePretty} метров. Будьте внимательны.`,
+            dtp: `Впереди ДТП через ${distancePretty} метров. Снизьте скорость и соблюдайте дистанцию.`,
+            works: `Впереди дорожные работы через ${distancePretty} метров. Двигайтесь внимательно.`,
+            sos: `Впереди SOS-запрос помощи через ${distancePretty} метров. При возможности окажите поддержку.`,
+            danger: `Впереди опасность на дороге через ${distancePretty} метров. Будьте особенно осторожны.`,
+            traffic_jam: `Впереди пробка через ${distancePretty} метров. По возможности выберите объезд.`
         };
 
-        // Шаблон 1: [Тип] + [Улица] + [Расстояние] (для ДПС/Спецполк)
-        if ((type === 'dps' || type === 'specbat') && markerCoords && Array.isArray(markerCoords) && markerCoords.length >= 2) {
-            const street = await getStreetForCoords(Number(markerCoords[0]), Number(markerCoords[1]));
-            if (street) {
-                const typeLabel = type === 'specbat' ? 'Спецполк' : 'ДПС';
-                text = `${typeLabel} на ${street}, ${distPhrase}.`;
-            }
-        }
-
         if (voiceStyle === 'cheeky') {
-            text = messageByType[type] || `Дорожное событие ${distPhrase}.`;
+            text = messageByType[type] || `Впереди дорожное событие через ${distancePretty} метров. Будьте внимательны.`;
         } else {
-            text = messageByType[type] || `Дорожное событие ${distPhrase}.`;
+            text = messageByType[type] || `Впереди дорожное событие через ${distancePretty} метров. Будьте внимательны.`;
         }
         
         // Отменяем предыдущую речь если есть
@@ -4047,7 +3523,7 @@
         if (ruVoice) utterance.voice = ruVoice;
         utterance.rate = 0.9;  // Немного медленнее
         utterance.pitch = 1.0;
-        utterance.volume = voiceVolume;
+        utterance.volume = 1.0;
         
         // Логируем попытку
         console.log(`🔊 Озвучка (${voiceStyle}): ${text.substring(0, 50)}...`);
@@ -4069,7 +3545,7 @@
             if (!userCoords || userCoords.length < 2) return;
             if (proximityRequiresFollow && !autoFollow) return;
 
-            // Поддерживаем разные форматы координат маркера: coords: [lat,lon] (основной) или latitude/longitude (legacy)
+            // Поддерживаем разные форматы координат маркера: coords: [lat,lon] или latitude/longitude
             let mLat = null, mLon = null;
             if (marker.coords && Array.isArray(marker.coords) && marker.coords.length >= 2) {
                 // Некоторые маркеры хранят координаты в виде [lon, lat] или [lat, lon] — попробуем угадать.
@@ -4128,19 +3604,84 @@
 
         // Первое уведомление: зона предупреждения
         if (distance >= warningMin && distance <= warningMax && currentNotification !== 'far') {
-            speakWarning(distance, marker.type, marker.comment, [mLat, mLon]);
+            speakWarning(distance, marker.type, marker.comment);
             distanceNotifications.set(markerId, 'far');
             console.log(`📍 Первое уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
         }
         // Второе уведомление: ближняя зона
         else if (distance < nearThreshold && currentNotification !== 'near') {
-            speakWarning(distance, marker.type, marker.comment, [mLat, mLon]);
+            speakWarning(distance, marker.type, marker.comment);
             distanceNotifications.set(markerId, 'near');
             console.log(`📍 Второе уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
         }
         // Очищаем уведомление если маркер слишком далеко
         else if (distance > warningMax && currentNotification) {
             distanceNotifications.delete(markerId);
+        }
+    }
+
+    /**
+     * Устанавливает стиль озвучки уведомлений о расстоянии
+     * @param {string} style - 'standard' или 'cheeky'
+     */
+    function setVoiceStyle(style) {
+        if (!isViewingOwnProfile) return;
+        voiceStyle = style;
+        
+        // Обновляем визуальное состояние кнопок
+        const standardBtn = document.getElementById('voiceStyleStandard');
+        const cheekyBtn = document.getElementById('voiceStyleCheeky');
+        const descriptionEl = document.getElementById('voiceStyleDescription');
+        
+        if (style === 'standard') {
+            standardBtn.style.background = '#34c759';
+            standardBtn.style.color = 'white';
+            cheekyBtn.style.background = '#9c9c9c';
+            cheekyBtn.style.color = 'white';
+            descriptionEl.textContent = '✨ Выбран: Стандартный стиль озвучки';
+        } else if (style === 'cheeky') {
+            standardBtn.style.background = '#9c9c9c';
+            standardBtn.style.color = 'white';
+            cheekyBtn.style.background = '#34c759';
+            cheekyBtn.style.color = 'white';
+            descriptionEl.textContent = '😎 Выбран: Дерзкий стиль озвучки';
+        }
+        
+        // Сохраняем выбор в localStorage
+        try {
+            localStorage.setItem('voiceStyle', style);
+        } catch (e) {
+            console.warn('Не удалось сохранить стиль озвучки:', e);
+        }
+        // Обновляем внешний вид маркера сразу
+        try { updateUserLocationMarker(); } catch(e){}
+        
+        console.log(`🔊 Стиль озвучки изменен на: ${style}`);
+    }
+    
+    /**
+     * Загружает сохраненный стиль озвучки при инициализации
+     */
+    function loadVoiceStyle() {
+        try {
+            const savedStyle = localStorage.getItem('voiceStyle');
+            if (savedStyle === 'cheeky' || savedStyle === 'standard') {
+                voiceStyle = savedStyle;
+            }
+        } catch (e) {
+            console.warn('Не удалось загрузить стиль озвучки:', e);
+        }
+    }
+
+    function updateWarningDistanceUI() {
+        const label = document.getElementById('warningDistanceLabel');
+        const range = document.getElementById('warningDistanceRange');
+        const meters = Math.max(300, Number(warningDistanceMeters) || 800);
+        if (label) {
+            label.textContent = meters >= 1000 ? `${(meters / 1000).toFixed(1)} км` : `${meters} м`;
+        }
+        if (range && String(range.value) !== String(meters)) {
+            range.value = meters;
         }
     }
 
@@ -4204,125 +3745,6 @@
         setProximityMode(proximityRequiresFollow);
     }
 
-    function updateDarkModeUi() {
-        const btn = document.getElementById('darkModeToggleBtn');
-        if (btn) {
-            btn.disabled = !radarActive;
-            btn.classList.toggle('disabled', !radarActive);
-            btn.classList.toggle('active', darkModeEnabled);
-            btn.textContent = darkModeEnabled ? '🌞 ВКЛЮЧИТЬ ЭКРАН' : '🌙 ТЕМНЫЙ РЕЖИМ';
-        }
-        const shade = document.getElementById('darkModeShade');
-        if (shade) {
-            shade.classList.toggle('active', darkModeEnabled);
-        }
-    }
-
-    function updateRadarUi() {
-        const btn = document.getElementById('radarActionBtn');
-        if (btn) {
-            btn.textContent = radarActive ? '🛑 ОСТАНОВИТЬ' : '🚦 ВКЛЮЧИТЬ';
-            btn.classList.toggle('active', radarActive);
-            btn.setAttribute('aria-pressed', radarActive ? 'true' : 'false');
-        }
-        const status = document.getElementById('radarStatusText');
-        if (status) {
-            status.textContent = radarActive
-                ? 'Радар активен: GPS и голосовые подсказки работают.'
-                : 'Радар выключен.';
-        }
-        const hint = document.getElementById('radarStatusHint');
-        if (hint) {
-            if (radarActive) {
-                hint.textContent = wakeLockSupported
-                    ? 'Экран удерживается активным, голосовые подсказки готовы.'
-                    : 'Подсказки активны, но браузер может погасить экран (Wake Lock не поддерживается).';
-            } else {
-                hint.textContent = 'Нажмите, чтобы включить GPS, озвучку и удержание экрана.';
-            }
-        }
-        updateDarkModeUi();
-    }
-
-    async function requestWakeLock() {
-        if (!wakeLockSupported || !wakeLockPreferenceEnabled) return false;
-        try {
-            wakeLockSentinel = await navigator.wakeLock.request('screen');
-            wakeLockSentinel.addEventListener('release', () => {
-                wakeLockSentinel = null;
-                if (radarActive && wakeLockPreferenceEnabled && document.visibilityState === 'visible') {
-                    requestWakeLock().catch(() => {});
-                }
-            });
-            console.log('🔒 Wake Lock активирован');
-            return true;
-        } catch (err) {
-            console.warn('Wake Lock недоступен:', err?.message || err);
-            wakeLockSentinel = null;
-            return false;
-        }
-    }
-
-    async function releaseWakeLock() {
-        if (!wakeLockSentinel) return;
-        try {
-            await wakeLockSentinel.release();
-        } catch (err) {
-            console.warn('Не удалось отпустить Wake Lock:', err?.message || err);
-        }
-        wakeLockSentinel = null;
-    }
-
-    async function startRadar() {
-        if (radarActive) return;
-        const gpsReady = initGPS();
-        if (!gpsReady) {
-            alert('Не удалось включить радар. Проверьте доступ к геолокации в Telegram.');
-            updateRadarUi();
-            return;
-        }
-        radarActive = true;
-        try { localStorage.setItem('radar_last_state', 'on'); } catch (e) {}
-        updateRadarUi();
-        evaluateAutoDarkMode(true);
-        if (wakeLockPreferenceEnabled && wakeLockSupported && document.visibilityState === 'visible') {
-            requestWakeLock().catch(() => {});
-        }
-    }
-
-    async function stopRadar() {
-        if (!radarActive) return;
-        radarActive = false;
-        try { localStorage.setItem('radar_last_state', 'off'); } catch (e) {}
-        toggleDarkMode(false);
-        autoDarkModeLastApplied = false;
-        stopGPS();
-        await releaseWakeLock();
-        updateRadarUi();
-    }
-
-    async function toggleRadar(forceState = null) {
-        const shouldEnable = typeof forceState === 'boolean' ? forceState : !radarActive;
-        if (shouldEnable) {
-            await startRadar();
-        } else {
-            await stopRadar();
-        }
-    }
-
-    function toggleDarkMode(forceState = null) {
-        const nextState = typeof forceState === 'boolean' ? forceState : !darkModeEnabled;
-        if (nextState && !radarActive) {
-            alert('Включите радар, чтобы затемнить экран.');
-            return;
-        }
-        darkModeEnabled = nextState;
-        if (!autoDarkModeAdjusting) {
-            autoDarkModeLastApplied = null;
-        }
-        updateDarkModeUi();
-    }
-
         function isReliableGeoPosition(lat, lon, accuracyMeters) {
                 const a = Number(accuracyMeters);
                 if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
@@ -4337,10 +3759,7 @@
     function initGPS() {
         if (!navigator.geolocation) {
             console.warn('Geolocation не поддерживается браузером');
-            return false;
-        }
-        if (gpsWatchId !== null) {
-            return true;
+            return;
         }
         
         // Опции для geolocation
@@ -4435,9 +3854,6 @@
                             if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
                                 console.warn('iOS: откройте настройки приложения и разрешите доступ к местоположению.');
                             }
-                            if (radarActive) {
-                                stopRadar().catch(() => {});
-                            }
                             break;
                         case error.POSITION_UNAVAILABLE:
                             console.warn('Информация о местоположении недоступна — пробую один раз получить позицию');
@@ -4457,33 +3873,9 @@
                 },
                 options
             );
-            return true;
         } catch (e) {
             console.warn('watchPosition failed:', e);
-            return false;
         }
-    }
-
-    function stopGPS() {
-        if (gpsWatchId !== null) {
-            try {
-                navigator.geolocation.clearWatch(gpsWatchId);
-            } catch (e) {
-                console.warn('clearWatch failed:', e?.message || e);
-            }
-            gpsWatchId = null;
-        }
-        lastUserPositionCoords = null;
-        lastUserPositionTime = null;
-        userLocation = null;
-        lastReliableUserLocation = null;
-        gpsReliable = false;
-        gpsWarnedUnreliable = false;
-        userSpeedKmh = 0;
-        updateSpeedometerUI(userSpeedKmh);
-        hideProximityBanner();
-        distanceNotifications.clear();
-        markerDistanceState.clear();
     }
     
     // Функция обновления маркера текущего местоположения на карте
@@ -4836,12 +4228,10 @@
             console.warn('Не удалось запустить heartbeat/online count:', e?.message || e);
         }
 
-        // Загружаем сохраненный стиль озвучки и связанные настройки
+        // Загружаем сохраненный стиль озвучки
         loadVoiceStyle();
-        loadVoiceAssistSettings();
         loadProximityMode();
         loadWarningDistance();
-        loadScreenEnergyPreferences();
         loadSpeedometerPreference();
         restoreTypeCategoryPreference();
         loadNotificationsState();
@@ -5119,7 +4509,17 @@
         }
 
         isViewingOwnProfile = true;
-        setProfileSettingsEnabled(true);
+
+        const voiceStandardBtn = document.getElementById('voiceStyleStandard');
+        const voiceCheekyBtn = document.getElementById('voiceStyleCheeky');
+        const warningDistanceRange = document.getElementById('warningDistanceRange');
+        const proximityAlwaysBtn = document.getElementById('proximityModeAlways');
+        const proximityFollowBtn = document.getElementById('proximityModeFollow');
+        if (voiceStandardBtn) { voiceStandardBtn.disabled = false; voiceStandardBtn.style.opacity = '1'; }
+        if (voiceCheekyBtn) { voiceCheekyBtn.disabled = false; voiceCheekyBtn.style.opacity = '1'; }
+        if (warningDistanceRange) { warningDistanceRange.disabled = false; warningDistanceRange.style.opacity = '1'; }
+        if (proximityAlwaysBtn) { proximityAlwaysBtn.disabled = false; proximityAlwaysBtn.style.opacity = '1'; }
+        if (proximityFollowBtn) { proximityFollowBtn.disabled = false; proximityFollowBtn.style.opacity = '1'; }
 
         // Загружаем базовую информацию профиля
         try {
@@ -5351,7 +4751,16 @@
             if (carEditForm) carEditForm.style.display = 'none';
 
             // Блокируем персональные настройки в чужом профиле
-            setProfileSettingsEnabled(false);
+            const voiceStandardBtn = document.getElementById('voiceStyleStandard');
+            const voiceCheekyBtn = document.getElementById('voiceStyleCheeky');
+            const warningDistanceRange = document.getElementById('warningDistanceRange');
+            const proximityAlwaysBtn = document.getElementById('proximityModeAlways');
+            const proximityFollowBtn = document.getElementById('proximityModeFollow');
+            if (voiceStandardBtn) { voiceStandardBtn.disabled = true; voiceStandardBtn.style.opacity = '0.5'; }
+            if (voiceCheekyBtn) { voiceCheekyBtn.disabled = true; voiceCheekyBtn.style.opacity = '0.5'; }
+            if (warningDistanceRange) { warningDistanceRange.disabled = true; warningDistanceRange.style.opacity = '0.5'; }
+            if (proximityAlwaysBtn) { proximityAlwaysBtn.disabled = true; proximityAlwaysBtn.style.opacity = '0.5'; }
+            if (proximityFollowBtn) { proximityFollowBtn.disabled = true; proximityFollowBtn.style.opacity = '0.5'; }
 
             // Отображаем аватар
             const avatarEl = document.getElementById('profile-avatar-display');
@@ -9111,6 +8520,8 @@
             window.addEventListener('resize', updateTargetAnchorPosition);
             setDtpHeatmapUiState(false);
             
+            // Инициализируем GPS отслеживание
+            initGPS();
             // Обновим состояние кнопки автослежения
             try { updateFollowButton(); } catch(e) { /* ignore */ }
             // Загружаем маркеры с сервера
@@ -9138,6 +8549,7 @@
                 myMap.geoObjects.add(markersCollection);
                 
                 initApp();
+                initGPS();
                 try { updateFollowButton(); } catch(e) { /* ignore */ }
                 loadMarkers();
                 setInterval(loadMarkersDebounced, 20000);
@@ -9523,20 +8935,6 @@
             console.error('Ошибка при загрузке маркеров (timeout или ошибка БД):', error?.message);
         }
     }
-
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && radarActive && wakeLockSupported && wakeLockPreferenceEnabled && !wakeLockSentinel) {
-            requestWakeLock().catch(() => {});
-        }
-        evaluateAutoDarkMode();
-    });
-
-    window.addEventListener('beforeunload', () => {
-        releaseWakeLock();
-        stopGPS();
-    });
-
-    updateRadarUi();
 </script>
     <!-- Модальное окно для модерации пользователя -->
     <div id="moderatorModal" class="modal">
@@ -9840,9 +9238,6 @@
 
         function showSplashScreen() {
             const splashScreen = document.getElementById('splashScreen');
-            if (!splashScreen) return;
-            splashScreen.style.display = 'flex';
-            splashScreen.setAttribute('aria-hidden', 'false');
             const greetingText = document.getElementById('greetingText');
             const usernameText = document.getElementById('usernameText');
 
@@ -9864,14 +9259,7 @@
         
         // Функция для скрытия экрана загрузки немедленно
         function hideSplashScreenImmediately() {
-            const splashScreen = document.getElementById('splashScreen');
-            if (!splashScreen) return;
-            splashScreen.classList.add('hidden');
-            splashScreen.setAttribute('aria-hidden', 'true');
-            // Через тик прячем из потока, чтобы не перехватывал события ввода
-            requestAnimationFrame(() => {
-                splashScreen.style.display = 'none';
-            });
+            document.getElementById('splashScreen').classList.add('hidden');
         }
 
         // ============= ПРОВЕРКА БАНА =============
