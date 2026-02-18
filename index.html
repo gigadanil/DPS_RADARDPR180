@@ -9840,6 +9840,9 @@
 
         function showSplashScreen() {
             const splashScreen = document.getElementById('splashScreen');
+            if (!splashScreen) return;
+            splashScreen.style.display = 'flex';
+            splashScreen.setAttribute('aria-hidden', 'false');
             const greetingText = document.getElementById('greetingText');
             const usernameText = document.getElementById('usernameText');
 
@@ -9861,7 +9864,14 @@
         
         // Функция для скрытия экрана загрузки немедленно
         function hideSplashScreenImmediately() {
-            document.getElementById('splashScreen').classList.add('hidden');
+            const splashScreen = document.getElementById('splashScreen');
+            if (!splashScreen) return;
+            splashScreen.classList.add('hidden');
+            splashScreen.setAttribute('aria-hidden', 'true');
+            // Через тик прячем из потока, чтобы не перехватывал события ввода
+            requestAnimationFrame(() => {
+                splashScreen.style.display = 'none';
+            });
         }
 
         // ============= ПРОВЕРКА БАНА =============
