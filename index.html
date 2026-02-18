@@ -697,6 +697,8 @@
     <button class="chat-btn activity-btn fab-activity" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС и Спецбат за месяц">👮🛡️</button>
     <!-- Кнопка тепловой карты -->
     <button class="chat-btn heatmap-toggle-btn fab-heatmap" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" title="Тепловая карта ДТП">🗂️🔥</button>
+    <!-- Зоркий глаз: тепловая карта "засад" ДПС/Спецбат -->
+    <button class="chat-btn heatmap-toggle-btn fab-heatmap" id="patrolHeatmapBtn" onclick="togglePatrolHeatmap()" title="Зоркий глаз: засады ДПС/Спецбат">👁️</button>
     <!-- Кнопка уведомлений -->
     <button class="chat-btn notif-btn fab-notif" onclick="openNotificationsDrawer()" title="Уведомления">
         🔔
@@ -1872,6 +1874,16 @@
     const DTP_HEATMAP_CACHE_MS = 2 * 60 * 1000;
     const DTP_HEATMAP_LOOKBACK_DAYS = 30;
     const DTP_HEATMAP_MAX_POINTS = 1200;
+
+    // "Зоркий глаз": точная теплокарта засад ДПС/Спецбат (свежесть 2–3 часа)
+    let patrolHeatmapEnabled = false;
+    let patrolHeatmapCollection = null;
+    let patrolHeatmapCellsCache = [];
+    let patrolHeatmapCacheLoadedAt = 0;
+    let patrolHeatmapRenderTimer = null;
+    const PATROL_HEATMAP_CACHE_MS = 60 * 1000;
+    const PATROL_HEATMAP_LOOKBACK_HOURS = 3;
+    const PATROL_HEATMAP_MAX_POINTS = 2500;
     const SAFE_DRIVE_NEWS_ITEMS = [
         {
             id: 'news_notif_feed_v1',
@@ -1986,6 +1998,255 @@
         if (overlay) overlay.classList.toggle('active', !!enabled);
     }
 
+    function setPatrolHeatmapUiState(enabled) {
+        const btn = document.getElementById('patrolHeatmapBtn');
+        if (btn) btn.classList.toggle('active', !!enabled);
+    }
+
+    function getPatrolHeatColor(type, norm) {
+        const n = Math.max(0, Math.min(1, Number(norm) || 0));
+        // ДПС: жёлто‑оранжевый, Спецбат: фиолетовый/красный
+        if (String(type) === 'specbat') {
+            // purple -> deep red
+            const r = Math.round(175 + (255 - 175) * n);
+            const g = Math.round(82 + (59 - 82) * n);
+            const b = Math.round(222 + (48 - 222) * n);
+            return `rgb(${r},${g},${b})`;
+        }
+        // dps
+        const r = Math.round(255);
+        const g = Math.round(214 + (120 - 214) * n);
+        const b = Math.round(10 + (0 - 10) * n);
+        return `rgb(${r},${g},${b})`;
+    }
+
+    function buildDotSvg(color, sizePx, alpha = 0.9) {
+        const s = Math.max(16, Math.min(28, Math.round(sizePx || 22)));
+        const r = Math.round(s / 2);
+        const stroke = 'rgba(0,0,0,0.10)';
+        const fill = String(color || 'rgb(255,159,10)');
+        const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 ${s} ${s}">
+  <circle cx="${r}" cy="${r}" r="${Math.max(3, r - 1)}" fill="${fill}" fill-opacity="${Math.max(0.2, Math.min(1, alpha)).toFixed(2)}" stroke="${stroke}" stroke-width="1"/>
+</svg>`;
+        return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+    }
+
+    function getPatrolHeatmapCellDegrees(zoom) {
+        // Очень строгая сетка: чтобы точки были "на конкретном кармане/съезде"
+        if (zoom >= 17) return 0.00045;
+        if (zoom >= 16) return 0.00065;
+        if (zoom >= 15) return 0.00095;
+        if (zoom >= 14) return 0.0014;
+        return 0.0022;
+    }
+
+    function parseTsToMsForQuery(ts) {
+        // Используем тот же хелпер, что и для других мест
+        return parseMarkerTimestampToMs(ts);
+    }
+
+    async function loadPatrolHeatmapData(force = false) {
+        if (!force && (Date.now() - patrolHeatmapCacheLoadedAt) < PATROL_HEATMAP_CACHE_MS && patrolHeatmapCellsCache.length) {
+            return patrolHeatmapCellsCache;
+        }
+
+        const now = Date.now();
+        const sinceMs = now - PATROL_HEATMAP_LOOKBACK_HOURS * 60 * 60 * 1000;
+        const sinceIso = new Date(sinceMs).toISOString();
+
+        let rows = [];
+        // Пытаемся как BIGINT(ms), иначе fallback на ISO
+        {
+            const r1 = await _sb
+                .from('markers')
+                .select('id,type,ts,coords')
+                .in('type', ['dps', 'specbat'])
+                .gte('ts', sinceMs)
+                .order('ts', { ascending: false })
+                .limit(PATROL_HEATMAP_MAX_POINTS);
+            if (r1?.error) {
+                const r2 = await _sb
+                    .from('markers')
+                    .select('id,type,ts,coords')
+                    .in('type', ['dps', 'specbat'])
+                    .gte('ts', sinceIso)
+                    .order('ts', { ascending: false })
+                    .limit(PATROL_HEATMAP_MAX_POINTS);
+                if (!r2?.error && Array.isArray(r2?.data)) rows = r2.data;
+            } else {
+                if (Array.isArray(r1?.data)) rows = r1.data;
+            }
+        }
+
+        if (!Array.isArray(rows) || !rows.length) {
+            patrolHeatmapCellsCache = [];
+            patrolHeatmapCacheLoadedAt = Date.now();
+            return patrolHeatmapCellsCache;
+        }
+
+        const zoom = myMap ? Number(myMap.getZoom() || 16) : 16;
+        const cellDeg = getPatrolHeatmapCellDegrees(zoom);
+        const cellMap = new Map();
+
+        rows.forEach(row => {
+            const coords = extractMarkerCoordsForNotif(row);
+            if (!coords) return;
+            const tsMs = parseTsToMsForQuery(row?.ts);
+            if (!Number.isFinite(tsMs) || tsMs < sinceMs) return;
+
+            const latKey = Math.round(Number(coords.lat) / cellDeg);
+            const lonKey = Math.round(Number(coords.lon) / cellDeg);
+            const key = `${latKey}:${lonKey}`;
+
+            const existing = cellMap.get(key) || {
+                lat: latKey * cellDeg,
+                lon: lonKey * cellDeg,
+                dps: 0,
+                specbat: 0,
+                weight: 0,
+                latestMs: 0
+            };
+            if (row.type === 'dps') existing.dps += 1;
+            if (row.type === 'specbat') existing.specbat += 1;
+
+            const ageMin = Math.max(0, (now - tsMs) / 60000);
+            // Свежесть: чем свежее, тем выше вес
+            const recency = ageMin <= 30 ? 1.0 : ageMin <= 90 ? 0.75 : ageMin <= 150 ? 0.55 : 0.40;
+            existing.weight += recency;
+            existing.latestMs = Math.max(existing.latestMs, tsMs);
+            cellMap.set(key, existing);
+        });
+
+        patrolHeatmapCellsCache = [...cellMap.values()]
+            .filter(c => (c.dps + c.specbat) > 0)
+            .sort((a, b) => (b.weight || 0) - (a.weight || 0))
+            .slice(0, 900);
+
+        patrolHeatmapCacheLoadedAt = Date.now();
+        return patrolHeatmapCellsCache;
+    }
+
+    async function showPatrolHeatmapAnalytics(cell) {
+        if (!cell) return;
+        if (!myMap) return;
+
+        const lat = Number(cell.lat);
+        const lon = Number(cell.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+        let street = '—';
+        try {
+            const res = await ymaps.geocode([lat, lon]);
+            const obj = res?.geoObjects?.get?.(0);
+            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
+            if (line) street = line;
+        } catch(e) {}
+
+        let probability = null;
+        let peak = null;
+        try {
+            let token = localStorage.getItem('sb_jwt') || '';
+            if (!token) {
+                const refreshed = await ensureSupabaseAuth();
+                token = refreshed || localStorage.getItem('sb_jwt') || '';
+            }
+            if (token) {
+                const resp = await fetch(`${SUPABASE_URL}/functions/v1/smart-hints?action=analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ lat, lon, ts_ms: Date.now(), recent_hours: PATROL_HEATMAP_LOOKBACK_HOURS, analyze_radius_m: 420, fetch_radius_m: 2500, window_days: 30, bucket_hours: 2 })
+                });
+                if (resp.ok) {
+                    const data = await resp.json().catch(()=>null);
+                    probability = Number(data?.analyze?.probability);
+                    peak = data?.analyze?.peak || null;
+                }
+            }
+        } catch(e) {}
+
+        const probText = Number.isFinite(probability) ? `${Math.round(probability)}%` : '—';
+        const peakText = peak?.start && peak?.end ? `${peak.start} - ${peak.end}` : 'нет данных';
+
+        const html = [
+            '<div style="font-size:12px; line-height:1.25;">',
+            '<div style="font-weight:900; margin-bottom:6px;">Аналитика Монолита</div>',
+            `<div>📍 Место: ${escapeHtml(street)}</div>`,
+            `<div>⚠️ Вероятность поста: <b>${escapeHtml(probText)}</b></div>`,
+            `<div>🕒 Пик активности: <b>${escapeHtml(peakText)}</b></div>`,
+            '</div>'
+        ].join('');
+
+        try {
+            myMap.balloon.open([lat, lon], html, { closeButton: true, maxWidth: 320 });
+        } catch(e) {}
+    }
+
+    async function renderPatrolHeatmapOverlay() {
+        if (!myMap) return;
+        if (!patrolHeatmapCollection) {
+            patrolHeatmapCollection = new ymaps.GeoObjectCollection();
+            myMap.geoObjects.add(patrolHeatmapCollection);
+        }
+
+        patrolHeatmapCollection.removeAll();
+        if (!patrolHeatmapEnabled) return;
+
+        const cells = await loadPatrolHeatmapData(false);
+        if (!cells.length) return;
+
+        const maxWeight = Math.max(...cells.map(c => Number(c.weight || 0)), 1);
+
+        cells.forEach(cell => {
+            const total = (cell.dps || 0) + (cell.specbat || 0);
+            const dominant = (cell.specbat || 0) >= (cell.dps || 0) ? 'specbat' : 'dps';
+            const norm = Math.max(0.12, Math.min(1, Number(cell.weight || 0) / maxWeight));
+            const color = getPatrolHeatColor(dominant, norm);
+
+            // Радиус точки строго ~10–12px
+            const size = 22; // diameter
+            const href = buildDotSvg(color, size, 0.92);
+
+            const pm = new ymaps.Placemark([cell.lat, cell.lon], {
+                hintContent: dominant === 'specbat' ? `Спецбат • ${total}` : `ДПС • ${total}`
+            }, {
+                iconLayout: 'default#image',
+                iconImageHref: href,
+                iconImageSize: [size, size],
+                iconImageOffset: [-Math.round(size/2), -Math.round(size/2)],
+                zIndex: 1200
+            });
+
+            pm.events.add('click', () => {
+                showPatrolHeatmapAnalytics(cell);
+            });
+
+            patrolHeatmapCollection.add(pm);
+        });
+    }
+
+    function schedulePatrolHeatmapRender() {
+        if (patrolHeatmapRenderTimer) clearTimeout(patrolHeatmapRenderTimer);
+        patrolHeatmapRenderTimer = setTimeout(() => {
+            renderPatrolHeatmapOverlay().catch(e => {
+                console.warn('Не удалось отрисовать тепловую карту засад:', e?.message || e);
+            });
+        }, 120);
+    }
+
+    async function togglePatrolHeatmap(forceState = null) {
+        patrolHeatmapEnabled = typeof forceState === 'boolean' ? forceState : !patrolHeatmapEnabled;
+        setPatrolHeatmapUiState(patrolHeatmapEnabled);
+
+        if (!patrolHeatmapEnabled) {
+            if (patrolHeatmapCollection) patrolHeatmapCollection.removeAll();
+            return;
+        }
+
+        await loadPatrolHeatmapData(false);
+        schedulePatrolHeatmapRender();
+    }
+
     function parseMarkerTimestampToMs(value) {
         if (typeof value === 'number') {
             if (value > 1e12) return value;
@@ -2001,21 +2262,23 @@
     }
 
     function getDtpHeatmapCellDegrees(zoom) {
-        if (zoom >= 17) return 0.0015;
-        if (zoom >= 16) return 0.0025;
-        if (zoom >= 15) return 0.004;
-        if (zoom >= 14) return 0.006;
-        if (zoom >= 13) return 0.009;
-        return 0.014;
+        // Чем ближе зум — тем мельче сетка, чтобы "пятна" указывали на конкретнее место.
+        if (zoom >= 17) return 0.0010;
+        if (zoom >= 16) return 0.0016;
+        if (zoom >= 15) return 0.0025;
+        if (zoom >= 14) return 0.0038;
+        if (zoom >= 13) return 0.0055;
+        return 0.008;
     }
 
     function getDtpHeatmapRadiusMeters(zoom) {
-        if (zoom >= 17) return 220;
-        if (zoom >= 16) return 320;
-        if (zoom >= 15) return 460;
-        if (zoom >= 14) return 700;
-        if (zoom >= 13) return 950;
-        return 1250;
+        // Радиусы уменьшены, чтобы пользователи понимали конкретный перекрёсток/участок.
+        if (zoom >= 17) return 120;
+        if (zoom >= 16) return 180;
+        if (zoom >= 15) return 260;
+        if (zoom >= 14) return 400;
+        if (zoom >= 13) return 550;
+        return 750;
     }
 
     function getDtpHeatColor(norm) {
@@ -2126,9 +2389,9 @@
             const norm = Math.max(0.08, Math.min(1, Number(cell.weight || 0) / maxWeight));
             const color = getDtpHeatColor(norm);
 
-            const glow = new ymaps.Circle([[cell.lat, cell.lon], radius * 1.7], {}, {
+            const glow = new ymaps.Circle([[cell.lat, cell.lon], radius * 1.4], {}, {
                 fillColor: color,
-                fillOpacity: 0.14 + norm * 0.16,
+                fillOpacity: 0.10 + norm * 0.14,
                 strokeOpacity: 0,
                 zIndex: 1100
             });
@@ -7574,13 +7837,37 @@
             monthStart.setDate(nowDate.getDate() - 29);
             monthStart.setHours(0, 0, 0, 0);
 
-            const { data: markers } = await _sb
-                .from('markers')
-                .select('ts,type')
-                .eq('author_id', uid)
-                .gte('ts', monthStart.toISOString())
-                .order('ts', { ascending: false })
-                .limit(10000);
+            // markers.ts в проекте может быть BIGINT (Date.now()) или TIMESTAMPTZ.
+            // Сначала пробуем как миллисекунды, затем fallback на ISO.
+            const monthStartMs = monthStart.getTime();
+
+            let markers = [];
+            {
+                const res = await _sb
+                    .from('markers')
+                    .select('ts,type')
+                    .eq('author_id', uid)
+                    .gte('ts', monthStartMs)
+                    .order('ts', { ascending: false })
+                    .limit(10000);
+                if (res?.error) {
+                    const res2 = await _sb
+                        .from('markers')
+                        .select('ts,type')
+                        .eq('author_id', uid)
+                        .gte('ts', monthStart.toISOString())
+                        .order('ts', { ascending: false })
+                        .limit(10000);
+                    if (res2?.error) {
+                        console.warn('Ошибка при загрузке тепловой карты (markers.ts filter):', res2.error?.message || res2.error);
+                        markers = [];
+                    } else {
+                        markers = Array.isArray(res2?.data) ? res2.data : [];
+                    }
+                } else {
+                    markers = Array.isArray(res?.data) ? res.data : [];
+                }
+            }
 
             activityHeatmapCache = {
                 markers: Array.isArray(markers) ? markers : [],
@@ -7631,7 +7918,7 @@
 
         const scopedMarkers = markers.filter(m => {
             if (!m?.ts) return false;
-            const tsMs = new Date(m.ts).getTime();
+            const tsMs = parseMarkerTimestampToMs(m.ts);
             if (!Number.isFinite(tsMs)) return false;
             if (tsMs < modeStartMs || tsMs > nowMs) return false;
             if (allowedTypes && !allowedTypes.has(m.type)) return false;
@@ -7643,7 +7930,7 @@
         const msDay = 24 * 60 * 60 * 1000;
 
         scopedMarkers.forEach(m => {
-            const d = new Date(m.ts);
+            const d = new Date(parseMarkerTimestampToMs(m.ts));
             if (isNaN(d.getTime())) return;
             const hour = d.getHours();
             rowCounts[hour] += 1;
@@ -8178,6 +8465,7 @@
                     }
                 });
                 if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
+                if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
             });
             // Если пользователь начал вручную передвигать карту — отключаем автоследование
             myMap.events.add('actionstart', () => {
@@ -8597,6 +8885,10 @@
         if (dtpHeatmapEnabled) {
             dtpHeatmapCacheLoadedAt = 0;
             scheduleDtpHeatmapRender();
+        }
+        if (patrolHeatmapEnabled) {
+            patrolHeatmapCacheLoadedAt = 0;
+            schedulePatrolHeatmapRender();
         }
         } catch (error) {
             console.error('Ошибка при загрузке маркеров (timeout или ошибка БД):', error?.message);
