@@ -2643,13 +2643,16 @@
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
         const coordKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        const DEBUG_GEOCODE = !!window.DEBUG_GEOCODE;
         let street = ANALYTICS_GEOCODE_CACHE.get(coordKey) || '⌛ Определяем…';
 
         // ★ Запускаем reverse geocode в фоне, но кэшируем только валидный адрес
         try {
-            const canGeocode = !!(window.ymaps && typeof ymaps.geocode === 'function');
+            const y = window.ymaps;
+            const canGeocode = !!(y && typeof y.geocode === 'function');
+            if (!canGeocode && DEBUG_GEOCODE) console.warn('[geocode] geocode недоступен', { hasYmaps: !!y, geocodeType: typeof y?.geocode });
             if (canGeocode && !ANALYTICS_GEOCODE_CACHE.has(coordKey) && !ANALYTICS_GEOCODE_INFLIGHT.has(coordKey)) {
-                const p = ymaps.geocode([lat, lon], { results: 1 })
+                const p = y.geocode([lat, lon], { results: 1 })
                     .then((res) => {
                         try {
                             const obj = res?.geoObjects?.get?.(0);
@@ -2673,6 +2676,7 @@
                     })
                     .then((line) => {
                         try {
+                            if (!line && DEBUG_GEOCODE) console.warn('[geocode] адрес не найден', { coordKey, lat, lon });
                             if (!line) return;
                             ANALYTICS_GEOCODE_CACHE.set(coordKey, line);
 
@@ -2703,14 +2707,49 @@
                             } catch(e) {}
                         } catch(e) {}
                     })
-                    .catch(() => {})
+                    .catch((e) => {
+                        if (DEBUG_GEOCODE) console.warn('[geocode] ошибка', e);
+                    })
                     .then(
                         () => { try { ANALYTICS_GEOCODE_INFLIGHT.delete(coordKey); } catch(e) {} },
                         () => { try { ANALYTICS_GEOCODE_INFLIGHT.delete(coordKey); } catch(e) {} }
                     );
 
                 ANALYTICS_GEOCODE_INFLIGHT.set(coordKey, p);
+
+                // Если geocode завис/долго не отвечает — через 12с разрешаем повторить
+                try {
+                    setTimeout(() => {
+                        try {
+                            if (ANALYTICS_GEOCODE_INFLIGHT.get(coordKey) === p) {
+                                ANALYTICS_GEOCODE_INFLIGHT.delete(coordKey);
+                                if (DEBUG_GEOCODE) console.warn('[geocode] timeout cleanup', { coordKey });
+                            }
+                        } catch(e) {}
+                    }, 12000);
+                } catch(e) {}
             }
+        } catch(e) {}
+
+        // Если адрес не успел определиться — показываем "—" вместо вечного "Определяем…"
+        try {
+            setTimeout(() => {
+                try {
+                    if (window.currentAnalyticsBalloonKey !== coordKey) return;
+                    if (ANALYTICS_GEOCODE_CACHE.has(coordKey)) return;
+                    if (!myMap?.balloon?.isOpen?.()) return;
+
+                    const currentHtml = String(window.currentAnalyticsBalloonHtml || '');
+                    if (!currentHtml) return;
+                    if (!currentHtml.includes('⌛ Определяем')) return;
+
+                    const newContent = currentHtml.replace(/📍 Место: [^<]*/g, '📍 Место: —');
+                    if (newContent === currentHtml) return;
+                    window.currentAnalyticsBalloonHtml = newContent;
+
+                    if (typeof myMap.balloon.setContent === 'function') myMap.balloon.setContent(newContent);
+                } catch(e) {}
+            }, 3500);
         } catch(e) {}
 
         let probability = null;
