@@ -2631,6 +2631,9 @@
         return patrolHeatmapCellsCache;
     }
 
+    const ANALYTICS_GEOCODE_CACHE = new Map();
+    const ANALYTICS_GEOCODE_INFLIGHT = new Map();
+    
     async function showPatrolHeatmapAnalytics(cell) {
         if (!cell) return;
         if (!myMap) return;
@@ -2639,31 +2642,76 @@
         const lon = Number(cell.lon);
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
-        let street = '—';
-        
-        // ★ Определяем адрес через reverse geocode (неблокирующий вызов)
-        ymaps.geocode([lat, lon], {results: 1})
-            .then(res => {
-                try {
-                    const obj = res?.geoObjects?.get?.(0);
-                    if (obj) {
-                        const line = String(obj.getAddressLine() || '').trim();
-                        if (line && myMap?.balloon?.isOpen?.()) {
-                            // Обновляем текст в уже открытом балуне
-                            setTimeout(() => {
-                                const balloonContent = myMap.balloon.getContent();
-                                if (balloonContent) {
-                                    const newContent = balloonContent.replace(/📍 Место: —/, `📍 Место: ${escapeHtml(line)}`);
-                                    if (newContent !== balloonContent) {
-                                        myMap.balloon.setContent(newContent);
-                                    }
-                                }
-                            }, 50);
+        const coordKey = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+        let street = ANALYTICS_GEOCODE_CACHE.get(coordKey) || '⌛ Определяем…';
+
+        // ★ Запускаем reverse geocode в фоне, но кэшируем только валидный адрес
+        try {
+            const canGeocode = !!(window.ymaps && typeof ymaps.geocode === 'function');
+            if (canGeocode && !ANALYTICS_GEOCODE_CACHE.has(coordKey) && !ANALYTICS_GEOCODE_INFLIGHT.has(coordKey)) {
+                const p = ymaps.geocode([lat, lon], { results: 1 })
+                    .then((res) => {
+                        try {
+                            const obj = res?.geoObjects?.get?.(0);
+                            if (!obj) return null;
+
+                            let line = '';
+                            try {
+                                line = String(obj.getAddressLine?.() || '').trim();
+                            } catch(e) {}
+
+                            if (!line) {
+                                try {
+                                    line = String(obj.properties?.get?.('text') || obj.properties?.get?.('name') || '').trim();
+                                } catch(e) {}
+                            }
+
+                            return line || null;
+                        } catch(e) {
+                            return null;
                         }
-                    }
-                } catch(e) {}
-            })
-            .catch(() => {});
+                    })
+                    .then((line) => {
+                        try {
+                            if (!line) return;
+                            ANALYTICS_GEOCODE_CACHE.set(coordKey, line);
+
+                            // Обновляем адрес только если пользователь всё ещё смотрит этот же балун
+                            if (window.currentAnalyticsBalloonKey !== coordKey) return;
+                            if (!myMap?.balloon?.isOpen?.()) return;
+
+                            // Обновляем через сохранённый HTML (надежнее, чем getContent)
+                            const currentHtml = String(window.currentAnalyticsBalloonHtml || '');
+                            if (!currentHtml) return;
+
+                            const newContent = currentHtml.replace(
+                                /📍 Место: [^<]*/g,
+                                `📍 Место: ${escapeHtml(line)}`
+                            );
+
+                            if (newContent === currentHtml) return;
+                            window.currentAnalyticsBalloonHtml = newContent;
+
+                            try {
+                                if (typeof myMap.balloon.setContent === 'function') {
+                                    myMap.balloon.setContent(newContent);
+                                } else {
+                                    const center = window.currentAnalyticsBalloonCenter || [lat, lon];
+                                    const opts = window.currentAnalyticsBalloonOpts || { closeButton: true, maxWidth: 320 };
+                                    myMap.balloon.open(center, newContent, opts);
+                                }
+                            } catch(e) {}
+                        } catch(e) {}
+                    })
+                    .catch(() => {})
+                    .then(
+                        () => { try { ANALYTICS_GEOCODE_INFLIGHT.delete(coordKey); } catch(e) {} },
+                        () => { try { ANALYTICS_GEOCODE_INFLIGHT.delete(coordKey); } catch(e) {} }
+                    );
+
+                ANALYTICS_GEOCODE_INFLIGHT.set(coordKey, p);
+            }
+        } catch(e) {}
 
         let probability = null;
         let peak = null;
@@ -2700,6 +2748,10 @@
         ].join('');
 
         try {
+            window.currentAnalyticsBalloonKey = coordKey;
+            window.currentAnalyticsBalloonHtml = html;
+            window.currentAnalyticsBalloonCenter = [lat, lon];
+            window.currentAnalyticsBalloonOpts = { closeButton: true, maxWidth: 320 };
             myMap.balloon.open([lat, lon], html, { closeButton: true, maxWidth: 320 });
         } catch(e) {}
     }
