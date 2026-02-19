@@ -30,21 +30,6 @@
             --mono-sos: #ff0000;
         }
 
-        /* Dark theme overrides */
-        body.dark-theme {
-            --mono-ui-bg: #080808; /* OLED Black */
-            --mono-surface: #1a1a1a;
-            --mono-btn-bg: #1C1C1E; /* Space Gray */
-            --mono-text: #e0e0e0;
-            --mono-muted: #b0b0b0;
-            --mono-border: #333;
-            --mono-sos: #ff4500; /* Neon Orange */
-
-            /* Совместимость со старым стилем: многие элементы завязаны на эти токены */
-            --bg: #080808;
-            --gray: #b0b0b0;
-        }
-
         body, html { width: 100%; height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--mono-ui-bg); color: var(--mono-text); overflow: hidden; }
         
         /* Отключение выделения и улучшение тап-реакций */
@@ -221,57 +206,7 @@
             font-weight: 600;
         }
         #map { width: 100%; height: 100%; position: absolute; }
-        /* Fallback (Yandex Maps API 2.1): если yandex#skeletonNight недоступен — затемняем ТАЙЛЫ,
-           а не весь контейнер (чтобы не инвертировать UI/метки). */
-        /* ★ Убрана тяжёлая фильтрация (filter) - вызывала лаги при взаимодействии с картой */
-        /* Используем только фоновую подсветку для тёмного режима */
-        #map.map-dark-filter .ymaps-2-1-map {
-            background-color: #0a0a0a !important;
-        }
 
-        /* Dark theme surface + text for key components (не трогаем inline-стили) */
-        body.dark-theme .settings-card,
-        body.dark-theme .modal-content,
-        body.dark-theme .ban-notice-content,
-        body.dark-theme .chat-messages,
-        body.dark-theme .notif-row,
-        body.dark-theme .chat-context-menu {
-            background: var(--mono-surface);
-            color: var(--mono-text);
-            border-color: var(--mono-border);
-        }
-        body.dark-theme .settings-card-title,
-        body.dark-theme .notif-title {
-            color: var(--mono-text);
-        }
-        body.dark-theme .settings-row-subtitle,
-        body.dark-theme .notif-body,
-        body.dark-theme .notif-time {
-            color: var(--mono-muted);
-        }
-
-        /* Dark theme controls */
-        body.dark-theme .settings-inline-btn,
-        body.dark-theme .settings-chip,
-        body.dark-theme .type-btn,
-        body.dark-theme .chat-photo-btn,
-        body.dark-theme .chat-input,
-        body.dark-theme .chat-message.other {
-            background: var(--mono-btn-bg);
-            color: var(--mono-text);
-            border-color: var(--mono-border);
-        }
-        body.dark-theme .chat-input::placeholder { color: rgba(224,224,224,0.55); }
-
-        /* Neon glow in dark mode */
-        body.dark-theme .main-btn,
-        body.dark-theme .settings-inline-btn,
-        body.dark-theme .settings-chip,
-        body.dark-theme .type-btn,
-        body.dark-theme .chat-send-btn,
-        body.dark-theme .unban-request-btn {
-            box-shadow: 0 0 0 1px rgba(255,204,0,0.14), 0 0 14px rgba(255,204,0,0.16);
-        }
         .target {
             position: absolute;
             top: 50%;
@@ -2198,7 +2133,6 @@
     // Флаг автоследования: если true — карта центрируется на пользователе при обновлении GPS
     let autoFollow = true;
     let mapActionInProgress = false;
-    let mapFilterSuppressed = false;
     let mapActionStartedAt = 0;
     let lastAutoFollowCenterAt = 0;
     let lastAutoFollowCenterCoords = null;
@@ -2311,12 +2245,7 @@
     let radarActive = false;
     let radarToggleInProgress = false;
     let wakeLockSentinel = null;
-    let darkModeEnabled = false;
     let wakeLockPreferenceEnabled = true;
-    let autoDarkModeEnabled = false;
-    let autoDarkModeTimerId = null;
-    let autoDarkModeLastApplied = null;
-    let autoDarkModeAdjusting = false;
     // Флаг видимости нижнего виджета
     let actionCardVisible = true;
     // Флаг для отключения автосцентрирования GPS после размещения метки
@@ -2604,21 +2533,8 @@
     }
 
     function toggleAutoDarkMode(state) {
-        if (!isViewingOwnProfile) return;
-        autoDarkModeEnabled = !!state;
-        updateScreenEnergyUi();
-        try {
-            localStorage.setItem('autoDarkModeEnabled', autoDarkModeEnabled ? 'true' : 'false');
-        } catch (e) {
-            console.warn('Не удалось сохранить авто-темный режим:', e);
-        }
-        if (autoDarkModeEnabled) {
-            startAutoDarkModeWatcher();
-            evaluateAutoDarkMode(true);
-        } else {
-            stopAutoDarkModeWatcher();
-            autoDarkModeLastApplied = false;
-        }
+        // ★ Темный режим удален
+        // Функция оставлена для совместимости
     }
 
     function loadScreenEnergyPreferences() {
@@ -2626,51 +2542,22 @@
             const savedWake = localStorage.getItem('wakeLockPreferenceEnabled');
             if (savedWake === 'false') wakeLockPreferenceEnabled = false;
             if (savedWake === 'true') wakeLockPreferenceEnabled = true;
-            const savedAutoDark = localStorage.getItem('autoDarkModeEnabled');
-            if (savedAutoDark === 'true') autoDarkModeEnabled = true;
-            if (savedAutoDark === 'false') autoDarkModeEnabled = false;
         } catch (e) {
-            console.warn('Не удалось загрузить настройки экрана/энергии:', e);
+            // ignore
         }
         updateScreenEnergyUi();
-        if (autoDarkModeEnabled) {
-            startAutoDarkModeWatcher();
-        } else {
-            stopAutoDarkModeWatcher();
-        }
     }
 
     function startAutoDarkModeWatcher() {
-        stopAutoDarkModeWatcher();
-        if (!autoDarkModeEnabled) return;
-        evaluateAutoDarkMode(true);
-        autoDarkModeTimerId = setInterval(() => {
-            evaluateAutoDarkMode();
-        }, AUTO_DARK_RECHECK_MS);
+        // ★ Темный режим удален
     }
 
     function stopAutoDarkModeWatcher() {
-        if (autoDarkModeTimerId) {
-            clearInterval(autoDarkModeTimerId);
-            autoDarkModeTimerId = null;
-        }
+        // ★ Темный режим удален
     }
 
     function evaluateAutoDarkMode(force = false) {
-        if (!autoDarkModeEnabled) return;
-        const hour = new Date().getHours();
-        const shouldBeDark = (hour >= 18 || hour < 6);
-        if (shouldBeDark && !darkModeEnabled) {
-            autoDarkModeAdjusting = true;
-            toggleDarkMode(true);
-            autoDarkModeAdjusting = false;
-            autoDarkModeLastApplied = true;
-        } else if (!shouldBeDark && darkModeEnabled && (autoDarkModeLastApplied || force)) {
-            autoDarkModeAdjusting = true;
-            toggleDarkMode(false);
-            autoDarkModeAdjusting = false;
-            autoDarkModeLastApplied = false;
-        }
+        // ★ Темный режим удален
     }
 
     function setDtpHeatmapUiState(enabled) {
@@ -2818,12 +2705,7 @@
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
         let street = '—';
-        try {
-            const res = await ymaps.geocode([lat, lon]);
-            const obj = res?.geoObjects?.get?.(0);
-            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
-            if (line) street = line;
-        } catch(e) {}
+        // ★ Удалено определение адреса через ymaps.geocode - вызывало лаги
 
         let probability = null;
         let peak = null;
@@ -4483,89 +4365,6 @@
         }
     }
 
-    // ===== Monolith smart dark theme (isolated) =====
-    const THEME_STORAGE_KEY = 'monolith_theme_is_dark';
-    const YA_MAP_TYPE_LIGHT = 'yandex#map';
-    const YA_MAP_TYPE_DARK = 'yandex#skeletonNight';
-
-    function isYandexMapTypeAvailable(typeId) {
-        try {
-            if (!window.ymaps) return false;
-            const storage = ymaps?.mapType?.storage;
-            if (!storage || typeof storage.get !== 'function') return false;
-            // storage.get кидает исключение если типа нет
-            const t = storage.get(typeId);
-            return !!t;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    function applyYandexMapTheme(isDark) {
-        const mapEl = document.getElementById('map');
-        const wantDark = !!isDark;
-        const darkTypeAvailable = wantDark ? isYandexMapTypeAvailable(YA_MAP_TYPE_DARK) : false;
-
-        let usedMapType = false;
-        let usedMapStyle = false;
-
-        // A) Идеальный вариант: yandex#skeletonNight (если реально доступен)
-        if (myMap && typeof myMap.setType === 'function' && wantDark && darkTypeAvailable) {
-            try {
-                myMap.setType(YA_MAP_TYPE_DARK);
-                usedMapType = true;
-            } catch (e) {
-                usedMapType = false;
-            }
-        }
-
-        // B) Если skeletonNight отсутствует/ломает тайлы (серая карта) — используем Monolith map styles,
-        // которые уже применялись в приложении: navigation-day-v1 / navigation-night-v1.
-        if (myMap && !usedMapType) {
-            // гарантируем базовый тип, чтобы слой тайлов точно существовал
-            if (typeof myMap.setType === 'function') {
-                try { myMap.setType(YA_MAP_TYPE_LIGHT); } catch (e) {}
-            }
-
-            // пробуем setMapStyle (самый стабильный путь без CSS filter)
-            if (typeof myMap.setMapStyle === 'function') {
-                try {
-                    myMap.setMapStyle(wantDark ? MAP_STYLE_NIGHT_ID : MAP_STYLE_DAY_ID);
-                    usedMapStyle = true;
-                } catch (e) {
-                    usedMapStyle = false;
-                }
-            }
-        }
-
-        // C) Последний шанс: CSS filter только для тайлов
-        if (mapEl) {
-            mapEl.classList.toggle('map-dark-filter', wantDark && !usedMapType && !usedMapStyle);
-        }
-
-        return usedMapType || usedMapStyle;
-    }
-
-    function toggleTheme(isDark) {
-        darkModeEnabled = !!isDark;
-        try {
-            document.body.classList.toggle('dark-theme', darkModeEnabled);
-        } catch (e) {
-            // ignore
-        }
-
-        try {
-            localStorage.setItem(THEME_STORAGE_KEY, darkModeEnabled ? '1' : '0');
-        } catch (e) {
-            // ignore
-        }
-
-        // Карта + UI
-        applyYandexMapTheme(darkModeEnabled);
-        recoverYandexMapViewport('theme');
-        try { updateDarkModeUi(); } catch (e) {}
-    }
-
     function recoverYandexMapViewport(reason = '') {
         if (!myMap || viewportRecoveryInProgress) return;
         viewportRecoveryInProgress = true;
@@ -4631,45 +4430,15 @@
     }
 
     function loadThemePreference() {
-        let saved = null;
-        try { saved = localStorage.getItem(THEME_STORAGE_KEY); } catch (e) { saved = null; }
-        if (saved === '1' || saved === '0') {
-            toggleTheme(saved === '1');
-        } else {
-            // по умолчанию: светлая
-            try { document.body.classList.remove('dark-theme'); } catch (e) {}
-        }
+        // ★ Темный режим удален
     }
 
     function syncMapVisualStyleWithTheme() {
-        // ★ ОПТИМИЗАЦИЯ: Упрощено - убрана дорогостоящая тема для карты
-        // Простое переключение фонового цвета вместо filter + yandex#skeletonNight
-        if (!viewportRecoveryInProgress && myMap) {
-            try {
-                const mapEl = document.getElementById('map');
-                if (mapEl) {
-                    if (darkModeEnabled) {
-                        mapEl.classList.add('map-dark-filter');
-                    } else {
-                        mapEl.classList.remove('map-dark-filter');
-                    }
-                }
-            } catch(e) {}
-        }
+        // ★ Темный режим удален
     }
 
     function updateDarkModeUi() {
-        const btn = document.getElementById('darkModeToggleBtn');
-        if (btn) {
-            btn.disabled = false;
-            btn.classList.toggle('disabled', false);
-            btn.classList.toggle('active', darkModeEnabled);
-            btn.textContent = darkModeEnabled ? '🌞 ВКЛЮЧИТЬ ЭКРАН' : '🌙 ТЕМНЫЙ РЕЖИМ';
-        }
-        // В "умной" теме не перекрываем приложение чёрным оверлеем.
-        const shade = document.getElementById('darkModeShade');
-        if (shade) shade.classList.remove('active');
-        syncMapVisualStyleWithTheme();
+        // ★ Темный режим удален
     }
 
     function updateRadarUi() {
@@ -4695,7 +4464,6 @@
                 hint.textContent = 'Нажмите, чтобы включить GPS, озвучку и удержание экрана.';
             }
         }
-        updateDarkModeUi();
     }
 
     async function requestWakeLock() {
@@ -9652,31 +9420,15 @@
                     mapActionInProgress = true;
                     mapActionStartedAt = Date.now();
                     autoFollow = false;
-
-                    try {
-                        const mapEl = document.getElementById('map');
-                        if (mapEl && mapEl.classList.contains('map-dark-filter')) {
-                            mapEl.classList.remove('map-dark-filter');
-                            mapFilterSuppressed = true;
-                        }
-                    } catch (e) {}
                 } catch (e) {
                     console.error('[actionstart] Ошибка при обработке actionstart:', e);
                 }
             });
 
-            // При завершении действия обновляем адрес/оверлеи и возвращаем тему.
+            // При завершении действия обновляем оверлеи.
             myMap.events.add('actionend', () => {
                 try {
                     mapActionInProgress = false;
-
-                    // Возвращаем фильтр/стиль после жеста
-                    try {
-                        if (mapFilterSuppressed) {
-                            mapFilterSuppressed = false;
-                            syncMapVisualStyleWithTheme();
-                        }
-                    } catch (e) {}
 
                     if (!viewportRecoveryInProgress) {
                         try { recoverYandexMapViewport('actionend'); } catch (e) {}
