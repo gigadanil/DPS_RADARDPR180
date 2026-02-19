@@ -2163,6 +2163,38 @@
     let userSpeedKmh = 0; // скорость в км/ч
     // Текущие серверные ачивки (ключ -> count)
     let currentAchievementCounts = {};
+    // Обработчик необработанных Promise rejection
+    window.addEventListener('unhandledrejection', (event) => {
+        if (event.reason && typeof event.reason === 'string' && 
+            (event.reason.includes('getZoomRange') ||
+             event.reason.includes('ticking') ||
+             event.reason.includes('Maximum call stack'))) {
+            console.error('[Promise Rejection Handler] Перехвачена ошибка карты:', event.reason);
+            event.preventDefault();
+            return false;
+        }
+    });
+
+    // Глобальный обработчик ошибок для перехвата ошибок из библиотек карт
+    window.addEventListener('error', (event) => {
+        if (event.error && event.error.message && 
+            (event.error.message.includes('Maximum call stack size exceeded') ||
+             event.error.message.includes('ticking while inactive'))) {
+            console.error('[Map Error Handler] Перехвачена ошибка карты:', event.error.message);
+            event.preventDefault();
+            
+            // Попытка восстановить карту
+            if (myMap && typeof ensureMapBehaviorsEnabled === 'function') {
+                try {
+                    setTimeout(() => {
+                        ensureMapBehaviorsEnabled();
+                    }, 100);
+                } catch (e) {}
+            }
+            return false;
+        }
+    }, true); // Capture phase для раннего перехвата
+
     // Коллекция для маркеров (чтобы не удалять служебные geoObjects при обновлении)
     let markersCollection = null;
     // Флаг автоследования: если true — карта центрируется на пользователе при обновлении GPS
@@ -9620,42 +9652,50 @@
             // Если пользователь начал вручную передвигать/масштабировать карту — отключаем автоследование
             // и временно убираем тяжёлый CSS-фильтр (он может фризить drag/zoom на iOS/WebView).
             myMap.events.add('actionstart', () => {
-                mapActionInProgress = true;
-                mapActionStartedAt = Date.now();
-                autoFollow = false;
-
                 try {
-                    const mapEl = document.getElementById('map');
-                    if (mapEl && mapEl.classList.contains('map-dark-filter')) {
-                        mapEl.classList.remove('map-dark-filter');
-                        mapFilterSuppressed = true;
-                    }
-                } catch (e) {}
+                    mapActionInProgress = true;
+                    mapActionStartedAt = Date.now();
+                    autoFollow = false;
+
+                    try {
+                        const mapEl = document.getElementById('map');
+                        if (mapEl && mapEl.classList.contains('map-dark-filter')) {
+                            mapEl.classList.remove('map-dark-filter');
+                            mapFilterSuppressed = true;
+                        }
+                    } catch (e) {}
+                } catch (e) {
+                    console.error('[actionstart] Ошибка при обработке actionstart:', e);
+                }
             });
 
             // При завершении действия обновляем адрес/оверлеи и возвращаем тему.
             myMap.events.add('actionend', () => {
-                mapActionInProgress = false;
-
-                // Возвращаем фильтр/стиль после жеста
                 try {
-                    if (mapFilterSuppressed) {
-                        mapFilterSuppressed = false;
-                        syncMapVisualStyleWithTheme();
+                    mapActionInProgress = false;
+
+                    // Возвращаем фильтр/стиль после жеста
+                    try {
+                        if (mapFilterSuppressed) {
+                            mapFilterSuppressed = false;
+                            syncMapVisualStyleWithTheme();
+                        }
+                    } catch (e) {}
+
+                    if (!viewportRecoveryInProgress) {
+                        try { recoverYandexMapViewport('actionend'); } catch (e) {}
                     }
-                } catch (e) {}
 
-                if (!viewportRecoveryInProgress) {
-                    try { recoverYandexMapViewport('actionend'); } catch (e) {}
-                }
+                    if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
+                    if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
 
-                if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
-                if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
-
-                // Если во время жеста кто-то запросил обновление маркеров — выполняем сейчас.
-                if (markersRefreshPending) {
-                    markersRefreshPending = false;
-                    try { loadMarkersDebounced(); } catch(e) {}
+                    // Если во время жеста кто-то запросил обновление маркеров — выполняем сейчас.
+                    if (markersRefreshPending) {
+                        markersRefreshPending = false;
+                        try { loadMarkersDebounced(); } catch(e) {}
+                    }
+                } catch (e) {
+                    console.error('[actionend] Ошибка при обработке actionend:', e);
                 }
             });
             
