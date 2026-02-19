@@ -4541,7 +4541,35 @@
 
         // Карта + UI
         applyYandexMapTheme(darkModeEnabled);
+        recoverYandexMapViewport('theme');
         try { updateDarkModeUi(); } catch (e) {}
+    }
+
+    function recoverYandexMapViewport(reason = '') {
+        if (!myMap) return;
+        try {
+            myMap.container?.fitToViewport?.();
+        } catch (e) {}
+
+        try {
+            const c = myMap.getCenter?.();
+            const z = myMap.getZoom?.();
+            if (c && typeof myMap.setCenter === 'function') {
+                myMap.setCenter(c, z, { duration: 0, checkZoomRange: false });
+            }
+        } catch (e) {}
+
+        try {
+            if (myMap.behaviors && typeof myMap.behaviors.enable === 'function') {
+                myMap.behaviors.enable(['drag', 'scrollZoom', 'multiTouch']);
+            }
+        } catch (e) {}
+
+        try {
+            requestAnimationFrame(() => {
+                try { myMap.container?.fitToViewport?.(); } catch(e) {}
+            });
+        } catch (e) {}
     }
 
     function loadThemePreference() {
@@ -9559,7 +9587,13 @@
             appInitialized = true;
             initApp();
             updateTargetAnchorPosition();
-            window.addEventListener('resize', updateTargetAnchorPosition);
+            window.addEventListener('resize', () => {
+                try { updateTargetAnchorPosition(); } catch(e) {}
+                try { recoverYandexMapViewport('resize'); } catch(e) {}
+            });
+            window.addEventListener('orientationchange', () => {
+                try { recoverYandexMapViewport('orientation'); } catch(e) {}
+            });
             setDtpHeatmapUiState(false);
             
             // Обновим состояние кнопки автослежения
@@ -9989,6 +10023,9 @@
             }
         } catch (e) {}
 
+        if (document.visibilityState === 'visible') {
+            try { recoverYandexMapViewport('visibility'); } catch(e) {}
+        }
         if (document.visibilityState === 'visible' && radarActive && wakeLockSupported && wakeLockPreferenceEnabled && !wakeLockSentinel) {
             requestWakeLock().catch(() => {});
         }
