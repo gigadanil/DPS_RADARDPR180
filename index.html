@@ -2293,6 +2293,9 @@
     let authorsCache = {};
     let authorsCacheTime = 0;
     const CACHE_DURATION = 300000; // Кэширование на 5 минут
+    // Отдельный кэш авторов для маркеров (drivers: name/likes/is_trusted) — чтобы не пересобирать на каждый loadMarkers
+    let markerAuthorsCache = {};
+    let markerAuthorsCacheTime = 0;
     // Таймер для дебаунса loadMarkers
     let loadMarkersTimeout = null;
 
@@ -3763,16 +3766,21 @@
     let loadMarkersInProgress = false;
     let markersRefreshPending = false;
 
+    // var (не const), чтобы функция requestMarkersRefresh могла безопасно ссылаться на него (без TDZ).
+    var loadMarkersDebounced = debounce(() => loadMarkers(), 750);
+
     function requestMarkersRefresh() {
         // Если пользователь прямо сейчас двигает/зумит карту — не трогаем главный поток.
         if (mapActionInProgress) {
             markersRefreshPending = true;
             return;
         }
-        requestMarkersRefresh();
+        try {
+            if (typeof loadMarkersDebounced === 'function') loadMarkersDebounced();
+        } catch (e) {
+            // ignore
+        }
     }
-
-    const loadMarkersDebounced = debounce(() => loadMarkers(), 750);
     
     // ============= ФУНКЦИИ ДЛЯ УВЕДОМЛЕНИЙ О РАССТОЯНИИ И ОЗВУЧКИ =============
     
@@ -9808,7 +9816,7 @@
                 if (insertedMarkers && insertedMarkers[0]) {
                     notifyHelpBotAboutMarker(insertedMarkers[0]);
                 }
-                loadMarkers();
+                requestMarkersRefresh();
             }
         } catch (e) {
             console.warn('Ошибка при добавлении метки:', e?.message || e);
@@ -9835,7 +9843,11 @@
         // чтобы корректно работать с разными типами поля exp (BIGINT или TIMESTAMPTZ)
         try {
             const { data: markers } = await Promise.race([
-                _sb.from('markers').select('*'),
+                // Ограничиваем до 500 последних маркеров (по ts DESC), чтобы не заламывать клиент при тысячах.
+                _sb.from('markers')
+                    .select('id,type,ts,exp,comment,coords,author_id,votes_up,votes_down,leave_confirmations,photo_url')
+                    .order('ts', { ascending: false })
+                    .limit(500),
                 new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Markers load timeout')), 10000)
                 )
@@ -9888,8 +9900,6 @@
             counterEl.innerHTML = counterHTML;
         }
         
-        // Удаляем только маркеры, которые мы рендерим (не трогаем userLocationMarker и служебные объекты)
-        if (markersCollection) markersCollection.removeAll();
         // Используем GPS координаты пользователя, иначе центр карты
         const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : myMap.getCenter();
 
@@ -9982,6 +9992,10 @@
                 }
             }
         } catch (e) {}
+
+        // Удаляем только маркеры, которые мы рендерим (не трогаем userLocationMarker и служебные объекты)
+        // Делаем это ПОСЛЕ подготовки данных, чтобы при ошибке не оставаться с пустой картой.
+        if (markersCollection) markersCollection.removeAll();
 
         // Для каждого маркера создаем объект на карте
         activeMarkers.forEach(m => {
