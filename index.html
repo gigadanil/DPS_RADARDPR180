@@ -9392,8 +9392,72 @@
         }
     }
 
+    async function ensureYmapsLoaded(timeoutMs = 15000) {
+        if (window.ymaps && typeof window.ymaps.ready === 'function') return true;
+
+        const existing = document.querySelector('script[src*="api-maps.yandex.ru/2.1/"]');
+        const baseSrc = existing?.getAttribute('src') || existing?.src || 'https://api-maps.yandex.ru/2.1/?lang=ru_RU';
+
+        let src = String(baseSrc);
+        const hasLoad = /[?&]load=/.test(src);
+        if (!hasLoad) src += (src.includes('?') ? '&' : '?') + 'load=package.full';
+        src += (src.includes('?') ? '&' : '?') + '_ts=' + Date.now();
+
+        const debug = !!window.DEBUG_GEOCODE;
+        if (debug) {
+            try {
+                console.log('[ymaps-load] start', {
+                    href: String(location?.href || ''),
+                    protocol: String(location?.protocol || ''),
+                    referrer: String(document?.referrer || ''),
+                    src,
+                });
+                if (String(location?.protocol || '') === 'file:') {
+                    console.warn('[ymaps-load] file:// режим часто блокируется Яндексом — нужен https');
+                }
+            } catch(e) {}
+        }
+
+        await new Promise((resolve, reject) => {
+            try {
+                const s = document.createElement('script');
+                s.src = src;
+                s.async = true;
+                s.onload = () => resolve(true);
+                s.onerror = (ev) => {
+                    if (debug) console.warn('[ymaps-load] onerror', { src, ev });
+                    reject(new Error('Yandex Maps API script failed to load'));
+                };
+                document.head.appendChild(s);
+            } catch (e) {
+                reject(e);
+            }
+        }).catch(() => false);
+
+        const startedAt = Date.now();
+        while (Date.now() - startedAt < Math.min(4000, timeoutMs)) {
+            if (window.ymaps && typeof window.ymaps.ready === 'function') return true;
+            await new Promise((r) => setTimeout(r, 100));
+        }
+
+        const ok = !!(window.ymaps && typeof window.ymaps.ready === 'function');
+        if (!ok && debug) {
+            console.warn('[ymaps-load] failed', {
+                hasYmaps: !!window.ymaps,
+                readyType: typeof window.ymaps?.ready,
+                note: 'Если ключ ограничен по доменам/Referer в кабинете Яндекса — добавь текущий домен (и домен Telegram Mini App) в разрешённые.'
+            });
+        }
+        return ok;
+    }
+
     // ============= ИНИЦИАЛИЗАЦИЯ КАРТЫ В ЯНДЕКС.ГОТОВАЯ =============
-    ymaps.ready(async () => {
+    async function initYandexMap() {
+        const ymaps = window.ymaps;
+        if (!ymaps || typeof ymaps.ready !== 'function') {
+            throw new Error('Yandex Maps API не загрузился (ymaps недоступен)');
+        }
+
         // Показываем экран приветствия
         showSplashScreen();
 
@@ -9590,7 +9654,30 @@
                 console.error('Ошибка инициализации карты:', e);
             }
         }
-    });
+    }
+
+    (async () => {
+        try {
+            const ok = await ensureYmapsLoaded(15000);
+            if (!ok) throw new Error('Не удалось загрузить Яндекс.Карты (возможно, блокировка api-maps.yandex.ru)');
+
+            const y = window.ymaps;
+            if (!y || typeof y.ready !== 'function') throw new Error('Yandex Maps API не готов');
+
+            y.ready(() => {
+                initYandexMap().catch((e) => {
+                    console.error('initYandexMap error:', e);
+                    try { hideSplashScreenImmediately(); } catch(_) {}
+                });
+            });
+        } catch (e) {
+            console.error('Yandex Maps bootstrap error:', e);
+            try { hideSplashScreenImmediately(); } catch(_) {}
+            try {
+                alert('❌ Не удалось загрузить Яндекс.Карты.\n\nПроверь интернет и доступность api-maps.yandex.ru в Telegram WebView.');
+            } catch(_) {}
+        }
+    })();
 
 
 
