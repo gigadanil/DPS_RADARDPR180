@@ -1779,24 +1779,49 @@
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     const BOT_USERNAME = 'DPSRADARDPR180bot';
-    function createSupabaseClient(token = null) {
+    // Supabase: держим ОДИН инстанс клиента (иначе supabase-js ругается на Multiple GoTrueClient instances).
+    // Авторизацию (JWT от Edge Function telegram-auth) подставляем через fetch-wrapper.
+    let supabaseAuthToken = null;
+    let _sb = null;
+
+    function createSupabaseClient() {
+        if (_sb) return _sb;
+
         const options = {
             auth: {
                 persistSession: false,
                 autoRefreshToken: false,
                 detectSessionInUrl: false
+            },
+            global: {
+                fetch: (url, fetchOptions = {}) => {
+                    try {
+                        const opts = fetchOptions || {};
+                        const headers = new Headers(opts.headers || {});
+                        // Supabase сам проставляет Authorization: Bearer <anon key>.
+                        // Если есть JWT пользователя — перетираем Authorization им.
+                        if (supabaseAuthToken) {
+                            headers.set('Authorization', `Bearer ${supabaseAuthToken}`);
+                        }
+                        opts.headers = headers;
+                        return fetch(url, opts);
+                    } catch (e) {
+                        return fetch(url, fetchOptions);
+                    }
+                }
             }
         };
-        if (token) {
-            options.global = { headers: { Authorization: `Bearer ${token}` } };
-        }
-        return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
+
+        _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
+        try { window._sb = _sb; } catch(e) {}
+        return _sb;
     }
 
     function clearSupabaseAuth() {
         closeRealtimeChannels();
-        _sb = createSupabaseClient();
-        try { window._sb = _sb; } catch(e) {}
+        supabaseAuthToken = null;
+        createSupabaseClient();
+        try { _sb?.realtime?.setAuth?.(null); } catch(e) {}
         try {
             localStorage.removeItem('sb_jwt');
             localStorage.removeItem('sb_jwt_exp');
@@ -1808,10 +1833,8 @@
         }
     }
 
-    // Клиент Supabase для работы с БД
-    let _sb = createSupabaseClient();
-    // Удобно для диагностики из DevTools: в некоторых WebView глобальный `let` не виден как переменная.
-    try { window._sb = _sb; } catch(e) {}
+    // Клиент Supabase для работы с БД (singleton)
+    createSupabaseClient();
 
     function setSupabaseAuth(token) {
         if (!token || typeof token !== 'string' || token.split('.').length !== 3) {
@@ -1819,8 +1842,9 @@
             return;
         }
         closeRealtimeChannels();
-        _sb = createSupabaseClient(token);
-        try { window._sb = _sb; } catch(e) {}
+        supabaseAuthToken = token;
+        createSupabaseClient();
+        try { _sb?.realtime?.setAuth?.(token); } catch(e) {}
         initRealtimeChannels();
     }
 
@@ -2226,6 +2250,58 @@
             topPx = Math.max(TARGET_MIN_TOP_PX, topPx);
         }
         targetEl.style.top = `${Math.round(topPx)}px`;
+    }
+
+    // Координаты точки, на которую указывает «прицел» (крестик).
+    // Нельзя просто брать myMap.getCenter(), т.к. прицел может быть поднят над нижним виджетом.
+    function getTargetPlacementCoords() {
+        try {
+            if (!myMap || typeof myMap.getCenter !== 'function') return [48.01, 37.80];
+            const fallbackCenter = myMap.getCenter();
+
+            const containerEl = (myMap.container && typeof myMap.container.getElement === 'function')
+                ? myMap.container.getElement()
+                : null;
+            if (!containerEl || typeof containerEl.getBoundingClientRect !== 'function') return fallbackCenter;
+
+            const mapRect = containerEl.getBoundingClientRect();
+            if (!mapRect || !Number.isFinite(mapRect.width) || !Number.isFinite(mapRect.height)) return fallbackCenter;
+
+            const targetEl = document.querySelector('.target');
+            const targetRect = (targetEl && typeof targetEl.getBoundingClientRect === 'function')
+                ? targetEl.getBoundingClientRect()
+                : null;
+
+            const xPage = mapRect.left + mapRect.width / 2;
+            let yPage = targetRect ? (targetRect.top + targetRect.height / 2) : (mapRect.top + mapRect.height / 2);
+
+            // На всякий случай зажимаем в границах контейнера карты.
+            yPage = Math.max(mapRect.top, Math.min(yPage, mapRect.bottom));
+
+            const pagePx = [xPage, yPage];
+
+            // Основной путь (Yandex.Maps v2.1): page -> global pixels -> coords via projection.
+            if (myMap.converter && typeof myMap.converter.pageToGlobal === 'function') {
+                const globalPx = myMap.converter.pageToGlobal(pagePx);
+                const projection = (myMap.options && typeof myMap.options.get === 'function')
+                    ? myMap.options.get('projection')
+                    : null;
+                if (projection && typeof projection.fromGlobalPixels === 'function' && typeof myMap.getZoom === 'function') {
+                    const coords = projection.fromGlobalPixels(globalPx, myMap.getZoom());
+                    if (Array.isArray(coords) && coords.length >= 2) return coords;
+                }
+            }
+
+            // Fallback: если окружение поддерживает прямое преобразование.
+            if (myMap.converter && typeof myMap.converter.pageToCoordinates === 'function') {
+                const coords = myMap.converter.pageToCoordinates(pagePx);
+                if (Array.isArray(coords) && coords.length >= 2) return coords;
+            }
+
+            return fallbackCenter;
+        } catch (e) {
+            try { return myMap.getCenter(); } catch (e2) { return [48.01, 37.80]; }
+        }
     }
 
     function setVoiceStyle(style) {
@@ -3384,14 +3460,35 @@
 
     async function syncNearbyImportantMarkersToNotifications({ silent = true } = {}) {
         try {
-            const sinceIso = new Date(Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS).toISOString();
-            const { data: markers, error } = await _sb
+            const sinceMs = Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS;
+            const sinceIso = new Date(sinceMs).toISOString();
+
+            let markers = null;
+            let error = null;
+
+            // ts может быть BIGINT(ms) или TIMESTAMPTZ — пробуем оба формата.
+            const r1 = await _sb
                 .from('markers')
                 .select('id,type,ts,comment,coords,leave_confirmations,author_id')
                 .in('type', ['sos', 'dtp'])
-                .gte('ts', sinceIso)
+                .gte('ts', sinceMs)
                 .order('ts', { ascending: false })
                 .limit(80);
+
+            if (r1?.error) {
+                const r2 = await _sb
+                    .from('markers')
+                    .select('id,type,ts,comment,coords,leave_confirmations,author_id')
+                    .in('type', ['sos', 'dtp'])
+                    .gte('ts', sinceIso)
+                    .order('ts', { ascending: false })
+                    .limit(80);
+                markers = r2?.data;
+                error = r2?.error;
+            } else {
+                markers = r1?.data;
+                error = null;
+            }
 
             if (error || !Array.isArray(markers)) return;
 
@@ -3656,12 +3753,21 @@
         return icons[type] || '⚠️';
     }
 
+    let sosBonusRpcUnavailable = false;
+
     async function getUserSosBonus(userId) {
         try {
             if (!userId) return 0;
+            if (sosBonusRpcUnavailable) return 0;
             const { data, error } = await _sb.rpc('get_user_sos_bonus', { p_user_id: String(userId) });
             if (error) {
-                console.warn('Не удалось получить SOS-бонус:', error?.message || error);
+                const msg = String(error?.message || error || '');
+                if (/could not find the function/i.test(msg) || /schema cache/i.test(msg) || /\b404\b/.test(msg) || /not found/i.test(msg)) {
+                    sosBonusRpcUnavailable = true;
+                    // Функция не задеплоена/не применены миграции — считаем бонус = 0 и больше не шумим.
+                    return 0;
+                }
+                console.warn('Не удалось получить SOS-бонус:', msg);
                 return 0;
             }
             return Number(data) || 0;
