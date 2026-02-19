@@ -4482,33 +4482,47 @@
 
     function applyYandexMapTheme(isDark) {
         const mapEl = document.getElementById('map');
-        let usedMapType = false;
-
         const wantDark = !!isDark;
         const darkTypeAvailable = wantDark ? isYandexMapTypeAvailable(YA_MAP_TYPE_DARK) : false;
 
-        // 1) Если тёмный тип доступен — переключаемся на него.
-        // 2) Если НЕ доступен — принудительно остаёмся на светлом типе и включаем CSS-фильтр.
-        if (myMap && typeof myMap.setType === 'function') {
+        let usedMapType = false;
+        let usedMapStyle = false;
+
+        // A) Идеальный вариант: yandex#skeletonNight (если реально доступен)
+        if (myMap && typeof myMap.setType === 'function' && wantDark && darkTypeAvailable) {
             try {
-                if (wantDark && darkTypeAvailable) {
-                    myMap.setType(YA_MAP_TYPE_DARK);
-                    usedMapType = true;
-                } else {
-                    // это также "лечит" серую карту, если ранее уже попытались поставить недоступный тип
-                    myMap.setType(YA_MAP_TYPE_LIGHT);
-                    usedMapType = false;
-                }
+                myMap.setType(YA_MAP_TYPE_DARK);
+                usedMapType = true;
             } catch (e) {
                 usedMapType = false;
-                // если даже светлый тип не переключился — просто используем фильтр как последний шанс
             }
         }
 
-        if (mapEl) {
-            mapEl.classList.toggle('map-dark-filter', wantDark && !usedMapType);
+        // B) Если skeletonNight отсутствует/ломает тайлы (серая карта) — используем Monolith map styles,
+        // которые уже применялись в приложении: navigation-day-v1 / navigation-night-v1.
+        if (myMap && !usedMapType) {
+            // гарантируем базовый тип, чтобы слой тайлов точно существовал
+            if (typeof myMap.setType === 'function') {
+                try { myMap.setType(YA_MAP_TYPE_LIGHT); } catch (e) {}
+            }
+
+            // пробуем setMapStyle (самый стабильный путь без CSS filter)
+            if (typeof myMap.setMapStyle === 'function') {
+                try {
+                    myMap.setMapStyle(wantDark ? MAP_STYLE_NIGHT_ID : MAP_STYLE_DAY_ID);
+                    usedMapStyle = true;
+                } catch (e) {
+                    usedMapStyle = false;
+                }
+            }
         }
-        return usedMapType;
+
+        // C) Последний шанс: CSS filter только для тайлов
+        if (mapEl) {
+            mapEl.classList.toggle('map-dark-filter', wantDark && !usedMapType && !usedMapStyle);
+        }
+
+        return usedMapType || usedMapStyle;
     }
 
     function toggleTheme(isDark) {
