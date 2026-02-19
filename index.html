@@ -2641,13 +2641,29 @@
 
         let street = '—';
         
-        // ★ Определяем адрес через geocode
-        try {
-            const res = await ymaps.geocode([lat, lon]);
-            const obj = res?.geoObjects?.get?.(0);
-            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
-            if (line) street = line;
-        } catch(e) {}
+        // ★ Определяем адрес через reverse geocode (неблокирующий вызов)
+        ymaps.geocode([lat, lon], {results: 1})
+            .then(res => {
+                try {
+                    const obj = res?.geoObjects?.get?.(0);
+                    if (obj) {
+                        const line = String(obj.getAddressLine() || '').trim();
+                        if (line && myMap?.balloon?.isOpen?.()) {
+                            // Обновляем текст в уже открытом балуне
+                            setTimeout(() => {
+                                const balloonContent = myMap.balloon.getContent();
+                                if (balloonContent) {
+                                    const newContent = balloonContent.replace(/📍 Место: —/, `📍 Место: ${escapeHtml(line)}`);
+                                    if (newContent !== balloonContent) {
+                                        myMap.balloon.setContent(newContent);
+                                    }
+                                }
+                            }, 50);
+                        }
+                    }
+                } catch(e) {}
+            })
+            .catch(() => {});
 
         let probability = null;
         let peak = null;
