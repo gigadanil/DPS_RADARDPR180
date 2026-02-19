@@ -3760,6 +3760,18 @@
     }
     
     // Оптимизированный дебаунс для loadMarkers (750ms вместо 500ms)
+    let loadMarkersInProgress = false;
+    let markersRefreshPending = false;
+
+    function requestMarkersRefresh() {
+        // Если пользователь прямо сейчас двигает/зумит карту — не трогаем главный поток.
+        if (mapActionInProgress) {
+            markersRefreshPending = true;
+            return;
+        }
+        requestMarkersRefresh();
+    }
+
     const loadMarkersDebounced = debounce(() => loadMarkers(), 750);
     
     // ============= ФУНКЦИИ ДЛЯ УВЕДОМЛЕНИЙ О РАССТОЯНИИ И ОЗВУЧКИ =============
@@ -4551,6 +4563,7 @@
 
     function recoverYandexMapViewport(reason = '') {
         if (!myMap) return;
+        ensureMapBehaviorsEnabled();
         try {
             myMap.container?.fitToViewport?.();
         } catch (e) {}
@@ -4564,9 +4577,7 @@
         } catch (e) {}
 
         try {
-            if (myMap.behaviors && typeof myMap.behaviors.enable === 'function') {
-                myMap.behaviors.enable(['drag', 'scrollZoom', 'multiTouch']);
-            }
+            ensureMapBehaviorsEnabled();
         } catch (e) {}
 
         try {
@@ -4574,6 +4585,20 @@
                 try { myMap.container?.fitToViewport?.(); } catch(e) {}
             });
         } catch (e) {}
+    }
+
+    function ensureMapBehaviorsEnabled() {
+        if (!myMap || !myMap.behaviors || typeof myMap.behaviors.enable !== 'function') return;
+        const behaviorsToEnable = ['drag', 'multiTouch', 'scrollZoom', 'dblClickZoom'];
+        try {
+            // enable принимает либо массив, либо строку — массивом быстрее
+            myMap.behaviors.enable(behaviorsToEnable);
+        } catch (e) {
+            // fallback по одному
+            behaviorsToEnable.forEach(b => {
+                try { myMap.behaviors.enable(b); } catch (e2) {}
+            });
+        }
     }
 
     function loadThemePreference() {
@@ -7145,7 +7170,7 @@
             if (adminInvisible !== nextState) {
                 adminInvisible = nextState;
                 updateAdminInvisibleButton();
-                loadMarkersDebounced();
+                requestMarkersRefresh();
                 if (isAdmin) updateUserLocationMarker();
             }
         });
@@ -7303,7 +7328,7 @@
         if (adminInvisible !== nextState) {
             adminInvisible = nextState;
             updateAdminInvisibleButton();
-            loadMarkersDebounced();
+            requestMarkersRefresh();
             if (isAdmin) updateUserLocationMarker();
         }
     }
@@ -7323,7 +7348,7 @@
             }
             adminInvisible = nextState;
             updateAdminInvisibleButton();
-            loadMarkersDebounced();
+            requestMarkersRefresh();
             if (isAdmin) updateUserLocationMarker();
             if (adminBroadcastChannel) {
                 await adminBroadcastChannel.send({
@@ -7832,7 +7857,7 @@
                 await expireMarkerById(markerId);
                 alert('Метка удалена');
                 openAdminModal(); // Обновляем список
-                loadMarkers(); // Обновляем карту
+                requestMarkersRefresh(); // Обновляем карту
             } catch (e) {
                 alert('Ошибка при удалении: ' + (e?.message || e));
             }
@@ -8688,7 +8713,7 @@
                 } else {
                     alert(`✅ Ваш голос учтён (${leaveCount}/${typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3} для удаления)`);
                 }
-                loadMarkers(); // обновляем карту с новым счётчиком
+                requestMarkersRefresh(); // обновляем карту с новым счётчиком
             } else if (insertError) {
                 alert('Ошибка при голосовании: ' + (insertError.message || 'неизвестная ошибка'));
             }
@@ -9549,6 +9574,19 @@
             // Если не забанен - инициализируем карту
             // Создаем карту с центром и уровнем зума
             myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+            try { ensureMapBehaviorsEnabled(); } catch(e) {}
+            try {
+                const mapEl = document.getElementById('map');
+                if (mapEl && !mapEl.__monolithInteractiveKickBound) {
+                    mapEl.__monolithInteractiveKickBound = true;
+                    mapEl.addEventListener('touchstart', () => {
+                        try { ensureMapBehaviorsEnabled(); } catch(e) {}
+                    }, { passive: true });
+                    mapEl.addEventListener('pointerdown', () => {
+                        try { ensureMapBehaviorsEnabled(); } catch(e) {}
+                    }, { passive: true });
+                }
+            } catch(e) {}
             syncMapVisualStyleWithTheme();
             
             // Границы Донецкой области (скрыты)
@@ -9611,6 +9649,12 @@
 
                 if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
                 if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
+
+                // Если во время жеста кто-то запросил обновление маркеров — выполняем сейчас.
+                if (markersRefreshPending) {
+                    markersRefreshPending = false;
+                    try { loadMarkersDebounced(); } catch(e) {}
+                }
             });
             
             // Инициализируем приложение (проверяем регистрацию)
@@ -9629,9 +9673,9 @@
             // Обновим состояние кнопки автослежения
             try { updateFollowButton(); } catch(e) { /* ignore */ }
             // Загружаем маркеры с сервера
-            loadMarkers();
+            requestMarkersRefresh();
             // Обновляем маркеры каждые 20 секунд (вместо 10) для экономии батареи
-            setInterval(loadMarkersDebounced, 20000);
+            setInterval(requestMarkersRefresh, 20000);
 
             // Если actionCard скрыт по умолчанию, показываем кнопку открытия
             const openBtn = document.getElementById('openActionBtn');
@@ -9649,14 +9693,27 @@
             // Пытаемся инициализировать карту, даже при ошибке проверки бана
             try {
                 myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+                try { ensureMapBehaviorsEnabled(); } catch(e) {}
+                try {
+                    const mapEl = document.getElementById('map');
+                    if (mapEl && !mapEl.__monolithInteractiveKickBound) {
+                        mapEl.__monolithInteractiveKickBound = true;
+                        mapEl.addEventListener('touchstart', () => {
+                            try { ensureMapBehaviorsEnabled(); } catch(e) {}
+                        }, { passive: true });
+                        mapEl.addEventListener('pointerdown', () => {
+                            try { ensureMapBehaviorsEnabled(); } catch(e) {}
+                        }, { passive: true });
+                    }
+                } catch(e) {}
                 syncMapVisualStyleWithTheme();
                 markersCollection = new ymaps.GeoObjectCollection();
                 myMap.geoObjects.add(markersCollection);
                 
                 initApp();
                 try { updateFollowButton(); } catch(e) { /* ignore */ }
-                loadMarkers();
-                setInterval(loadMarkersDebounced, 20000);
+                requestMarkersRefresh();
+                setInterval(requestMarkersRefresh, 20000);
                 
                 const openBtn = document.getElementById('openActionBtn');
                 if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
@@ -9766,6 +9823,13 @@
 
     // Функция загрузки всех активных маркеров с карты
     async function loadMarkers() {
+        if (loadMarkersInProgress) return;
+        if (document.visibilityState && document.visibilityState !== 'visible') return;
+        if (mapActionInProgress) {
+            markersRefreshPending = true;
+            return;
+        }
+        loadMarkersInProgress = true;
         // Загружаем маркеры, которые еще не истекли (exp > текущее время)
         // Загружаем все метки и фильтруем их по exp на клиенте,
         // чтобы корректно работать с разными типами поля exp (BIGINT или TIMESTAMPTZ)
@@ -10037,23 +10101,14 @@
         }
         } catch (error) {
             console.error('Ошибка при загрузке маркеров (timeout или ошибка БД):', error?.message);
+        } finally {
+            loadMarkersInProgress = false;
         }
     }
 
     document.addEventListener('visibilitychange', () => {
-        // Когда WebView скрыт, Яндекс.Карты могут продолжать "инерцию" и сыпать ошибками/лагать.
-        // Аккуратно отключаем тяжёлые поведения, а при возвращении включаем обратно.
-        try {
-            if (myMap && myMap.behaviors) {
-                if (document.visibilityState === 'visible') {
-                    myMap.behaviors.enable(['drag', 'scrollZoom', 'multiTouch']);
-                } else {
-                    myMap.behaviors.disable(['drag', 'scrollZoom', 'multiTouch']);
-                }
-            }
-        } catch (e) {}
-
         if (document.visibilityState === 'visible') {
+            try { ensureMapBehaviorsEnabled(); } catch(e) {}
             try { recoverYandexMapViewport('visibility'); } catch(e) {}
         }
         if (document.visibilityState === 'visible' && radarActive && wakeLockSupported && wakeLockPreferenceEnabled && !wakeLockSentinel) {
