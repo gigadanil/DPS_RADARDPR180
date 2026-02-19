@@ -223,12 +223,10 @@
         #map { width: 100%; height: 100%; position: absolute; }
         /* Fallback (Yandex Maps API 2.1): если yandex#skeletonNight недоступен — затемняем ТАЙЛЫ,
            а не весь контейнер (чтобы не инвертировать UI/метки). */
-        #map.map-dark-filter [class*="ymaps-2-1-"][class*="-ground-pane"] {
-            filter: invert(90%) hue-rotate(180deg) brightness(0.7) contrast(1.3);
-            will-change: filter;
-        }
+        /* ★ Убрана тяжёлая фильтрация (filter) - вызывала лаги при взаимодействии с картой */
+        /* Используем только фоновую подсветку для тёмного режима */
         #map.map-dark-filter .ymaps-2-1-map {
-            background-color: #080808 !important;
+            background-color: #0a0a0a !important;
         }
 
         /* Dark theme surface + text for key components (не трогаем inline-стили) */
@@ -4178,48 +4176,13 @@
      * Использует Web Speech API как fallback (с новым текстом озвучки)
      */
     const TTS_STREET_CACHE = new Map();
+    // ★ ОПТИМИЗАЦИЯ: Убрано дорогое геокодирование из озвучивания
+    // getStreetForCoords вызвал слишком много lag при озвучивании маркеров
+    // Теперь просто возвращаем пусто чтобы не блокировать речь
     async function getStreetForCoords(lat, lon) {
-        const a = Number(lat);
-        const b = Number(lon);
-        if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-        if (!window.ymaps || !ymaps.geocode) return null;
-
-        const key = `${a.toFixed(4)},${b.toFixed(4)}`;
-        const cached = TTS_STREET_CACHE.get(key);
-        if (cached) return cached;
-
-        try {
-            const res = await ymaps.geocode([a, b]);
-            const obj = res?.geoObjects?.get?.(0);
-            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
-            if (!line) return null;
-
-            const parts = line.split(',').map(s => s.trim()).filter(Boolean);
-            let street = parts.length ? parts[parts.length - 1] : line;
-            let streetHint = '';
-            for (let i = parts.length - 1; i >= 0; i--) {
-                const p = parts[i];
-                if (/улиц|просп|пр\.|бульвар|шоссе|переулок|пл\.|площад|набереж/i.test(p)) {
-                    streetHint = p;
-                    break;
-                }
-            }
-            if (streetHint) street = streetHint;
-
-            // Чистим частые приставки/суффиксы
-            street = street
-                .replace(/^улица\s+/i, '')
-                .replace(/\s+улица$/i, '')
-                .replace(/^проспект\s+/i, 'просп. ')
-                .replace(/^просп\.\s+/i, 'просп. ')
-                .replace(/^бульвар\s+/i, 'бульв. ');
-
-            // Кэшируем на сессию
-            TTS_STREET_CACHE.set(key, street);
-            return street;
-        } catch (e) {
-            return null;
-        }
+        // Функция сохраняется для совместимости, но больше не рождает geocoding запросы
+        // Это значительно улучшает перформанс при озвучивании
+        return null;
     }
 
     function formatDistanceRuPhrase(distanceMeters) {
@@ -4679,10 +4642,19 @@
     }
 
     function syncMapVisualStyleWithTheme() {
-        // Требование: тёмная тема через yandex#skeletonNight, иначе fallback CSS filter.
-        // Не применяем стили если идет восстановление viewport (может вызвать рекурсию)
-        if (!viewportRecoveryInProgress) {
-            applyYandexMapTheme(!!darkModeEnabled);
+        // ★ ОПТИМИЗАЦИЯ: Упрощено - убрана дорогостоящая тема для карты
+        // Простое переключение фонового цвета вместо filter + yandex#skeletonNight
+        if (!viewportRecoveryInProgress && myMap) {
+            try {
+                const mapEl = document.getElementById('map');
+                if (mapEl) {
+                    if (darkModeEnabled) {
+                        mapEl.classList.add('map-dark-filter');
+                    } else {
+                        mapEl.classList.remove('map-dark-filter');
+                    }
+                }
+            } catch(e) {}
         }
     }
 
