@@ -17,8 +17,35 @@
             --safe-area-inset-top: env(safe-area-inset-top);
             --safe-area-inset-bottom: env(safe-area-inset-bottom);
             --safe-area-inset-left: env(safe-area-inset-left);
-            --safe-area-inset-right: env(safe-area-inset-right); }
-        body, html { width: 100%; height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); overflow: hidden; }
+            --safe-area-inset-right: env(safe-area-inset-right);
+
+            /* ===== Monolith theme tokens (isolated) ===== */
+            --mono-ui-bg: #ffffff;
+            --mono-surface: #ffffff;
+            --mono-btn-bg: #f4f4f4;
+            --mono-text: #000000;
+            --mono-muted: #8e8e93;
+            --mono-border: #e0e0e0;
+            --mono-neon: #ffcc00;
+            --mono-sos: #ff0000;
+        }
+
+        /* Dark theme overrides */
+        body.dark-theme {
+            --mono-ui-bg: #080808; /* OLED Black */
+            --mono-surface: #1a1a1a;
+            --mono-btn-bg: #1C1C1E; /* Space Gray */
+            --mono-text: #e0e0e0;
+            --mono-muted: #b0b0b0;
+            --mono-border: #333;
+            --mono-sos: #ff4500; /* Neon Orange */
+
+            /* Совместимость со старым стилем: многие элементы завязаны на эти токены */
+            --bg: #080808;
+            --gray: #b0b0b0;
+        }
+
+        body, html { width: 100%; height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--mono-ui-bg); color: var(--mono-text); overflow: hidden; }
         
         /* Отключение выделения и улучшение тап-реакций */
         * {
@@ -194,6 +221,55 @@
             font-weight: 600;
         }
         #map { width: 100%; height: 100%; position: absolute; }
+        /* Fallback: если yandex#skeletonNight недоступен — затемняем тайлы фильтром */
+        #map.map-dark-filter {
+            filter: invert(1) hue-rotate(180deg) brightness(0.82) contrast(1.12) saturate(0.9);
+            transform: translateZ(0);
+        }
+
+        /* Dark theme surface + text for key components (не трогаем inline-стили) */
+        body.dark-theme .settings-card,
+        body.dark-theme .modal-content,
+        body.dark-theme .ban-notice-content,
+        body.dark-theme .chat-messages,
+        body.dark-theme .notif-row,
+        body.dark-theme .chat-context-menu {
+            background: var(--mono-surface);
+            color: var(--mono-text);
+            border-color: var(--mono-border);
+        }
+        body.dark-theme .settings-card-title,
+        body.dark-theme .notif-title {
+            color: var(--mono-text);
+        }
+        body.dark-theme .settings-row-subtitle,
+        body.dark-theme .notif-body,
+        body.dark-theme .notif-time {
+            color: var(--mono-muted);
+        }
+
+        /* Dark theme controls */
+        body.dark-theme .settings-inline-btn,
+        body.dark-theme .settings-chip,
+        body.dark-theme .type-btn,
+        body.dark-theme .chat-photo-btn,
+        body.dark-theme .chat-input,
+        body.dark-theme .chat-message.other {
+            background: var(--mono-btn-bg);
+            color: var(--mono-text);
+            border-color: var(--mono-border);
+        }
+        body.dark-theme .chat-input::placeholder { color: rgba(224,224,224,0.55); }
+
+        /* Neon glow in dark mode */
+        body.dark-theme .main-btn,
+        body.dark-theme .settings-inline-btn,
+        body.dark-theme .settings-chip,
+        body.dark-theme .type-btn,
+        body.dark-theme .chat-send-btn,
+        body.dark-theme .unban-request-btn {
+            box-shadow: 0 0 0 1px rgba(255,204,0,0.14), 0 0 14px rgba(255,204,0,0.16);
+        }
         .target {
             position: absolute;
             top: 50%;
@@ -2076,6 +2152,7 @@
     let gpsWatchId = null;
     // Маркер текущего местоположения на карте
     let userLocationMarker = null;
+    let userLocationMarkerKind = null; // 'admin' | 'user'
     // Для вычисления скорости: предыдущая позиция и время
     let lastUserPositionCoords = null; // [lat, lon]
     let lastUserPositionTime = null; // ms
@@ -2086,6 +2163,9 @@
     let markersCollection = null;
     // Флаг автоследования: если true — карта центрируется на пользователе при обновлении GPS
     let autoFollow = true;
+    let lastAutoFollowCenterAt = 0;
+    let lastAutoFollowCenterCoords = null;
+    let lastGpsLogAt = 0;
     // Данные профиля текущего пользователя
     let currentDriver = null;
     // ID администратора (измените на свой ID Telegram)
@@ -2190,6 +2270,7 @@
     // Дистанция предупреждения (в метрах)
     let warningDistanceMeters = 800;
     let radarActive = false;
+    let radarToggleInProgress = false;
     let wakeLockSentinel = null;
     let darkModeEnabled = false;
     let wakeLockPreferenceEnabled = true;
@@ -2444,8 +2525,7 @@
         ['radarActionBtn','darkModeToggleBtn'].forEach(id => {
             const btn = document.getElementById(id);
             if (!btn) return;
-            const isDark = id === 'darkModeToggleBtn';
-            const shouldDisable = !enabled || (isDark && !radarActive);
+            const shouldDisable = !enabled;
             btn.disabled = shouldDisable;
             btn.classList.toggle('disabled', btn.disabled);
         });
@@ -2538,12 +2618,12 @@
         if (!autoDarkModeEnabled) return;
         const hour = new Date().getHours();
         const shouldBeDark = (hour >= 18 || hour < 6);
-        if (shouldBeDark && radarActive && !darkModeEnabled) {
+        if (shouldBeDark && !darkModeEnabled) {
             autoDarkModeAdjusting = true;
             toggleDarkMode(true);
             autoDarkModeAdjusting = false;
             autoDarkModeLastApplied = true;
-        } else if ((!shouldBeDark || !radarActive) && darkModeEnabled && (autoDarkModeLastApplied || force)) {
+        } else if (!shouldBeDark && darkModeEnabled && (autoDarkModeLastApplied || force)) {
             autoDarkModeAdjusting = true;
             toggleDarkMode(false);
             autoDarkModeAdjusting = false;
@@ -4379,25 +4459,78 @@
         }
     }
 
-    function syncMapVisualStyleWithTheme() {
-        const targetStyle = darkModeEnabled ? MAP_STYLE_NIGHT_ID : MAP_STYLE_DAY_ID;
-        if (targetStyle && targetStyle !== currentMapStyleId) {
-            applyMapVisualStyle(targetStyle);
+    // ===== Monolith smart dark theme (isolated) =====
+    const THEME_STORAGE_KEY = 'monolith_theme_is_dark';
+    const YA_MAP_TYPE_LIGHT = 'yandex#map';
+    const YA_MAP_TYPE_DARK = 'yandex#skeletonNight';
+
+    function applyYandexMapTheme(isDark) {
+        const mapEl = document.getElementById('map');
+        let applied = false;
+
+        // Пытаемся переключить тип карты (лучший вариант)
+        if (myMap && typeof myMap.setType === 'function') {
+            try {
+                myMap.setType(isDark ? YA_MAP_TYPE_DARK : YA_MAP_TYPE_LIGHT);
+                applied = true;
+            } catch (e) {
+                applied = false;
+            }
         }
+
+        // Fallback: если тип недоступен — включаем CSS-фильтр
+        if (mapEl) {
+            mapEl.classList.toggle('map-dark-filter', !!isDark && !applied);
+        }
+        return applied;
+    }
+
+    function toggleTheme(isDark) {
+        darkModeEnabled = !!isDark;
+        try {
+            document.body.classList.toggle('dark-theme', darkModeEnabled);
+        } catch (e) {
+            // ignore
+        }
+
+        try {
+            localStorage.setItem(THEME_STORAGE_KEY, darkModeEnabled ? '1' : '0');
+        } catch (e) {
+            // ignore
+        }
+
+        // Карта + UI
+        applyYandexMapTheme(darkModeEnabled);
+        try { updateDarkModeUi(); } catch (e) {}
+    }
+
+    function loadThemePreference() {
+        let saved = null;
+        try { saved = localStorage.getItem(THEME_STORAGE_KEY); } catch (e) { saved = null; }
+        if (saved === '1' || saved === '0') {
+            toggleTheme(saved === '1');
+        } else {
+            // по умолчанию: светлая
+            try { document.body.classList.remove('dark-theme'); } catch (e) {}
+        }
+    }
+
+    function syncMapVisualStyleWithTheme() {
+        // Требование: тёмная тема через yandex#skeletonNight, иначе fallback CSS filter.
+        applyYandexMapTheme(!!darkModeEnabled);
     }
 
     function updateDarkModeUi() {
         const btn = document.getElementById('darkModeToggleBtn');
         if (btn) {
-            btn.disabled = !radarActive;
-            btn.classList.toggle('disabled', !radarActive);
+            btn.disabled = false;
+            btn.classList.toggle('disabled', false);
             btn.classList.toggle('active', darkModeEnabled);
             btn.textContent = darkModeEnabled ? '🌞 ВКЛЮЧИТЬ ЭКРАН' : '🌙 ТЕМНЫЙ РЕЖИМ';
         }
+        // В "умной" теме не перекрываем приложение чёрным оверлеем.
         const shade = document.getElementById('darkModeShade');
-        if (shade) {
-            shade.classList.toggle('active', darkModeEnabled);
-        }
+        if (shade) shade.classList.remove('active');
         syncMapVisualStyleWithTheme();
     }
 
@@ -4458,9 +4591,12 @@
 
     async function startRadar() {
         if (radarActive) return;
-        const gpsReady = initGPS();
+        const gpsReady = await initGPS();
         if (!gpsReady) {
-            alert('Не удалось включить радар. Проверьте доступ к геолокации в Telegram.');
+            const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+            alert(isIOS
+                ? 'Не удалось включить радар: нет доступа к геолокации.\n\nПроверьте: Настройки iOS → Telegram → Геолокация → «При использовании», и в Telegram разрешите доступ к местоположению.'
+                : 'Не удалось включить радар. Проверьте доступ к геолокации в Telegram.');
             updateRadarUi();
             return;
         }
@@ -4477,7 +4613,6 @@
         if (!radarActive) return;
         radarActive = false;
         try { localStorage.setItem('radar_last_state', 'off'); } catch (e) {}
-        toggleDarkMode(false);
         autoDarkModeLastApplied = false;
         stopGPS();
         await releaseWakeLock();
@@ -4485,25 +4620,44 @@
     }
 
     async function toggleRadar(forceState = null) {
-        const shouldEnable = typeof forceState === 'boolean' ? forceState : !radarActive;
-        if (shouldEnable) {
-            await startRadar();
-        } else {
-            await stopRadar();
+        if (radarToggleInProgress) return;
+        radarToggleInProgress = true;
+        try {
+            const shouldEnable = typeof forceState === 'boolean' ? forceState : !radarActive;
+            if (shouldEnable) {
+                await startRadar();
+            } else {
+                await stopRadar();
+            }
+        } catch (e) {
+            console.warn('toggleRadar failed:', e?.message || e);
+        } finally {
+            radarToggleInProgress = false;
         }
+    }
+
+    function maybeAutoFollowSetCenter(coords) {
+        if (document.visibilityState && document.visibilityState !== 'visible') return;
+        if (!autoFollow || !myMap || !Array.isArray(coords) || coords.length < 2) return;
+        if (disableAutoFollowOnce) return;
+        const now = Date.now();
+        if (lastAutoFollowCenterAt && (now - lastAutoFollowCenterAt) < 800) return;
+        if (lastAutoFollowCenterCoords) {
+            try {
+                const d = calculateDistance(lastAutoFollowCenterCoords[0], lastAutoFollowCenterCoords[1], coords[0], coords[1]);
+                if (Number.isFinite(d) && d < 8) return;
+            } catch (e) {}
+        }
+        lastAutoFollowCenterAt = now;
+        lastAutoFollowCenterCoords = [coords[0], coords[1]];
+        try { myMap.setCenter(coords); } catch (e) { /* ignore */ }
     }
 
     function toggleDarkMode(forceState = null) {
         const nextState = typeof forceState === 'boolean' ? forceState : !darkModeEnabled;
-        if (nextState && !radarActive) {
-            alert('Включите радар, чтобы затемнить экран.');
-            return;
-        }
-        darkModeEnabled = nextState;
-        if (!autoDarkModeAdjusting) {
-            autoDarkModeLastApplied = null;
-        }
-        updateDarkModeUi();
+        if (!autoDarkModeAdjusting) autoDarkModeLastApplied = null;
+        // backward-compat: кнопка/логика продолжает вызывать toggleDarkMode, но фактически переключаем тему.
+        toggleTheme(!!nextState);
     }
 
         function isReliableGeoPosition(lat, lon, accuracyMeters) {
@@ -4517,7 +4671,7 @@
                 return true;
         }
 
-    function initGPS() {
+    async function initGPS() {
         if (!navigator.geolocation) {
             console.warn('Geolocation не поддерживается браузером');
             return false;
@@ -4545,99 +4699,120 @@
                 } catch(e){}
             }
 
-            gpsWatchId = navigator.geolocation.watchPosition(
-                (position) => {
-                    // Успешное получение координат
-                    const { latitude, longitude, accuracy } = position.coords;
-                    const now = Date.now();
+            let permissionDenied = false;
 
-                    lastGpsAccuracyMeters = Number(accuracy);
-                    const latNum = Number(latitude);
-                    const lonNum = Number(longitude);
-                    const reliableNow = isReliableGeoPosition(latNum, lonNum, Number(accuracy));
-                    gpsReliable = reliableNow;
+            const onGpsSuccess = (position) => {
+                const { latitude, longitude, accuracy } = position.coords;
+                const now = Date.now();
 
-                    if (!reliableNow) {
-                        if (!gpsWarnedUnreliable) {
-                            gpsWarnedUnreliable = true;
-                            console.warn('⚠️ Геолокация неточная (большая погрешность или точка вне ДНР). Включите GPS и разрешите доступ к местоположению для Telegram, затем подождите 10–20 секунд.');
-                        }
-                        if (lastReliableUserLocation) {
-                            // Не перетираем точные координаты мусором
-                            return;
-                        }
-                        // Если точных ещё нет — покажем хотя бы маркер, но без синка радиуса и автоследования
-                        userSpeedKmh = 0;
-                        userLocation = [latNum, lonNum];
-                        updateUserLocationMarker();
-                        updateSpeedometerUI(userSpeedKmh);
-                        console.log(`📍 GPS (не точно): ${latNum.toFixed(4)}, ${lonNum.toFixed(4)} (точность: ${Number(accuracy).toFixed(0)}м)`);
+                lastGpsAccuracyMeters = Number(accuracy);
+                const latNum = Number(latitude);
+                const lonNum = Number(longitude);
+                const reliableNow = isReliableGeoPosition(latNum, lonNum, Number(accuracy));
+                gpsReliable = reliableNow;
+
+                if (!reliableNow) {
+                    if (!gpsWarnedUnreliable) {
+                        gpsWarnedUnreliable = true;
+                        console.warn('⚠️ Геолокация неточная (большая погрешность или точка вне ДНР). Включите GPS и разрешите доступ к местоположению для Telegram, затем подождите 10–20 секунд.');
+                    }
+                    if (lastReliableUserLocation) {
+                        // Не перетираем точные координаты мусором
                         return;
                     }
-
-                    // Вычисляем скорость на основе предыдущей позиции (м/c -> км/ч)
-                    if (lastUserPositionCoords && lastUserPositionTime) {
-                        const prev = lastUserPositionCoords;
-                        const dt = (now - lastUserPositionTime) / 1000; // сек
-                        if (dt > 0) {
-                            const dist = calculateDistance(prev[0], prev[1], latitude, longitude); // метры
-                            const speedMs = dist / dt; // м/с
-                            userSpeedKmh = Math.round(speedMs * 3.6);
-                        }
-                    }
-                    lastUserPositionCoords = [latitude, longitude];
-                    lastUserPositionTime = now;
-
-                    userLocation = [latitude, longitude];
-                    lastReliableUserLocation = [latitude, longitude];
-
-                    // обновляем опорную точку для радиуса Telegram-уведомлений (если пользователь подписан)
-                    syncHelpSubscriberHomeCoords(false).catch(()=>{});
-
-                    // Обновляем маркер на карте (включая визуализацию скорости/ачивок/стиля)
+                    // Если точных ещё нет — покажем хотя бы маркер, но без синка радиуса и автоследования
+                    userSpeedKmh = 0;
+                    userLocation = [latNum, lonNum];
                     updateUserLocationMarker();
                     updateSpeedometerUI(userSpeedKmh);
-
-                    // Интеллектуальные подсказки по истории меток ДПС/Спецбат
-                    maybeCheckSmartHint(latitude, longitude);
-
-                    // Центрируем карту если автоследование включено
-                    if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
+                    if (!lastGpsLogAt || (now - lastGpsLogAt) > 5000) {
+                        console.log(`📍 GPS (не точно): ${latNum.toFixed(4)}, ${lonNum.toFixed(4)} (точность: ${Number(accuracy).toFixed(0)}м)`);
+                        lastGpsLogAt = now;
                     }
-                    if (disableAutoFollowOnce) disableAutoFollowOnce = false;
+                    return;
+                }
+
+                // Вычисляем скорость на основе предыдущей позиции (м/c -> км/ч)
+                if (lastUserPositionCoords && lastUserPositionTime) {
+                    const prev = lastUserPositionCoords;
+                    const dt = (now - lastUserPositionTime) / 1000; // сек
+                    if (dt > 0) {
+                        const dist = calculateDistance(prev[0], prev[1], latitude, longitude); // метры
+                        const speedMs = dist / dt; // м/с
+                        userSpeedKmh = Math.round(speedMs * 3.6);
+                    }
+                }
+                lastUserPositionCoords = [latitude, longitude];
+                lastUserPositionTime = now;
+
+                userLocation = [latitude, longitude];
+                lastReliableUserLocation = [latitude, longitude];
+
+                // обновляем опорную точку для радиуса Telegram-уведомлений (если пользователь подписан)
+                syncHelpSubscriberHomeCoords(false).catch(()=>{});
+
+                // Обновляем маркер на карте
+                updateUserLocationMarker();
+                updateSpeedometerUI(userSpeedKmh);
+
+                // Интеллектуальные подсказки
+                maybeCheckSmartHint(latitude, longitude);
+
+                // Центрируем карту если автоследование включено
+                maybeAutoFollowSetCenter(userLocation);
+
+                if (disableAutoFollowOnce) disableAutoFollowOnce = false;
+
+                if (!lastGpsLogAt || (now - lastGpsLogAt) > 5000) {
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
-                },
-                (error) => {
-                    // Ошибка получения координат
-                    console.warn('Ошибка GPS:', error.message);
-                    switch(error.code) {
-                        case error.PERMISSION_DENIED:
-                            console.warn('Разрешение на доступ к GPS отклонено');
-                            // Для мобильных WebView полезно показать инструкцию
-                            if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-                                console.warn('iOS: откройте настройки приложения и разрешите доступ к местоположению.');
-                            }
-                            if (radarActive) {
-                                stopRadar().catch(() => {});
-                            }
-                            break;
-                        case error.POSITION_UNAVAILABLE:
-                            console.warn('Информация о местоположении недоступна — пробую один раз получить позицию');
-                            // однократная попытка
-                            navigator.geolocation.getCurrentPosition((pos) => {
-                                const { latitude, longitude } = pos.coords;
-                                userLocation = [latitude, longitude];
-                                lastUserPositionCoords = [latitude, longitude];
-                                lastUserPositionTime = Date.now();
-                                updateUserLocationMarker();
-                            }, ()=>{}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
-                            break;
-                        case error.TIMEOUT:
-                            console.warn('Истекло время ожидания GPS — попробуйте ещё раз');
-                            break;
-                    }
-                },
+                    lastGpsLogAt = now;
+                }
+            };
+
+            const onGpsError = (error) => {
+                console.warn('Ошибка GPS:', error.message);
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        permissionDenied = true;
+                        console.warn('Разрешение на доступ к GPS отклонено');
+                        if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                            console.warn('iOS: откройте настройки Telegram и разрешите доступ к местоположению.');
+                        }
+                        if (radarActive) {
+                            stopRadar().catch(() => {});
+                        }
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        console.warn('Информация о местоположении недоступна — пробую один раз получить позицию');
+                        navigator.geolocation.getCurrentPosition((pos) => {
+                            onGpsSuccess(pos);
+                        }, ()=>{}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+                        break;
+                    case error.TIMEOUT:
+                        console.warn('Истекло время ожидания GPS — попробуйте ещё раз');
+                        break;
+                }
+            };
+
+            // Важно для iOS WKWebView: сначала однократно вызываем getCurrentPosition,
+            // чтобы гарантированно запросить разрешение и получить первый фикс.
+            await new Promise((resolve) => {
+                try {
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => { try { onGpsSuccess(pos); } finally { resolve(); } },
+                        (err) => { try { onGpsError(err); } finally { resolve(); } },
+                        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+                    );
+                } catch (e) {
+                    resolve();
+                }
+            });
+
+            if (permissionDenied) return false;
+
+            gpsWatchId = navigator.geolocation.watchPosition(
+                onGpsSuccess,
+                onGpsError,
                 options
             );
             return true;
@@ -4681,9 +4856,14 @@
             return;
         }
 
-        // Удаляем старый маркер если он есть
-        if (userLocationMarker) {
-            try { myMap.geoObjects.remove(userLocationMarker); } catch(e){}
+        const shouldBeAdminMarker = !!isAdmin;
+        const desiredKind = shouldBeAdminMarker ? 'admin' : 'user';
+
+        // Если тип маркера изменился (например, вошли/вышли из админ-режима) — пересоздаём.
+        if (userLocationMarker && userLocationMarkerKind && userLocationMarkerKind !== desiredKind) {
+            try { myMap.geoObjects.remove(userLocationMarker); } catch(e) {}
+            userLocationMarker = null;
+            userLocationMarkerKind = null;
         }
 
         // Параметры внешнего вида
@@ -4728,7 +4908,7 @@
   <circle cx="${size/2}" cy="${size/2}" r="${size*0.49}" fill="none" stroke="rgba(0,0,0,0.04)" stroke-width="1"/>
 </svg>`;
 
-        if (isAdmin) {
+        if (shouldBeAdminMarker) {
             const adminSize = 36;
             const adminIconHtml = `
                 <div class="admin-marker admin-marker--self">
@@ -4738,38 +4918,78 @@
                     <span class="admin-marker-badge">👑</span>
                 </div>
             `;
-            userLocationMarker = new ymaps.Placemark(userLocation,
-                {
-                    hintContent: 'Вы здесь (Админ)',
-                    balloonContent: `👑 Админ на связи<br>Скорость: ${speed} км/ч`
-                },
-                {
-                    iconLayout: 'default#imageWithContent',
-                    iconContent: adminIconHtml,
-                    iconImageSize: [adminSize, adminSize],
-                    iconImageOffset: [-(adminSize/2), -(adminSize/2)],
-                    zIndex: 1100
-                }
-            );
+            if (!userLocationMarker) {
+                userLocationMarker = new ymaps.Placemark(
+                    userLocation,
+                    {
+                        hintContent: 'Вы здесь (Админ)',
+                        balloonContent: `👑 Админ на связи<br>Скорость: ${speed} км/ч`
+                    },
+                    {
+                        iconLayout: 'default#imageWithContent',
+                        iconContent: adminIconHtml,
+                        iconImageSize: [adminSize, adminSize],
+                        iconImageOffset: [-(adminSize/2), -(adminSize/2)],
+                        zIndex: 1100
+                    }
+                );
+                userLocationMarkerKind = 'admin';
+                myMap.geoObjects.add(userLocationMarker);
+            } else {
+                try { userLocationMarker.geometry.setCoordinates(userLocation); } catch(e) {}
+                try {
+                    userLocationMarker.properties.set({
+                        hintContent: 'Вы здесь (Админ)',
+                        balloonContent: `👑 Админ на связи<br>Скорость: ${speed} км/ч`
+                    });
+                } catch(e) {}
+                try {
+                    userLocationMarker.options.set({
+                        iconContent: adminIconHtml,
+                        iconImageSize: [adminSize, adminSize],
+                        iconImageOffset: [-(adminSize/2), -(adminSize/2)],
+                        zIndex: 1100
+                    });
+                } catch(e) {}
+            }
         } else {
             const svgUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 
-            userLocationMarker = new ymaps.Placemark(userLocation,
-                {
-                    hintContent: 'Вы здесь',
-                    balloonContent: `📍 Ваше текущее местоположение<br>Скорость: ${speed} км/ч`
-                },
-                {
-                    iconLayout: 'default#image',
-                    iconImageHref: svgUrl,
-                    iconImageSize: [size, size],
-                    iconImageOffset: [-(size/2), -(size/2)],
-                    zIndex: 1000
-                }
-            );
+            if (!userLocationMarker) {
+                userLocationMarker = new ymaps.Placemark(
+                    userLocation,
+                    {
+                        hintContent: 'Вы здесь',
+                        balloonContent: `📍 Ваше текущее местоположение<br>Скорость: ${speed} км/ч`
+                    },
+                    {
+                        iconLayout: 'default#image',
+                        iconImageHref: svgUrl,
+                        iconImageSize: [size, size],
+                        iconImageOffset: [-(size/2), -(size/2)],
+                        zIndex: 1000
+                    }
+                );
+                userLocationMarkerKind = 'user';
+                myMap.geoObjects.add(userLocationMarker);
+            } else {
+                try { userLocationMarker.geometry.setCoordinates(userLocation); } catch(e) {}
+                try {
+                    userLocationMarker.properties.set({
+                        hintContent: 'Вы здесь',
+                        balloonContent: `📍 Ваше текущее местоположение<br>Скорость: ${speed} км/ч`
+                    });
+                } catch(e) {}
+                try {
+                    userLocationMarker.options.set({
+                        iconImageHref: svgUrl,
+                        iconImageSize: [size, size],
+                        iconImageOffset: [-(size/2), -(size/2)],
+                        zIndex: 1000
+                    });
+                } catch(e) {}
+            }
         }
-
-        myMap.geoObjects.add(userLocationMarker);
 
         // Центрируем карту на текущем местоположении (если это первый раз)
         if (!myMap.lastUserLocationUpdate) {
@@ -9228,6 +9448,9 @@
         // Показываем экран приветствия
         showSplashScreen();
 
+        // Применяем сохранённую тему как можно раньше (до модалок/кнопок)
+        try { loadThemePreference(); } catch(e) {}
+
         try {
             const tgUserForRules = window.Telegram?.WebApp?.initDataUnsafe?.user;
             if (tgUserForRules?.id) {
@@ -9714,6 +9937,18 @@
     }
 
     document.addEventListener('visibilitychange', () => {
+        // Когда WebView скрыт, Яндекс.Карты могут продолжать "инерцию" и сыпать ошибками/лагать.
+        // Аккуратно отключаем тяжёлые поведения, а при возвращении включаем обратно.
+        try {
+            if (myMap && myMap.behaviors) {
+                if (document.visibilityState === 'visible') {
+                    myMap.behaviors.enable(['drag', 'scrollZoom', 'multiTouch']);
+                } else {
+                    myMap.behaviors.disable(['drag', 'scrollZoom', 'multiTouch']);
+                }
+            }
+        } catch (e) {}
+
         if (document.visibilityState === 'visible' && radarActive && wakeLockSupported && wakeLockPreferenceEnabled && !wakeLockSentinel) {
             requestWakeLock().catch(() => {});
         }
