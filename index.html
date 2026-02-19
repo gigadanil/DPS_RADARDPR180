@@ -2228,6 +2228,7 @@
     let messagesRealtimeChannel = null;
     let markersRealtimeTimer = null;
     let messagesRealtimeTimer = null;
+    let mapBehaviorsMonitorInterval = null; // Мониторинг состояния behaviors карты
     let adminInvisibleIntervalId = null;
     // Флаг: открыт ли собственный профиль (для блокировки настроек в чужом профиле)
     let isViewingOwnProfile = true;
@@ -4622,7 +4623,13 @@
         try {
             requestAnimationFrame(() => {
                 try { myMap.container?.fitToViewport?.(); } catch(e) {}
+                try { ensureMapBehaviorsEnabled(); } catch(e) {}
                 viewportRecoveryInProgress = false;
+                
+                // Еще одна проверка behaviors через 150ms чтобы убедиться что они остались включены
+                setTimeout(() => {
+                    try { ensureMapBehaviorsEnabled(); } catch(e) {}
+                }, 150);
             });
         } catch (e) {
             viewportRecoveryInProgress = false;
@@ -4633,12 +4640,29 @@
         if (!myMap || !myMap.behaviors || typeof myMap.behaviors.enable !== 'function') return;
         const behaviorsToEnable = ['drag', 'multiTouch', 'scrollZoom', 'dblClickZoom'];
         try {
-            // enable принимает либо массив, либо строку — массивом быстрее
+            // Убедимся что behaviors включены
             myMap.behaviors.enable(behaviorsToEnable);
+            
+            // Проверяем что каждый behaviors фактически включен
+            behaviorsToEnable.forEach(b => {
+                try {
+                    if (!myMap.behaviors.isEnabled(b)) {
+                        myMap.behaviors.enable(b);
+                    }
+                } catch (e) {}
+            });
         } catch (e) {
             // fallback по одному
             behaviorsToEnable.forEach(b => {
-                try { myMap.behaviors.enable(b); } catch (e2) {}
+                try { 
+                    myMap.behaviors.enable(b);
+                    // Дважды проверяем
+                    setTimeout(() => {
+                        if (myMap && myMap.behaviors && !myMap.behaviors.isEnabled(b)) {
+                            myMap.behaviors.enable(b);
+                        }
+                    }, 50);
+                } catch (e2) {}
             });
         }
     }
@@ -9694,8 +9718,21 @@
                         markersRefreshPending = false;
                         try { loadMarkersDebounced(); } catch(e) {}
                     }
+                    
+                    // ★ КРИТИЧНО: Гарантированное восстановление behaviors после действия
+                    // Это предотвращает случаи когда zoom/pan перестают работать
+                    try { ensureMapBehaviorsEnabled(); } catch(e) {}
+                    
+                    // Двойная проверка через 100ms на случай если behaviors отключились асинхронно
+                    setTimeout(() => {
+                        if (myMap && !mapActionInProgress) {
+                            try { ensureMapBehaviorsEnabled(); } catch(e) {}
+                        }
+                    }, 100);
                 } catch (e) {
                     console.error('[actionend] Ошибка при обработке actionend:', e);
+                    // Даже при ошибке пытаемся включить behaviors
+                    try { ensureMapBehaviorsEnabled(); } catch(e2) {}
                 }
             });
             
@@ -9718,6 +9755,34 @@
             requestMarkersRefresh();
             // Обновляем маркеры каждые 20 секунд (вместо 10) для экономии батареи
             setInterval(requestMarkersRefresh, 20000);
+
+            // ★ Запускаем мониторинг behaviors: периодически проверяем что zoom/pan остаются активны
+            if (!mapBehaviorsMonitorInterval) {
+                mapBehaviorsMonitorInterval = setInterval(() => {
+                    if (myMap && !mapActionInProgress) {
+                        try {
+                            const behaviorsToCheck = ['drag', 'multiTouch', 'scrollZoom', 'dblClickZoom'];
+                            let anyDisabled = false;
+                            
+                            behaviorsToCheck.forEach(b => {
+                                if (!myMap.behaviors.isEnabled(b)) {
+                                    anyDisabled = true;
+                                    myMap.behaviors.enable(b);
+                                    console.warn('[Behaviors Monitor] Поправили отключенный behavior:', b);
+                                }
+                            });
+                            
+                            if (anyDisabled) {
+                                console.log('[Behaviors Monitor] Восстановлены behaviors после спонтанного отключения');
+                            }
+                        } catch (e) {
+                            // Если мониторинг сломался - перезапускаем
+                            console.error('[Behaviors Monitor] Ошибка мониторинга:', e);
+                            try { ensureMapBehaviorsEnabled(); } catch(e2) {}
+                        }
+                    }
+                }, 1500); // Проверяем каждые 1.5 секунды
+            }
 
             // Если actionCard скрыт по умолчанию, показываем кнопку открытия
             const openBtn = document.getElementById('openActionBtn');
