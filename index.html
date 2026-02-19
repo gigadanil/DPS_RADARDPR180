@@ -2640,7 +2640,14 @@
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
         let street = '—';
-        // ★ Удалено определение адреса через ymaps.geocode - вызывало лаги
+        
+        // ★ Определяем адрес через geocode
+        try {
+            const res = await ymaps.geocode([lat, lon]);
+            const obj = res?.geoObjects?.get?.(0);
+            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
+            if (line) street = line;
+        } catch(e) {}
 
         let probability = null;
         let peak = null;
