@@ -225,6 +225,7 @@
            а не весь контейнер (чтобы не инвертировать UI/метки). */
         #map.map-dark-filter [class*="ymaps-2-1-"][class*="-ground-pane"] {
             filter: invert(90%) hue-rotate(180deg) brightness(0.7) contrast(1.3);
+            will-change: filter;
         }
         #map.map-dark-filter .ymaps-2-1-map {
             background-color: #080808 !important;
@@ -2166,6 +2167,9 @@
     let markersCollection = null;
     // Флаг автоследования: если true — карта центрируется на пользователе при обновлении GPS
     let autoFollow = true;
+    let mapActionInProgress = false;
+    let mapFilterSuppressed = false;
+    let mapActionStartedAt = 0;
     let lastAutoFollowCenterAt = 0;
     let lastAutoFollowCenterCoords = null;
     let lastGpsLogAt = 0;
@@ -4707,6 +4711,8 @@
     function maybeAutoFollowSetCenter(coords) {
         if (document.visibilityState && document.visibilityState !== 'visible') return;
         if (!autoFollow || !myMap || !Array.isArray(coords) || coords.length < 2) return;
+        if (mapActionInProgress) return;
+        if (mapActionStartedAt && (Date.now() - mapActionStartedAt) < 1200) return;
         if (disableAutoFollowOnce) return;
         const now = Date.now();
         if (lastAutoFollowCenterAt && (now - lastAutoFollowCenterAt) < 800) return;
@@ -9560,27 +9566,51 @@
             markersCollection = new ymaps.GeoObjectCollection();
             myMap.geoObjects.add(markersCollection);
             
-            // При изменении центра карты обновляем адрес
-            myMap.events.add('actionend', () => {
-                const targetCoords = getTargetPlacementCoords();
-                ymaps.geocode(targetCoords).then(res => {
-                    const obj = res.geoObjects.get(0);
-                    document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
-                    
-                    // Проверяем, в какой области находимся
-                    const coords = targetCoords;
-                    if (isInDonetskRegion(coords)) {
-                        document.getElementById('addr-text').style.color = '#34c759';
-                    } else {
-                        document.getElementById('addr-text').style.color = '#ff3b30';
+            // Если пользователь начал вручную передвигать/масштабировать карту — отключаем автоследование
+            // и временно убираем тяжёлый CSS-фильтр (он может фризить drag/zoom на iOS/WebView).
+            myMap.events.add('actionstart', () => {
+                mapActionInProgress = true;
+                mapActionStartedAt = Date.now();
+                autoFollow = false;
+
+                try {
+                    const mapEl = document.getElementById('map');
+                    if (mapEl && mapEl.classList.contains('map-dark-filter')) {
+                        mapEl.classList.remove('map-dark-filter');
+                        mapFilterSuppressed = true;
                     }
-                });
+                } catch (e) {}
+            });
+
+            // При завершении действия обновляем адрес/оверлеи и возвращаем тему.
+            myMap.events.add('actionend', () => {
+                mapActionInProgress = false;
+
+                // Возвращаем фильтр/стиль после жеста
+                try {
+                    if (mapFilterSuppressed) {
+                        mapFilterSuppressed = false;
+                        syncMapVisualStyleWithTheme();
+                    }
+                } catch (e) {}
+
+                try { recoverYandexMapViewport('actionend'); } catch (e) {}
+
+                try {
+                    const targetCoords = getTargetPlacementCoords();
+                    ymaps.geocode(targetCoords).then(res => {
+                        const obj = res.geoObjects.get(0);
+                        const addrEl = document.getElementById('addr-text');
+                        if (addrEl) {
+                            addrEl.innerText = obj ? obj.getAddressLine() : "Местоположение";
+                            const coords = targetCoords;
+                            addrEl.style.color = isInDonetskRegion(coords) ? '#34c759' : '#ff3b30';
+                        }
+                    });
+                } catch (e) {}
+
                 if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
                 if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
-            });
-            // Если пользователь начал вручную передвигать карту — отключаем автоследование
-            myMap.events.add('actionstart', () => {
-                autoFollow = false;
             });
             
             // Инициализируем приложение (проверяем регистрацию)
