@@ -2172,6 +2172,7 @@
     let mapActionStartedAt = 0;
     let lastAutoFollowCenterAt = 0;
     let lastAutoFollowCenterCoords = null;
+    let viewportRecoveryInProgress = false; // Флаг защиты от рекурсии при восстановлении viewport
     let lastGpsLogAt = 0;
     // Данные профиля текущего пользователя
     let currentDriver = null;
@@ -4570,18 +4571,16 @@
     }
 
     function recoverYandexMapViewport(reason = '') {
-        if (!myMap) return;
-        ensureMapBehaviorsEnabled();
+        if (!myMap || viewportRecoveryInProgress) return;
+        viewportRecoveryInProgress = true;
+        
         try {
-            myMap.container?.fitToViewport?.();
+            ensureMapBehaviorsEnabled();
         } catch (e) {}
 
+        // Только fitToViewport, НЕ вызываем setCenter (может триггерить actionend и вызвать рекурсию)
         try {
-            const c = myMap.getCenter?.();
-            const z = myMap.getZoom?.();
-            if (c && typeof myMap.setCenter === 'function') {
-                myMap.setCenter(c, z, { duration: 0, checkZoomRange: false });
-            }
+            myMap.container?.fitToViewport?.();
         } catch (e) {}
 
         try {
@@ -4591,8 +4590,11 @@
         try {
             requestAnimationFrame(() => {
                 try { myMap.container?.fitToViewport?.(); } catch(e) {}
+                viewportRecoveryInProgress = false;
             });
-        } catch (e) {}
+        } catch (e) {
+            viewportRecoveryInProgress = false;
+        }
     }
 
     function ensureMapBehaviorsEnabled() {
@@ -4622,7 +4624,10 @@
 
     function syncMapVisualStyleWithTheme() {
         // Требование: тёмная тема через yandex#skeletonNight, иначе fallback CSS filter.
-        applyYandexMapTheme(!!darkModeEnabled);
+        // Не применяем стили если идет восстановление viewport (может вызвать рекурсию)
+        if (!viewportRecoveryInProgress) {
+            applyYandexMapTheme(!!darkModeEnabled);
+        }
     }
 
     function updateDarkModeUi() {
@@ -9640,20 +9645,9 @@
                     }
                 } catch (e) {}
 
-                try { recoverYandexMapViewport('actionend'); } catch (e) {}
-
-                try {
-                    const targetCoords = getTargetPlacementCoords();
-                    ymaps.geocode(targetCoords).then(res => {
-                        const obj = res.geoObjects.get(0);
-                        const addrEl = document.getElementById('addr-text');
-                        if (addrEl) {
-                            addrEl.innerText = obj ? obj.getAddressLine() : "Местоположение";
-                            const coords = targetCoords;
-                            addrEl.style.color = isInDonetskRegion(coords) ? '#34c759' : '#ff3b30';
-                        }
-                    });
-                } catch (e) {}
+                if (!viewportRecoveryInProgress) {
+                    try { recoverYandexMapViewport('actionend'); } catch (e) {}
+                }
 
                 if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
                 if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
