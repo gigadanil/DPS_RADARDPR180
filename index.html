@@ -532,44 +532,6 @@
         .heatmap-toggle-btn { background: #ff9f0a; font-size: 18px; }
         .heatmap-toggle-btn.active { background: #ff3b30; box-shadow: 0 0 0 3px rgba(255,59,48,0.18), 0 8px 22px rgba(255,59,48,0.28); }
         .activity-btn { background: #007aff; font-size: 18px; }
-        .dark-mode-shade {
-            position: fixed;
-            inset: 0;
-            background: #000;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.25s ease;
-            z-index: 4000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .dark-mode-shade.active {
-            opacity: 0.94;
-        }
-        .dark-mode-message {
-            text-align: center;
-            color: rgba(255,255,255,0.85);
-            line-height: 1.6;
-            font-size: 14px;
-            background: rgba(255,255,255,0.02);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 18px;
-            padding: 22px 26px;
-            max-width: 280px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.45);
-            pointer-events: auto;
-        }
-        .dark-mode-message button {
-            margin-top: 14px;
-            border: 1px solid rgba(255,255,255,0.25);
-            border-radius: 12px;
-            padding: 10px 24px;
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-            font-weight: 700;
-            cursor: pointer;
-        }
         #mapDimmingOverlay {
             position: absolute;
             inset: 0;
@@ -905,13 +867,6 @@
         <span id="notifUnreadBadge" class="notif-badge">0</span>
     </button>
     <div id="inAppNotifWrap" class="notif-toast-wrap"></div>
-    <div id="darkModeShade" class="dark-mode-shade">
-        <div class="dark-mode-message">
-            <div style="font-size:16px; font-weight:800; margin-bottom:6px;">🌙 Темный режим</div>
-            <div>Экран приглушен, радар и голосовые подсказки продолжают работать.</div>
-            <button type="button" onclick="toggleDarkMode(false)">Включить экран</button>
-        </div>
-    </div>
     
     <!-- Модальное окно чата -->
     <div id="chatModal" class="modal">
@@ -1596,13 +1551,6 @@
                     <button type="button" class="settings-inline-btn" id="radarActionBtn" onclick="toggleRadar()" aria-pressed="false">🚦 ВКЛЮЧИТЬ</button>
                 </div>
                 <div class="settings-row-subtitle" id="radarStatusText" style="margin-bottom: 10px;">Радар выключен.</div>
-                <div class="settings-row">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Тёмный режим</div>
-                        <span class="settings-row-subtitle">Приглушает экран, когда радар уже активен.</span>
-                    </div>
-                    <button type="button" class="settings-inline-btn disabled" id="darkModeToggleBtn" onclick="toggleDarkMode()" disabled>🌙 ТЕМНЫЙ РЕЖИМ</button>
-                </div>
                 <div class="settings-row-subtitle" id="radarStatusHint" style="margin-bottom: 12px;">Нажмите радар, чтобы включить GPS и подсказки.</div>
                 <div class="settings-row">
                     <div class="settings-row-text">
@@ -1611,16 +1559,6 @@
                     </div>
                     <label class="switch">
                         <input type="checkbox" id="wakeLockPrefToggle" onchange="toggleWakeLockPreference(this.checked)">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
-                <div class="settings-row" style="margin-bottom: 0;">
-                    <div class="settings-row-text">
-                        <div class="settings-row-title">Авто-темный режим</div>
-                        <span class="settings-row-subtitle">После 18:00 затемняет карту, чтобы не слепить в дороге.</span>
-                    </div>
-                    <label class="switch">
-                        <input type="checkbox" id="autoDarkModeToggle" onchange="toggleAutoDarkMode(this.checked)">
                         <span class="switch-slider"></span>
                     </label>
                 </div>
@@ -2493,7 +2431,7 @@
             volumeRange.disabled = !enabled;
             volumeRange.style.opacity = opacity;
         }
-        ['radarActionBtn','darkModeToggleBtn'].forEach(id => {
+        ['radarActionBtn'].forEach(id => {
             const btn = document.getElementById(id);
             if (!btn) return;
             const shouldDisable = !enabled;
@@ -2502,18 +2440,15 @@
         });
         setSwitchEnabled('voiceToggle', enabled);
         setSwitchEnabled('wakeLockPrefToggle', enabled);
-        setSwitchEnabled('autoDarkModeToggle', enabled);
         if (enabled) {
             try { updateRadarUi(); } catch(e) {}
-            try { updateDarkModeUi(); } catch(e) {}
         }
     }
 
     function updateScreenEnergyUi() {
         const wakeToggle = document.getElementById('wakeLockPrefToggle');
         if (wakeToggle) wakeToggle.checked = !!wakeLockPreferenceEnabled;
-        const autoToggle = document.getElementById('autoDarkModeToggle');
-        if (autoToggle) autoToggle.checked = !!autoDarkModeEnabled;
+        // ★ autoDarkModeToggle удален вместе с темным режимом
     }
 
     function toggleWakeLockPreference(state) {
@@ -4519,7 +4454,6 @@
         if (!radarActive) return;
         radarActive = false;
         try { localStorage.setItem('radar_last_state', 'off'); } catch (e) {}
-        autoDarkModeLastApplied = false;
         stopGPS();
         await releaseWakeLock();
         updateRadarUi();
@@ -4559,13 +4493,6 @@
         lastAutoFollowCenterAt = now;
         lastAutoFollowCenterCoords = [coords[0], coords[1]];
         try { myMap.setCenter(coords); } catch (e) { /* ignore */ }
-    }
-
-    function toggleDarkMode(forceState = null) {
-        const nextState = typeof forceState === 'boolean' ? forceState : !darkModeEnabled;
-        if (!autoDarkModeAdjusting) autoDarkModeLastApplied = null;
-        // backward-compat: кнопка/логика продолжает вызывать toggleDarkMode, но фактически переключаем тему.
-        toggleTheme(!!nextState);
     }
 
         function isReliableGeoPosition(lat, lon, accuracyMeters) {
@@ -9355,9 +9282,6 @@
     ymaps.ready(async () => {
         // Показываем экран приветствия
         showSplashScreen();
-
-        // Применяем сохранённую тему как можно раньше (до модалок/кнопок)
-        try { loadThemePreference(); } catch(e) {}
 
         try {
             const tgUserForRules = window.Telegram?.WebApp?.initDataUnsafe?.user;
