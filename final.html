@@ -8,6 +8,7 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#212121">
     <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="safedrive-responsive.css">
     <title>EASY RIDE — RELIABLE</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1030,13 +1031,13 @@
         <button class="action-btn" id="ccActivityBtn" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС/Спецбат" aria-label="Активность ДПС/Спецбат">👮🛡️</button>
     </div>
 
-    <!-- Нижний левый угол: locate-btn (центрирование/слежение) -->
-    <button class="locate-btn" id="locateBtn" onclick="centerOnMyLocation()" title="Центрирование" aria-label="Центрирование">
-        <span class="locate-icon">➤</span>
-    </button>
-
-    <!-- Нижний правый угол: ptt-btn (Рация) -->
-    <button class="ptt-btn ptt-fab" id="pttFabBtn" title="Рация (зажми и говори)" aria-label="Рация">🎙️</button>
+    <!-- Нижние углы: Геолокация + Рация -->
+    <div class="bottom-controls" id="bottomControls" aria-label="Нижние кнопки">
+        <button class="locate-btn" id="locateBtn" onclick="centerOnMyLocation()" title="Центрирование" aria-label="Центрирование">
+            <span class="locate-icon">➤</span>
+        </button>
+        <button class="ptt-btn ptt-fab" id="pttFabBtn" title="Рация (зажми и говори)" aria-label="Рация">🎙️</button>
+    </div>
 
     <!-- Баннер админ-уведомлений -->
     <div id="broadcastBanner" class="broadcast-banner"></div>
@@ -2154,6 +2155,25 @@
         } catch (e) {}
     }
 
+    function applyResponsiveUiScale() {
+        try {
+            const h = Math.max(0, Number(window.innerHeight) || 0);
+            // Базовая настройка: чем ниже экран — тем меньше UI.
+            let scale = 1;
+            if (h && h < 610) scale = 0.86;
+            else if (h && h < 680) scale = 0.92;
+            else if (h && h < 740) scale = 0.96;
+            document.documentElement.style.setProperty('--ui-scale', String(scale));
+        } catch (e) {}
+    }
+
+    // Responsive tuning on load + rotations
+    try {
+        window.addEventListener('resize', applyResponsiveUiScale, { passive: true });
+        window.addEventListener('orientationchange', applyResponsiveUiScale, { passive: true });
+        applyResponsiveUiScale();
+    } catch (e) {}
+
     // Открыть бот в Telegram (пытаемся сначала tg://, затем https://)
     function openTelegramBot() {
         try {
@@ -2369,10 +2389,9 @@
         }
 
         const cardRect = card.getBoundingClientRect();
-        const desiredTop = Math.max(
-            TARGET_MIN_TOP_PX,
-            Math.min(window.innerHeight * 0.5, cardRect.top - TARGET_CARD_GAP_PX)
-        );
+        const visibleBottom = Math.max(0, cardRect.top - TARGET_CARD_GAP_PX);
+        // Центрируем прицел относительно видимой части карты (верх экрана -> верх панели)
+        const desiredTop = Math.max(TARGET_MIN_TOP_PX, Math.round(visibleBottom * 0.5));
         target.style.top = `${Math.round(desiredTop)}px`;
     }
 
