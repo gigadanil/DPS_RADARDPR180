@@ -241,7 +241,15 @@
             transform: translate(-50%, -50%);
             box-shadow: 0 0 0 2px rgba(255,255,255,0.95);
         }
-        .bottom-ui, .action-panel { position: fixed; bottom: calc(10px + var(--safe-area-inset-bottom)); left: 0; right: 0; z-index: 1550; padding: 0 10px; }
+        .bottom-ui, .action-panel {
+            position: fixed;
+            bottom: calc(10px + var(--safe-area-inset-bottom));
+            left: 0;
+            right: 0;
+            z-index: 1550;
+            padding: 0 10px;
+            pointer-events: none; /* важно: не блокировать жесты карты невидимыми областями */
+        }
         .action-card {
             background: rgba(0, 0, 0, 0.65);
             color: #fff;
@@ -251,6 +259,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.35);
             border: 1px solid rgba(255,255,255,0.10);
             position: relative;
+            pointer-events: auto; /* панель кликабельна, контейнер вокруг — нет */
             transform: translateY(0);
             opacity: 1;
             transition: transform 0.3s ease, opacity 0.3s ease;
@@ -418,6 +427,7 @@
             flex-direction: column;
             gap: 10px;
             transition: opacity 0.3s ease;
+            pointer-events: none; /* карта под ним должна перетаскиваться в пустых местах */
         }
         .control-cluster .cc-btn {
             width: 50px;
@@ -435,6 +445,7 @@
             cursor: pointer;
             transition: transform 0.3s ease, background 0.3s ease, opacity 0.3s ease;
             box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+            pointer-events: auto;
         }
         .control-cluster .cc-btn:active { transform: scale(0.95); }
         .control-cluster .cc-btn.active { border-color: rgba(52,199,89,0.65); box-shadow: 0 0 0 3px rgba(52,199,89,0.18), 0 10px 30px rgba(0,0,0,0.28); }
