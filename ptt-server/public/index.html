@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MONOLITH 180 — Рация</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 18px; }
+    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    #pttBtn {
+      width: 100%;
+      max-width: 420px;
+      height: 72px;
+      border-radius: 18px;
+      border: 0;
+      font-size: 18px;
+      font-weight: 800;
+      background: #16a34a;
+      color: white;
+      touch-action: manipulation;
+      user-select: none;
+    }
+    #pttBtn.disabled { background: #9ca3af; }
+    #pttBtn.busy { background: #6b7280; }
+    #status { margin-top: 10px; font-size: 13px; color: #111; }
+    #complainBtn { height: 40px; padding: 0 14px; border-radius: 12px; border: 1px solid #ddd; background:#fff; font-weight:700; }
+    #complainBtn:disabled { opacity: 0.5; }
+    input { height: 40px; padding: 0 10px; border-radius: 12px; border: 1px solid #ddd; }
+  </style>
+</head>
+<body>
+  <h2>MONOLITH 180 — Рация (PTT)</h2>
+
+  <div class="row">
+    <input id="nameInput" placeholder="Имя (например: Артём)" value="" />
+    <input id="userIdInput" placeholder="ID (любое)" value="" />
+  </div>
+
+  <div style="margin-top:14px;">
+    <button id="pttBtn">🎙️ Удерживай, чтобы говорить</button>
+    <div id="status">Готово.</div>
+  </div>
+
+  <div style="margin-top:14px;" class="row">
+    <button id="complainBtn" disabled>🚫 Пожаловаться на последнюю реплику</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/ptt-client.js"></script>
+</body>
+</html>

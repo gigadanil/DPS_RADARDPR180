@@ -1,0 +1,19 @@
+[functions.telegram-auth]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/telegram-auth/index.ts"
+
+[functions.help-subscribe]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/help-subscribe/index.ts"
+
+[functions.mchs-auto]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/mchs-auto/index.ts"
+
+[functions.maintenance-toggle]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/maintenance-toggle/index.ts"

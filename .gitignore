@@ -1,0 +1,27 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# PTT server
+ptt-server/uploads/
+
+# Supabase local
+.supabase/
+
+# Supabase CLI bundled artifacts / caches (do not commit)
+supabase-cli/supabase.exe
+supabase-cli/supabase/.temp/
+supabase-cli/supabase/.branches/
+supabase/.temp/
+supabase.tar.gz
+
+# Local secrets
+*.local
+*.local.*
+*.secret
+*.secret.*
+*serviceAccount*.json
+
+# OS
+Thumbs.db
+.DS_Store
