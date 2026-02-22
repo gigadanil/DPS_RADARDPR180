@@ -241,14 +241,32 @@
             transform: translate(-50%, -50%);
             box-shadow: 0 0 0 2px rgba(255,255,255,0.95);
         }
-        .bottom-ui { position: absolute; bottom: calc(10px + var(--safe-area-inset-bottom)); left: 0; right: 0; z-index: 1000; padding: 0 8px; }
-        .action-card { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-radius: 24px; padding: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); position: relative; }
-        .action-card.hidden { display: none; }
+        .bottom-ui, .action-panel { position: fixed; bottom: calc(10px + var(--safe-area-inset-bottom)); left: 0; right: 0; z-index: 1550; padding: 0 10px; }
+        .action-card {
+            background: rgba(0, 0, 0, 0.65);
+            color: #fff;
+            backdrop-filter: blur(8px);
+            border-radius: 22px;
+            padding: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.10);
+            position: relative;
+            transform: translateY(0);
+            opacity: 1;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            will-change: transform, opacity;
+        }
+        .action-card.hidden {
+            display: block;
+            transform: translateY(120%);
+            opacity: 0;
+            pointer-events: none;
+        }
         .action-card-close { position: absolute; top: 10px; right: 10px; background: none; border: none; font-size: 24px; cursor: pointer; color: var(--gray); padding: 4px 8px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: all 0.2s; }
-        .action-card-close:active { background: #f0f0f5; color: #000; }
+        .action-card-close:active { background: rgba(255,255,255,0.10); color: #fff; }
         .open-action-btn { position: fixed; bottom: calc(18px + var(--safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); width: 48px; height: 48px; border-radius: 50%; background: white; border: 2px solid var(--blue); z-index: 1600; display: none; align-items: center; justify-content: center; font-size: 22px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); cursor: pointer; }
         .open-action-btn.visible { display: flex; }
-        .addr-label { font-size: 12px; color: #000; font-weight: 600; margin-bottom: 10px; display: block; text-align: center; }
+        .addr-label { font-size: 12px; color: #fff; font-weight: 800; margin-bottom: 10px; display: block; text-align: center; }
         .type-selector { display: flex; justify-content: space-between; margin-bottom: 12px; gap: 6px; flex-wrap: wrap; }
         .type-btn { 
             border: none; background: none; cursor: pointer; display: flex; flex-direction: column; 
@@ -266,23 +284,25 @@
         .type-btn.active { color: var(--blue); background: rgba(0, 122, 255, 0.08); }
         .type-btn.active .icon-circle { background: #fff; border-color: var(--blue); box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3); }
         .type-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
-        .type-tab-btn { flex: 1; border: 1px solid #d9d9df; background: #f5f5f9; color: #666; border-radius: 10px; padding: 8px 10px; font-size: 11px; font-weight: 800; cursor: pointer; }
-        .type-tab-btn.active { background: #fff; color: var(--blue); border-color: var(--blue); }
+        .type-tab-btn { flex: 1; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.78); border-radius: 12px; padding: 8px 10px; font-size: 11px; font-weight: 900; cursor: pointer; transition: all 0.3s ease; }
+        .type-tab-btn.active { background: rgba(52,199,89,0.16); color: #fff; border-color: rgba(52,199,89,0.55); }
         .type-group { display: none; width: 100%; gap: 6px; flex-wrap: wrap; }
         .type-group.active { display: flex; }
         .type-group-title { width: 100%; font-size: 11px; font-weight: 800; margin: 4px 0 2px 0; }
-        .type-group-title.patrol { color: var(--blue); }
-        .type-group-title.help { color: #34c759; }
+        .type-group-title.patrol { color: #34c759; }
+        .type-group-title.help { color: rgba(52,199,89,0.95); }
         
         /* Счётчик активных меток */
-        .markers-counter { font-size: 11px; color: var(--gray); margin-bottom: 10px; text-align: center; padding: 8px; background: #f9f9f9; border-radius: 10px; }
+        .markers-counter { font-size: 11px; color: rgba(255,255,255,0.85); margin-bottom: 10px; text-align: center; padding: 8px; background: rgba(255,255,255,0.06); border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); }
         .counter-item { display: inline-block; margin: 0 6px; }
         .counter-item span:first-child { font-weight: 700; color: var(--blue); }
 
         /* Погодный виджет (1 строка) */
-        .weather-widget { font-size: 11px; color: var(--gray); margin-bottom: 10px; text-align: center; padding: 8px; background: #f9f9f9; border-radius: 10px; }
+        .weather-widget { font-size: 11px; color: rgba(255,255,255,0.85); margin-bottom: 10px; text-align: center; padding: 8px; background: rgba(255,255,255,0.06); border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); }
         .weather-widget .weather-warn { font-weight: 800; }
         .main-btn { width: 100%; background: var(--blue); color: white; border: none; border-radius: 16px; padding: 14px; font-size: 15px; font-weight: 800; cursor: pointer; }
+        .action-card .main-btn { background: #34c759; color: #0b0b0b; font-weight: 900; transition: all 0.3s ease; }
+        .action-card .main-btn:active { transform: scale(0.98); }
         .b-cont { font-size: 14px; line-height: 1.4; min-width: 170px; }
         .b-poll { display: flex; gap: 8px; margin-top: 10px; }
         .b-poll-btn { flex: 1; border: none; border-radius: 8px; padding: 8px; cursor: pointer; background: #f0f0f5; font-weight: bold; }
@@ -352,6 +372,138 @@
             align-items: flex-end;
         }
 
+
+        /* ============= DRIVER ERGO UI (по ТЗ) ============= */
+        #onlineCountBadge.online-count {
+            position: fixed;
+            top: calc(12px + var(--safe-area-inset-top));
+            left: calc(12px + var(--safe-area-inset-left));
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 16px;
+            background: rgba(0,0,0,0.55);
+            color: #fff;
+            font-weight: 900;
+            font-size: 13px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.30);
+            transition: opacity 0.3s ease;
+        }
+        #onlineCountBadge.online-count.visible { display: inline-flex; }
+        .online-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #34c759;
+            box-shadow: 0 0 0 0 rgba(52,199,89,0.45);
+            animation: onlinePulse 1.4s ease-in-out infinite;
+        }
+        @keyframes onlinePulse {
+            0% { box-shadow: 0 0 0 0 rgba(52,199,89,0.45); }
+            70% { box-shadow: 0 0 0 10px rgba(52,199,89,0.0); }
+            100% { box-shadow: 0 0 0 0 rgba(52,199,89,0.0); }
+        }
+
+        .control-cluster {
+            position: fixed;
+            top: 50%;
+            right: calc(12px + var(--safe-area-inset-right));
+            transform: translateY(-50%);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.3s ease;
+        }
+        .control-cluster .cc-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(0,0,0,0.55);
+            color: #fff;
+            font-size: 20px;
+            font-weight: 900;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(8px);
+            cursor: pointer;
+            transition: transform 0.3s ease, background 0.3s ease, opacity 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+        }
+        .control-cluster .cc-btn:active { transform: scale(0.95); }
+        .control-cluster .cc-btn.active { border-color: rgba(52,199,89,0.65); box-shadow: 0 0 0 3px rgba(52,199,89,0.18), 0 10px 30px rgba(0,0,0,0.28); }
+        .control-cluster .cc-btn.off { opacity: 0.65; }
+
+        .locate-btn {
+            position: fixed;
+            left: calc(12px + var(--safe-area-inset-left));
+            bottom: calc(12px + var(--safe-area-inset-bottom));
+            z-index: 2000;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(0,0,0,0.55);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            box-shadow: 0 12px 34px rgba(0,0,0,0.35);
+        }
+        .locate-btn:active { transform: scale(0.95); }
+        .locate-btn .locate-icon { color: var(--blue); font-size: 24px; line-height: 1; }
+        .locate-btn.active .locate-icon { color: #34c759; }
+
+        .ptt-btn.ptt-fab {
+            position: fixed;
+            right: calc(12px + var(--safe-area-inset-right));
+            bottom: calc(12px + var(--safe-area-inset-bottom));
+            z-index: 2000;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: none;
+            background: #34c759;
+            color: #fff;
+            font-size: 26px;
+            font-weight: 900;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 16px 42px rgba(0,0,0,0.42);
+            transition: transform 0.3s ease, background 0.3s ease, opacity 0.3s ease;
+            backdrop-filter: blur(8px);
+            touch-action: none;
+            user-select: none;
+        }
+        .ptt-btn.ptt-fab:active { transform: scale(0.96); }
+        .ptt-btn.ptt-fab.talking { background: #ff3b30; }
+        .ptt-btn.ptt-fab.talking::after {
+            content: '';
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,59,48,0.55);
+            animation: pttWave 0.95s ease-out infinite;
+        }
+        @keyframes pttWave {
+            0% { transform: scale(0.85); opacity: 0.75; }
+            100% { transform: scale(1.35); opacity: 0; }
+        }
+
+        .side-dimmed { opacity: 0.2 !important; pointer-events: none !important; }
+
+        /* Прячем старые плавающие элементы, чтобы интерфейс соответствовал ТЗ */
+        .top-controls, .fab-stack, .follow-toggle, .feedback-btn { display: none !important; }
         .fab-row {
             display: flex;
             gap: 10px;
@@ -822,9 +974,28 @@
     
 
     <!-- Онлайн-счётчик пользователей -->
-    <div id="onlineCountBadge" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 1600; background: white; padding: 6px 10px; border-radius: 14px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); font-weight:700; display: none;">Онлайн: —</div>
+    <div id="onlineCountBadge" class="online-count" aria-label="Онлайн">
+        <span class="online-dot" aria-hidden="true"></span>
+        <span id="onlineCountText">В сети: —</span>
+    </div>
     <div id="map"></div>
     <div id="mapDimmingOverlay"></div>
+
+    <!-- Правый центр: control-cluster (Профиль / Настройки / Слои / Голос) -->
+    <div class="control-cluster" id="controlCluster" aria-label="Быстрые настройки">
+        <button class="cc-btn" id="ccProfileBtn" onclick="openProfileModal()" title="Профиль" aria-label="Профиль">👤</button>
+        <button class="cc-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
+        <button class="cc-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
+        <button class="cc-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
+    </div>
+
+    <!-- Нижний левый угол: locate-btn (центрирование/слежение) -->
+    <button class="locate-btn" id="locateBtn" onclick="centerOnMyLocation()" title="Центрирование" aria-label="Центрирование">
+        <span class="locate-icon">➤</span>
+    </button>
+
+    <!-- Нижний правый угол: ptt-btn (Рация) -->
+    <button class="ptt-btn ptt-fab" id="pttFabBtn" title="Рация (зажми и говори)" aria-label="Рация">🎙️</button>
 
     <!-- Баннер админ-уведомлений -->
     <div id="broadcastBanner" class="broadcast-banner"></div>
@@ -852,19 +1023,6 @@
     </div>
     <button class="speedometer-open-btn" id="speedometerOpenBtn" onclick="toggleSpeedometer(true)" title="Показать спидометр">🧭</button>
     
-    <!-- Верхний блок (Управление): Профиль, Настройки -->
-    <div class="top-controls">
-        <button class="profile-btn" id="profileBtn" onclick="openProfileModal()" title="Профиль">👤</button>
-        <button class="admin-btn" id="adminBtn" onclick="openAdminModal()" title="Настройки">⚙️</button>
-    </div>
-
-    <!-- Кнопка активности ДПС/Спецбат -->
-    <button class="chat-btn activity-btn fab-activity" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС и Спецбат за месяц">👮🛡️</button>
-    <!-- Кнопка уведомлений -->
-    <button class="chat-btn notif-btn fab-notif" onclick="openNotificationsDrawer()" title="Уведомления">
-        🔔
-        <span id="notifUnreadBadge" class="notif-badge">0</span>
-    </button>
     <div id="inAppNotifWrap" class="notif-toast-wrap"></div>
     
     <!-- Модальное окно чата -->
@@ -1686,7 +1844,7 @@
         </div>
     </div>
     
-    <div class="bottom-ui">
+    <div class="bottom-ui action-panel">
         <div class="action-card" id="actionCard">
             <button class="action-card-close" onclick="toggleActionCard()">✕</button>
             <span class="addr-label" id="addr-text">Определение адреса...</span>
@@ -2141,7 +2299,17 @@
             card.classList.add('hidden');
             if (openBtn) openBtn.classList.add('visible');
         }
+        try { setSideControlsDimmed(!!actionCardVisible); } catch(e) {}
         updateTargetAnchorPosition();
+    }
+
+    function setSideControlsDimmed(dimmed) {
+        const ids = ['controlCluster', 'locateBtn', 'pttFabBtn'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.classList.toggle('side-dimmed', !!dimmed);
+        });
     }
 
     function updateTargetAnchorPosition() {
@@ -3580,13 +3748,7 @@
         } catch (e) {
             console.warn('Не удалось остановить аудио:', e?.message || e);
         }
-        try {
-            if (window.speechSynthesis && window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
-            }
-        } catch (e) {
-            console.warn('Не удалось остановить озвучку:', e?.message || e);
-        }
+        // Важно для MONOLITH 180: не отменяем speechSynthesis, чтобы очередь не обрывалась.
     }
 
     // ===================== MONOLITH 180: Voice + WakeLock + Background keep-alive =====================
@@ -3777,6 +3939,14 @@
     function monolithPrimeAudioOnce() {
         if (monolithAudioPrimed) return;
         monolithAudioPrimed = true;
+
+        // Android/WebView: часто нужно "разбудить" speechSynthesis после user gesture.
+        try {
+            if (window.speechSynthesis) {
+                try { window.speechSynthesis.getVoices(); } catch(e) {}
+                try { window.speechSynthesis.resume(); } catch(e) {}
+            }
+        } catch (e) {}
         try {
             const a = new Audio(MONOLITH_SILENT_WAV);
             a.volume = 0.001;
@@ -4144,7 +4314,7 @@
      */
     function checkMarkerDistance(marker, userCoords) {
             if (!userCoords || userCoords.length < 2) return;
-            if (proximityRequiresFollow && !autoFollow) return;
+            const followOkForBanner = !(proximityRequiresFollow && !autoFollow);
 
             // Поддерживаем разные форматы координат маркера: coords: [lat,lon] или latitude/longitude
             let mLat = null, mLon = null;
@@ -4192,17 +4362,26 @@
                 const now = Date.now();
                 const st = crowdConfirmState.get(markerId) || { askedAt: 0, wasNear: false };
 
-                // считаем "рядом" если подходили ближе 120м
-                if (distance < 120) st.wasNear = true;
-
-                const cooldownOk = !st.askedAt || (now - st.askedAt) > CROWD_CONFIRM_COOLDOWN_MS;
-                if (trend === 'away' && st.wasNear && cooldownOk) {
-                    st.askedAt = now;
-                    st.wasNear = false;
+                // Только при нормальном GPS и движении (иначе будет спрашивать пешком/на месте)
+                const speed = Number(userSpeedKmh) || 0;
+                if (!gpsReliable || speed < 10) {
                     crowdConfirmState.set(markerId, st);
-                    crowdConfirmShow(markerId, marker.type);
                 } else {
-                    crowdConfirmState.set(markerId, st);
+
+                    // На практике 120м слишком строго (GPS шум / проезд по соседней улице).
+                    // Считаем "рядом" если подходили ближе 250м.
+                    if (distance < 250) st.wasNear = true;
+
+                    const cooldownOk = !st.askedAt || (now - st.askedAt) > CROWD_CONFIRM_COOLDOWN_MS;
+                    // Чтобы не срабатывало на дрожании GPS — спрашиваем только когда уже начали реально удаляться.
+                    if (trend === 'away' && st.wasNear && cooldownOk && distance > 300) {
+                        st.askedAt = now;
+                        st.wasNear = false;
+                        crowdConfirmState.set(markerId, st);
+                        crowdConfirmShow(markerId, marker.type);
+                    } else {
+                        crowdConfirmState.set(markerId, st);
+                    }
                 }
             }
         } catch (e) {}
@@ -4218,10 +4397,12 @@
             return;
         }
 
-        if (distance <= warningMax) {
-            setActiveProximityMarker(markerId, marker.type, [mLat, mLon], distance);
-        } else if (proximityBannerState.markerId === markerId) {
-            clearActiveProximityMarker(markerId);
+        if (followOkForBanner) {
+            if (distance <= warningMax) {
+                setActiveProximityMarker(markerId, marker.type, [mLat, mLon], distance);
+            } else if (proximityBannerState.markerId === markerId) {
+                clearActiveProximityMarker(markerId);
+            }
         }
 
         // MONOLITH 180: простая логика — озвучиваем только при < 1000м
@@ -4231,7 +4412,26 @@
 
         if (distance < threshold && currentNotification !== 'near1k') {
             const label = getMarkerLabel(marker.type);
-            aiSpeak(`Внимание, впереди ${label}`);
+            const ageMin = getMarkerAgeMinutes(marker);
+            const type = String(marker.type || '');
+
+            // Округляем дистанцию для озвучки
+            let distancePretty;
+            if (distance > 1000) distancePretty = Math.round(distance / 100) * 100;
+            else if (distance > 100) distancePretty = Math.round(distance / 10) * 10;
+            else distancePretty = Math.round(distance);
+
+            let suffix = '';
+            // "До сколько" предсказать нельзя; можем сказать только сколько минут назад добавили/подтвердили.
+            if (ageMin !== null && ageMin >= 0 && ageMin <= 24 * 60) {
+                if (['dps', 'patrol', 'specbat', 'motobat', 'cargo_control'].includes(type)) {
+                    suffix = `. Стоят уже ${formatMinutesRu(ageMin)}`;
+                } else {
+                    suffix = `. Метка ${formatMinutesRu(ageMin)} назад`;
+                }
+            }
+
+            aiSpeak(`Внимание, впереди ${label}, примерно через ${distancePretty} метров${suffix}`);
             distanceNotifications.set(markerId, 'near1k');
             console.log(`📍 Голос: маркер ${markerId} (${distance.toFixed(0)}м)`);
         } else if (distance > hysteresis && currentNotification) {
@@ -4645,7 +4845,10 @@
 
     function updateFollowButton() {
         const btn = document.getElementById('followToggleBtn');
-        if (!btn) return;
+        if (!btn) {
+            try { updateLocateBtnUiState(); } catch(e) {}
+            return;
+        }
         const modeText = proximityRequiresFollow ? 'Оповещения: только при автослежении' : 'Оповещения: всегда';
         if (autoFollow) {
             btn.classList.remove('inactive');
@@ -4660,6 +4863,68 @@
         const badge = proximityRequiresFollow ? '<span class="follow-badge">P</span>' : '';
         btn.innerHTML = `<span class="follow-icon">${icon}</span>${badge}`;
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
+        try { updateLocateBtnUiState(); } catch(e) {}
+    }
+
+    function updateLocateBtnUiState() {
+        const locate = document.getElementById('locateBtn');
+        if (!locate) return;
+        locate.classList.toggle('active', !!autoFollow);
+        locate.title = autoFollow ? 'Отслеживание: ВКЛ' : 'Отслеживание: ВЫКЛ';
+    }
+
+    function updateVoiceBtnUiState() {
+        const btn = document.getElementById('ccVoiceBtn');
+        if (!btn) return;
+        btn.classList.toggle('off', !isMonolithVoiceEnabled());
+        btn.classList.toggle('active', isMonolithVoiceEnabled());
+        btn.textContent = isMonolithVoiceEnabled() ? '🔊' : '🔇';
+    }
+
+    function toggleMonolithVoiceFromUI() {
+        monolithVoiceEnabled = !monolithVoiceEnabled;
+        saveMonolithVoiceEnabled();
+        applyMonolithVoiceToggleUI();
+        if (!monolithVoiceEnabled) {
+            try { monolithClearTtsQueue(true); } catch (e) {}
+            try { monolithStopKeepAliveAudio(); } catch (e) {}
+            try { monolithReleaseWakeLock(); } catch (e) {}
+        } else {
+            try { monolithMaybeUpdateWakeLock(); } catch (e) {}
+        }
+        updateVoiceBtnUiState();
+    }
+
+    function updateLayersBtnUiState() {
+        const btn = document.getElementById('ccLayersBtn');
+        if (!btn) return;
+        const mode = dtpHeatmapEnabled ? 'dtp' : patrolHeatmapEnabled ? 'patrol' : 'off';
+        btn.classList.toggle('active', mode !== 'off');
+        // Подсказка режима: Засады / ДТП / Выкл
+        btn.textContent = mode === 'patrol' ? '🛡️' : mode === 'dtp' ? '💥' : '🗂️';
+        btn.title = mode === 'patrol' ? 'Слои: Засады (ДПС/Спецбат)' : mode === 'dtp' ? 'Слои: ДТП' : 'Слои: выкл';
+    }
+
+    function toggleMainLayers() {
+        // Цикл: Засады -> ДТП -> Выкл
+        const mode = dtpHeatmapEnabled ? 'dtp' : patrolHeatmapEnabled ? 'patrol' : 'off';
+
+        if (mode === 'off') {
+            // включаем Засады
+            toggleDtpHeatmap(false).catch(()=>{});
+            togglePatrolHeatmap(true).catch(()=>{});
+        } else if (mode === 'patrol') {
+            // переключаем на ДТП
+            togglePatrolHeatmap(false).catch(()=>{});
+            toggleDtpHeatmap(true).catch(()=>{});
+        } else {
+            // выключаем всё
+            togglePatrolHeatmap(false).catch(()=>{});
+            toggleDtpHeatmap(false).catch(()=>{});
+        }
+
+        // Обновим UI после асинхронных тумблеров
+        setTimeout(() => { try { updateLayersBtnUiState(); } catch(e) {} }, 120);
     }
     
     // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
@@ -4816,7 +5081,7 @@
         }
 
         // Показываем онлайн-бейдж (если поддерживается)
-        try { document.getElementById('onlineCountBadge').style.display = 'block'; } catch(e) {}
+        try { document.getElementById('onlineCountBadge')?.classList?.add('visible'); } catch(e) {}
 
         // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
         try {
@@ -4894,6 +5159,13 @@
 
         // Рация: держим подключение постоянно, чтобы реплики приходили без открытой модалки.
         try { pttConnectSocket(); } catch (e) {}
+        try { pttAttachFabHandlers(); } catch (e) {}
+
+        // Ergo UI: синхронизируем состояния кнопок
+        try { updateFollowButton(); } catch (e) {}
+        try { updateVoiceBtnUiState(); } catch (e) {}
+        try { updateLayersBtnUiState(); } catch (e) {}
+        try { setSideControlsDimmed(!!actionCardVisible); } catch (e) {}
 
         // Инициализируем админ-канал и статус невидимки
         initAdminBroadcastChannel();
@@ -7788,6 +8060,46 @@
         btn.addEventListener('mouseleave', () => pttPressEnd(false));
     }
 
+    function pttSetFabTalkingUi(isTalking) {
+        const fab = document.getElementById('pttFabBtn');
+        if (!fab) return;
+        fab.classList.toggle('talking', !!isTalking);
+    }
+
+    function pttAttachFabHandlers() {
+        const fab = document.getElementById('pttFabBtn');
+        if (!fab || fab.__pttBound) return;
+        fab.__pttBound = true;
+
+        const onDown = (e) => {
+            try { e.preventDefault(); } catch (err) {}
+            // Стартуем запись/канал
+            pttPressStart();
+            // UI переключаем с небольшой задержкой (pttPressStart async)
+            setTimeout(() => { try { pttSetFabTalkingUi(!!pttIsPressed); } catch(e) {} }, 30);
+        };
+
+        const onUp = (e) => {
+            try { e.preventDefault(); } catch (err) {}
+            pttPressEnd(false);
+            pttSetFabTalkingUi(false);
+        };
+
+        fab.addEventListener('pointerdown', onDown, { passive: false });
+        fab.addEventListener('pointerup', onUp, { passive: false });
+        fab.addEventListener('pointercancel', onUp, { passive: false });
+        fab.addEventListener('pointerleave', () => {
+            try { pttPressEnd(false); } catch(e) {}
+            pttSetFabTalkingUi(false);
+        });
+
+        // fallback на старые браузеры
+        fab.addEventListener('touchstart', onDown, { passive: false });
+        fab.addEventListener('touchend', onUp, { passive: false });
+        fab.addEventListener('mousedown', onDown);
+        window.addEventListener('mouseup', () => { try { onUp({ preventDefault(){} }); } catch(e) {} });
+    }
+
     function pttEnsureReporterId() {
         if (pttReporterId) return pttReporterId;
         try {
@@ -8584,17 +8896,24 @@
         const badge = document.getElementById('onlineCountBadge');
         if (!badge) return;
         if (!presenceSupported) {
-            badge.textContent = 'Онлайн: N/A';
+            const t = document.getElementById('onlineCountText');
+            if (t) t.textContent = 'В сети: N/A';
+            else badge.textContent = 'В сети: N/A';
             return;
         }
         try {
             const threshold = new Date(Date.now() - 2*60*1000).toISOString();
             const res = await _sb.from('drivers').select('user_id', { count: 'exact' }).gte('last_seen', threshold);
             const count = res.count || (res.data ? res.data.length : 0);
-            badge.textContent = `Онлайн: ${count}`;
+            const t = document.getElementById('onlineCountText');
+            if (t) t.textContent = `В сети: ${count}`;
+            else badge.textContent = `В сети: ${count}`;
+            try { badge.classList.add('visible'); } catch(e) {}
         } catch (e) {
             console.warn('Ошибка loadOnlineCount:', e?.message || e);
-            badge.textContent = 'Онлайн: ?';
+            const t = document.getElementById('onlineCountText');
+            if (t) t.textContent = 'В сети: ?';
+            else badge.textContent = 'В сети: ?';
             presenceSupported = false;
         }
     }
@@ -8778,6 +9097,10 @@
     }
 
     function crowdConfirmShow(markerId, markerType) {
+        try {
+            const wrap = document.getElementById('crowdConfirm');
+            if (wrap && wrap.classList.contains('active')) return; // не спамим поверх уже открытого
+        } catch (e) {}
         crowdConfirmPending = { markerId, markerType };
         const wrap = document.getElementById('crowdConfirm');
         const title = document.getElementById('crowdConfirmTitle');
@@ -8819,6 +9142,29 @@
     // expose for inline onclick
     window.crowdConfirmAnswer = crowdConfirmAnswer;
     window.crowdConfirmHide = crowdConfirmHide;
+
+    function formatMinutesRu(min) {
+        const m = Math.max(0, Math.round(Number(min) || 0));
+        const mod10 = m % 10;
+        const mod100 = m % 100;
+        let w = 'минут';
+        if (mod100 >= 11 && mod100 <= 14) w = 'минут';
+        else if (mod10 === 1) w = 'минуту';
+        else if (mod10 >= 2 && mod10 <= 4) w = 'минуты';
+        return `${m} ${w}`;
+    }
+
+    function getMarkerAgeMinutes(marker) {
+        try {
+            const tsMs = (typeof parseMarkerTimestampToMs === 'function') ? parseMarkerTimestampToMs(marker?.ts) : NaN;
+            if (!Number.isFinite(tsMs) || tsMs <= 0) return null;
+            const diff = Date.now() - tsMs;
+            if (diff < 0) return null;
+            return Math.floor(diff / (60 * 1000));
+        } catch (e) {
+            return null;
+        }
+    }
 
     // SOS: отметить "Я в пути" (кто едет помогать)
     window.sosEnroute = async (markerId) => {
