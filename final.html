@@ -4247,6 +4247,12 @@
             const ageMin = getMarkerAgeMinutes(marker);
             const type = String(marker.type || '');
 
+            // Округляем дистанцию для озвучки
+            let distancePretty;
+            if (distance > 1000) distancePretty = Math.round(distance / 100) * 100;
+            else if (distance > 100) distancePretty = Math.round(distance / 10) * 10;
+            else distancePretty = Math.round(distance);
+
             let suffix = '';
             // "До сколько" предсказать нельзя; можем сказать только сколько минут назад добавили/подтвердили.
             if (ageMin !== null && ageMin >= 0 && ageMin <= 24 * 60) {
@@ -4257,7 +4263,7 @@
                 }
             }
 
-            aiSpeak(`Внимание, впереди ${label}${suffix}`);
+            aiSpeak(`Внимание, впереди ${label}, примерно через ${distancePretty} метров${suffix}`);
             distanceNotifications.set(markerId, 'near1k');
             console.log(`📍 Голос: маркер ${markerId} (${distance.toFixed(0)}м)`);
         } else if (distance > hysteresis && currentNotification) {
