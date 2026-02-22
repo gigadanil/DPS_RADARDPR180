@@ -7328,7 +7328,7 @@
 
     // ===================== Рация (Push-to-Talk) — клиент =====================
     // Требует: Socket.io client (cdn), MediaRecorder, HTTPS для микрофона.
-    const PTT_SERVER_URL = ''; // если пусто — используем текущий origin
+    const PTT_SERVER_URL = 'https://monolith-180-ptt.onrender.com'; // если пусто — используем текущий origin
     const PTT_SERVER_URL_STORAGE_KEY = 'ptt:serverUrl';
     const PTT_MAX_RECORD_MS = 7000;
     const PTT_COOLDOWN_MS = 10000;
@@ -7564,6 +7564,9 @@
             await pttRequestWakeLock();
             await pttEnsureMic();
             pttConnectSocket();
+            // Важно: сначала отправляем hello (userId/name), потом ptt:start.
+            // Иначе сервер может зафиксировать имя как "Неизвестный".
+            try { pttSocket?.emit('hello', { userId: pttGetUserId(), name: pttGetName() }); } catch (e) {}
             try { pttSocket?.emit('ptt:start'); } catch (e) {}
 
             pttIsPressed = true;
@@ -7684,6 +7687,7 @@
         pttSocket = io(pttBaseUrl(), { transports: ['websocket', 'polling'] });
 
         pttSocket.on('connect', () => {
+            // hello отправляем сразу при connect, чтобы имя было известно серверу
             try { pttSocket.emit('hello', { userId: pttGetUserId(), name: pttGetName() }); } catch (e) {}
             pttLogStatus('Подключено к рации');
             pttSetHoldButtonState('idle');
