@@ -954,6 +954,7 @@
                 Карту можно смотреть в браузере, но для действий откройте в Telegram.
             </p>
             <div style="display:flex; flex-direction:column; gap:12px; justify-content:center;">
+                <div id="tgLoginWidget" style="display:flex; justify-content:center;"></div>
                 <button onclick="openTelegramBot()" style="padding:14px 20px; border-radius:12px; border:none; background:linear-gradient(135deg, #007aff 0%, #0051d5 100%); color:#fff; font-weight:700; font-size:16px; cursor:pointer; transition:all 0.3s; box-shadow:0 4px 12px rgba(0,122,255,0.3);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,122,255,0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,122,255,0.3)'">
                     📱 Открыть в Telegram
                 </button>
@@ -2006,7 +2007,22 @@
 
     async function ensureSupabaseAuth() {
         const initData = window.Telegram?.WebApp?.initData;
-        if (!initData) return null;
+        if (!initData) {
+            try {
+                const cachedToken = localStorage.getItem('sb_jwt') || '';
+                const cachedExp = Number(localStorage.getItem('sb_jwt_exp') || 0);
+                const nowSec = Math.floor(Date.now() / 1000);
+                if (cachedToken && cachedToken.split('.').length === 3 && (!cachedExp || cachedExp > nowSec + 60)) {
+                    setSupabaseAuth(cachedToken);
+                    try {
+                        const storedUid = localStorage.getItem('site_uid');
+                        if (!uid && storedUid) uid = String(storedUid);
+                    } catch(e) {}
+                    return cachedToken;
+                }
+            } catch (e) {}
+            return null;
+        }
 
         try {
             const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
@@ -2192,6 +2208,124 @@
         applyResponsiveUiScale();
     } catch (e) {}
 
+    // ============= Telegram Mini App UI fixes (header overlay + viewport height) =============
+    let tgViewportHeightPx = 0;
+
+    function applyTelegramUiVars() {
+        try {
+            const isTg = !!window.Telegram?.WebApp;
+            document.documentElement.style.setProperty('--tg-header-offset', isTg ? '45px' : '0px');
+        } catch (e) {}
+
+        try {
+            const vh = Number(window.Telegram?.WebApp?.viewportHeight || 0);
+            if (vh && Number.isFinite(vh)) {
+                tgViewportHeightPx = Math.max(0, Math.round(vh));
+                document.documentElement.style.setProperty('--tg-viewport-height', `${tgViewportHeightPx}px`);
+            }
+        } catch (e) {}
+    }
+
+    function initTelegramWebAppUi() {
+        try {
+            const wa = window.Telegram?.WebApp;
+            if (!wa) {
+                applyTelegramUiVars();
+                return;
+            }
+
+            try { wa.ready(); } catch (e) {}
+            try { wa.expand(); } catch (e) {}
+            try { wa.setHeaderColor('#000000'); } catch (e) {}
+            try { wa.enableClosingConfirmation(); } catch (e) {}
+
+            applyTelegramUiVars();
+
+            try {
+                wa.onEvent?.('viewportChanged', () => {
+                    applyTelegramUiVars();
+                    try { updateTargetAnchorPosition(); } catch(e) {}
+                });
+            } catch (e) {}
+        } catch (e) {}
+    }
+
+    try { initTelegramWebAppUi(); } catch (e) {}
+
+    function getTelegramDisplayUser() {
+        return window.Telegram?.WebApp?.initDataUnsafe?.user || siteTelegramUser;
+    }
+
+    function ensureTelegramLoginWidgetRendered() {
+        try {
+            const wrap = document.getElementById('tgLoginWidget');
+            if (!wrap) return;
+            if (wrap.__tgWidgetMounted) return;
+            wrap.__tgWidgetMounted = true;
+
+            const botUser = String(BOT_USERNAME || '').replace(/^@/, '').trim();
+            if (!botUser) return;
+
+            window.onTelegramSiteAuth = window.onTelegramSiteAuth || function(user) {
+                handleTelegramSiteAuth(user).catch(()=>{});
+            };
+
+            const s = document.createElement('script');
+            s.async = true;
+            s.src = 'https://telegram.org/js/telegram-widget.js?22';
+            s.setAttribute('data-telegram-login', botUser);
+            s.setAttribute('data-size', 'large');
+            s.setAttribute('data-radius', '12');
+            s.setAttribute('data-request-access', 'write');
+            s.setAttribute('data-onauth', 'onTelegramSiteAuth(user)');
+            wrap.innerHTML = '';
+            wrap.appendChild(s);
+        } catch (e) {}
+    }
+
+    async function handleTelegramSiteAuth(user) {
+        try {
+            if (!user || !user.id || !user.hash) throw new Error('Invalid widget user');
+
+            const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user })
+            });
+            if (!res.ok) {
+                const t = await res.text().catch(()=> '');
+                throw new Error(`telegram-login failed (${res.status}): ${t}`);
+            }
+            const data = await res.json().catch(()=> null);
+            const token = data?.token;
+            if (!token || typeof token !== 'string' || token.split('.').length !== 3) throw new Error('telegram-login returned invalid token');
+
+            setSupabaseAuth(token);
+            uid = String(data?.user_id || user.id);
+            siteTelegramUser = data?.user || user;
+            try { window.__siteTelegramUser = siteTelegramUser; } catch(e) {}
+
+            try {
+                localStorage.setItem('sb_jwt', token);
+                localStorage.setItem('site_uid', String(uid));
+                localStorage.setItem('sb_jwt_exp', String(Math.floor(Date.now()/1000) + 24*60*60));
+            } catch(e) {}
+
+            try {
+                const overlay = document.getElementById('tgAuthOverlay');
+                if (overlay) overlay.style.display = 'none';
+            } catch(e) {}
+
+            // Подтянем профиль водителя (если уже есть)
+            try {
+                const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle();
+                if (driver) currentDriver = driver;
+            } catch(e) {}
+        } catch (e) {
+            console.warn('handleTelegramSiteAuth error:', e?.message || e);
+        }
+    }
+
     // Открыть бот в Telegram (пытаемся сначала tg://, затем https://)
     function openTelegramBot() {
         try {
@@ -2223,7 +2357,9 @@
     };
     // ID текущего пользователя из Telegram (null если не авторизован)
     const rawTgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
-    const uid = rawTgId ? String(rawTgId) : null;
+    let uid = rawTgId ? String(rawTgId) : null;
+    let siteTelegramUser = null; // Telegram Login Widget user (для входа через сайт)
+    try { window.__siteTelegramUser = siteTelegramUser; } catch(e) {}
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
     let myMap, selectedType = 'dps';
     // Текущее GPS местоположение пользователя
@@ -2409,7 +2545,9 @@
             mapRect = null;
         }
         const mapTop = mapRect ? mapRect.top : 0;
-        const mapBottom = mapRect ? mapRect.bottom : window.innerHeight;
+        const baseBottom = mapRect ? mapRect.bottom : window.innerHeight;
+        const tgBottom = (tgViewportHeightPx && tgViewportHeightPx > 0) ? (mapTop + tgViewportHeightPx) : 0;
+        const mapBottom = tgBottom ? Math.min(baseBottom, tgBottom) : baseBottom;
 
         const card = document.getElementById('actionCard');
         if (!actionCardVisible || !card || card.classList.contains('hidden')) {
@@ -5122,6 +5260,8 @@
         // В режиме "гость" не показываем блокирующий оверлей — карта должна открываться.
         const overlay = document.getElementById('tgAuthOverlay');
         if (overlay) overlay.style.display = 'none';
+        // На сайте (без Mini App) сразу готовим Login Widget, чтобы можно было авторизоваться.
+        try { ensureTelegramLoginWidgetRendered(); } catch(e) {}
 
         if (isTelegram) {
             // Определяем админа раньше для проверки ТО
@@ -5427,10 +5567,11 @@
 
     // Функция открытия модального окна регистрации
     function openRegistrationModal() {
-        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        const tgUser = getTelegramDisplayUser();
         if (!tgUser) {
             const overlay = document.getElementById('tgAuthOverlay');
             if (overlay) overlay.style.display = 'flex';
+            try { ensureTelegramLoginWidgetRendered(); } catch(e) {}
             return;
         }
         const target = document.querySelector('.target');
@@ -5449,11 +5590,12 @@
     async function registerDriver(event) {
         event.preventDefault();
 
-        // Получаем данные Telegram
-        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        // Получаем данные Telegram (Mini App или Login Widget)
+        const tgUser = getTelegramDisplayUser();
         if (!tgUser || !uid) {
             const overlay = document.getElementById('tgAuthOverlay');
             if (overlay) overlay.style.display = 'flex';
+            try { ensureTelegramLoginWidgetRendered(); } catch(e) {}
             return;
         }
         const name = (tgUser?.first_name || '') + ' ' + (tgUser?.last_name || '');
