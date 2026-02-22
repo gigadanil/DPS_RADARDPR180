@@ -4727,6 +4727,9 @@
         } catch (e) {}
         startProximityBannerLoop();
 
+        // Рация: держим подключение постоянно, чтобы реплики приходили без открытой модалки.
+        try { pttConnectSocket(); } catch (e) {}
+
         // Инициализируем админ-канал и статус невидимки
         initAdminBroadcastChannel();
         await refreshAdminInvisibleStatus();
@@ -7674,6 +7677,17 @@
             await a.play();
         } catch (e) {
             console.warn('PTT play blocked:', e);
+
+            // Если autoplay заблокирован — покажем in-app уведомление.
+            try {
+                if (typeof showInAppNotification === 'function') {
+                    showInAppNotification({
+                        title: `🎙️ Рация: ${speakerName}`,
+                        body: 'Новая реплика. Откройте 🎙️ «Рация», чтобы прослушать.',
+                        priority: 'high'
+                    });
+                }
+            } catch (e2) {}
         }
     }
 
@@ -7759,6 +7773,12 @@
         pttConnectSocket();
         pttSetHoldButtonState('idle');
         pttRequestWakeLock();
+
+        // Если уже есть последняя реплика — включим кнопку жалобы
+        try {
+            const btn = pttEl('pttComplainBtn');
+            if (btn) btn.disabled = !pttLastMessageId;
+        } catch (e) {}
     }
 
     function closePttModal() {
@@ -7767,7 +7787,6 @@
         const modal = pttEl('pttModal');
         if (modal) modal.classList.remove('active');
         try { pttPressEnd(false); } catch(e) {}
-        pttDisconnectSocket();
         pttReleaseWakeLock();
     }
 
