@@ -4898,19 +4898,33 @@
     function updateLayersBtnUiState() {
         const btn = document.getElementById('ccLayersBtn');
         if (!btn) return;
-        const anyOn = !!(patrolHeatmapEnabled || dtpHeatmapEnabled);
-        btn.classList.toggle('active', anyOn);
+        const mode = dtpHeatmapEnabled ? 'dtp' : patrolHeatmapEnabled ? 'patrol' : 'off';
+        btn.classList.toggle('active', mode !== 'off');
+        // Подсказка режима: Засады / ДТП / Выкл
+        btn.textContent = mode === 'patrol' ? '🛡️' : mode === 'dtp' ? '💥' : '🗂️';
+        btn.title = mode === 'patrol' ? 'Слои: Засады (ДПС/Спецбат)' : mode === 'dtp' ? 'Слои: ДТП' : 'Слои: выкл';
     }
 
     function toggleMainLayers() {
-        const anyOn = !!(patrolHeatmapEnabled || dtpHeatmapEnabled);
-        if (anyOn) {
+        // Цикл: Засады -> ДТП -> Выкл
+        const mode = dtpHeatmapEnabled ? 'dtp' : patrolHeatmapEnabled ? 'patrol' : 'off';
+
+        if (mode === 'off') {
+            // включаем Засады
+            toggleDtpHeatmap(false).catch(()=>{});
+            togglePatrolHeatmap(true).catch(()=>{});
+        } else if (mode === 'patrol') {
+            // переключаем на ДТП
+            togglePatrolHeatmap(false).catch(()=>{});
+            toggleDtpHeatmap(true).catch(()=>{});
+        } else {
+            // выключаем всё
             togglePatrolHeatmap(false).catch(()=>{});
             toggleDtpHeatmap(false).catch(()=>{});
-        } else {
-            togglePatrolHeatmap(true).catch(()=>{});
         }
-        setTimeout(() => { try { updateLayersBtnUiState(); } catch(e) {} }, 80);
+
+        // Обновим UI после асинхронных тумблеров
+        setTimeout(() => { try { updateLayersBtnUiState(); } catch(e) {} }, 120);
     }
     
     // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
