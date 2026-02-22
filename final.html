@@ -313,6 +313,89 @@
         .admin-btn { position: absolute; top: calc(15px + var(--safe-area-inset-top)); left: calc(15px + var(--safe-area-inset-left)); z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: #ff9500; border: 2px solid white; cursor: pointer; font-size: 22px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
         .admin-btn.visible { display: block; }
         .admin-btn:active { transform: scale(1.05); }
+
+        /* ============= ГРУППИРОВКА КНОПОК (MONOLITH 180) ============= */
+        .top-controls {
+            position: fixed;
+            top: calc(15px + var(--safe-area-inset-top));
+            right: calc(15px + var(--safe-area-inset-right));
+            z-index: 1600;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .top-controls .profile-btn,
+        .top-controls .admin-btn {
+            position: relative;
+            top: auto;
+            right: auto;
+            left: auto;
+        }
+
+        .fab-stack {
+            position: fixed;
+            right: calc(15px + var(--safe-area-inset-right));
+            bottom: calc(18px + var(--safe-area-inset-bottom));
+            z-index: 1600;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            align-items: flex-end;
+        }
+
+        .fab-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .fab-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+            width: 100%;
+        }
+
+        /* Все кнопки внутри стека становятся относительными */
+        .fab-stack .chat-btn,
+        .fab-stack .loc-btn {
+            position: relative;
+            bottom: auto;
+            right: auto;
+            top: auto;
+            left: auto;
+        }
+
+        /* Оперативные: рация самая крупная, чат под ней */
+        .fab-stack .fab-ptt {
+            width: 68px;
+            height: 68px;
+            font-size: 28px;
+        }
+
+        .fab-stack .fab-chat {
+            width: 52px;
+            height: 52px;
+            font-size: 24px;
+        }
+
+        /* Навигационные: слои меньше, центрирование обычное */
+        .fab-stack .layers-btn {
+            width: 46px;
+            height: 46px;
+            font-size: 18px;
+        }
+
+        .fab-stack .loc-btn {
+            width: 52px;
+            height: 52px;
+            font-size: 20px;
+            border: 2px solid var(--blue);
+        }
         
         .admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         .admin-table th, .admin-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; font-size: 12px; }
@@ -725,16 +808,14 @@
     </div>
     <button class="speedometer-open-btn" id="speedometerOpenBtn" onclick="toggleSpeedometer(true)" title="Показать спидометр">🧭</button>
     
-    <!-- Кнопка чата -->
-    <button class="chat-btn fab-chat" onclick="openChatModal()">💬</button>
-    <!-- Кнопка Рации (Push-to-Talk) -->
-    <button class="chat-btn ptt-btn fab-ptt" onclick="openPttModal()" title="Рация: удерживай, чтобы говорить">🎙️</button>
+    <!-- Верхний блок (Управление): Профиль, Настройки -->
+    <div class="top-controls">
+        <button class="profile-btn" id="profileBtn" onclick="openProfileModal()" title="Профиль">👤</button>
+        <button class="admin-btn" id="adminBtn" onclick="openAdminModal()" title="Настройки">⚙️</button>
+    </div>
+
     <!-- Кнопка активности ДПС/Спецбат -->
     <button class="chat-btn activity-btn fab-activity" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС и Спецбат за месяц">👮🛡️</button>
-    <!-- Кнопка тепловой карты -->
-    <button class="chat-btn heatmap-toggle-btn fab-heatmap" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" title="Тепловая карта ДТП">🗂️🔥</button>
-    <!-- Зоркий глаз: тепловая карта "засад" ДПС/Спецбат -->
-    <button class="chat-btn heatmap-toggle-btn fab-heatmap-patrol" id="patrolHeatmapBtn" onclick="togglePatrolHeatmap()" title="Зоркий глаз: засады ДПС/Спецбат">👁️</button>
     <!-- Кнопка уведомлений -->
     <button class="chat-btn notif-btn fab-notif" onclick="openNotificationsDrawer()" title="Уведомления">
         🔔
@@ -801,16 +882,28 @@
         </div>
     </div>
     
-    <!-- Кнопка админа -->
-    <button class="admin-btn" id="adminBtn" onclick="openAdminModal()">⚙️</button>
-    <!-- Кнопка профиля -->
-    <button class="profile-btn" id="profileBtn" onclick="openProfileModal()" title="Профиль">👤</button>
     <!-- Кнопка отправки нареканий -->
     <button class="feedback-btn" id="feedbackBtn" onclick="openBugReportModal()" title="Сообщить о баге">🐛</button>
-    <!-- Кнопка 'Где я' -->
-    <button class="loc-btn" id="locBtn" onclick="centerOnMyLocation()" title="Где я">📍</button>
     <!-- Переключатель автослежения GPS -->
     <button class="follow-toggle" id="followToggleBtn" onclick="toggleFollow()" title="Автослежение GPS">🔔</button>
+
+    <!-- Правый нижний угол: 2 блока (Оперативные / Навигационные) -->
+    <div class="fab-stack" aria-label="Быстрые действия">
+        <!-- Навигационные: Слои + Центрирование -->
+        <div class="fab-group" aria-label="Навигационные">
+            <div class="fab-row">
+                <button class="chat-btn heatmap-toggle-btn layers-btn" id="patrolHeatmapBtn" onclick="togglePatrolHeatmap()" title="Слои: засад ДПС/Спецбат">👁️</button>
+                <button class="chat-btn heatmap-toggle-btn layers-btn" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" title="Слои: тепловая карта ДТП">🗂️🔥</button>
+            </div>
+            <button class="loc-btn" id="locBtn" onclick="centerOnMyLocation()" title="Центрирование (Где я)">📍</button>
+        </div>
+
+        <!-- Оперативные: Рация (самая крупная), Чат под ней -->
+        <div class="fab-group" aria-label="Оперативные">
+            <button class="chat-btn ptt-btn fab-ptt" onclick="openPttModal()" title="Рация: удерживай, чтобы говорить">🎙️</button>
+            <button class="chat-btn fab-chat" onclick="openChatModal()" title="Чат">💬</button>
+        </div>
+    </div>
     
     <!-- Модальное окно отправки отчета о баге -->
     <div id="bugReportModal" class="modal">
