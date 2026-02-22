@@ -3580,13 +3580,7 @@
         } catch (e) {
             console.warn('Не удалось остановить аудио:', e?.message || e);
         }
-        try {
-            if (window.speechSynthesis && window.speechSynthesis.speaking) {
-                window.speechSynthesis.cancel();
-            }
-        } catch (e) {
-            console.warn('Не удалось остановить озвучку:', e?.message || e);
-        }
+        // Важно для MONOLITH 180: не отменяем speechSynthesis, чтобы очередь не обрывалась.
     }
 
     // ===================== MONOLITH 180: Voice + WakeLock + Background keep-alive =====================
@@ -3777,6 +3771,14 @@
     function monolithPrimeAudioOnce() {
         if (monolithAudioPrimed) return;
         monolithAudioPrimed = true;
+
+        // Android/WebView: часто нужно "разбудить" speechSynthesis после user gesture.
+        try {
+            if (window.speechSynthesis) {
+                try { window.speechSynthesis.getVoices(); } catch(e) {}
+                try { window.speechSynthesis.resume(); } catch(e) {}
+            }
+        } catch (e) {}
         try {
             const a = new Audio(MONOLITH_SILENT_WAV);
             a.volume = 0.001;
@@ -4144,7 +4146,7 @@
      */
     function checkMarkerDistance(marker, userCoords) {
             if (!userCoords || userCoords.length < 2) return;
-            if (proximityRequiresFollow && !autoFollow) return;
+            const followOkForBanner = !(proximityRequiresFollow && !autoFollow);
 
             // Поддерживаем разные форматы координат маркера: coords: [lat,lon] или latitude/longitude
             let mLat = null, mLon = null;
@@ -4192,17 +4194,26 @@
                 const now = Date.now();
                 const st = crowdConfirmState.get(markerId) || { askedAt: 0, wasNear: false };
 
-                // считаем "рядом" если подходили ближе 120м
-                if (distance < 120) st.wasNear = true;
-
-                const cooldownOk = !st.askedAt || (now - st.askedAt) > CROWD_CONFIRM_COOLDOWN_MS;
-                if (trend === 'away' && st.wasNear && cooldownOk) {
-                    st.askedAt = now;
-                    st.wasNear = false;
+                // Только при нормальном GPS и движении (иначе будет спрашивать пешком/на месте)
+                const speed = Number(userSpeedKmh) || 0;
+                if (!gpsReliable || speed < 10) {
                     crowdConfirmState.set(markerId, st);
-                    crowdConfirmShow(markerId, marker.type);
                 } else {
-                    crowdConfirmState.set(markerId, st);
+
+                    // На практике 120м слишком строго (GPS шум / проезд по соседней улице).
+                    // Считаем "рядом" если подходили ближе 250м.
+                    if (distance < 250) st.wasNear = true;
+
+                    const cooldownOk = !st.askedAt || (now - st.askedAt) > CROWD_CONFIRM_COOLDOWN_MS;
+                    // Чтобы не срабатывало на дрожании GPS — спрашиваем только когда уже начали реально удаляться.
+                    if (trend === 'away' && st.wasNear && cooldownOk && distance > 300) {
+                        st.askedAt = now;
+                        st.wasNear = false;
+                        crowdConfirmState.set(markerId, st);
+                        crowdConfirmShow(markerId, marker.type);
+                    } else {
+                        crowdConfirmState.set(markerId, st);
+                    }
                 }
             }
         } catch (e) {}
@@ -4218,10 +4229,12 @@
             return;
         }
 
-        if (distance <= warningMax) {
-            setActiveProximityMarker(markerId, marker.type, [mLat, mLon], distance);
-        } else if (proximityBannerState.markerId === markerId) {
-            clearActiveProximityMarker(markerId);
+        if (followOkForBanner) {
+            if (distance <= warningMax) {
+                setActiveProximityMarker(markerId, marker.type, [mLat, mLon], distance);
+            } else if (proximityBannerState.markerId === markerId) {
+                clearActiveProximityMarker(markerId);
+            }
         }
 
         // MONOLITH 180: простая логика — озвучиваем только при < 1000м
@@ -4231,7 +4244,20 @@
 
         if (distance < threshold && currentNotification !== 'near1k') {
             const label = getMarkerLabel(marker.type);
-            aiSpeak(`Внимание, впереди ${label}`);
+            const ageMin = getMarkerAgeMinutes(marker);
+            const type = String(marker.type || '');
+
+            let suffix = '';
+            // "До сколько" предсказать нельзя; можем сказать только сколько минут назад добавили/подтвердили.
+            if (ageMin !== null && ageMin >= 0 && ageMin <= 24 * 60) {
+                if (['dps', 'patrol', 'specbat', 'motobat', 'cargo_control'].includes(type)) {
+                    suffix = `. Стоят уже ${formatMinutesRu(ageMin)}`;
+                } else {
+                    suffix = `. Метка ${formatMinutesRu(ageMin)} назад`;
+                }
+            }
+
+            aiSpeak(`Внимание, впереди ${label}${suffix}`);
             distanceNotifications.set(markerId, 'near1k');
             console.log(`📍 Голос: маркер ${markerId} (${distance.toFixed(0)}м)`);
         } else if (distance > hysteresis && currentNotification) {
@@ -8778,6 +8804,10 @@
     }
 
     function crowdConfirmShow(markerId, markerType) {
+        try {
+            const wrap = document.getElementById('crowdConfirm');
+            if (wrap && wrap.classList.contains('active')) return; // не спамим поверх уже открытого
+        } catch (e) {}
         crowdConfirmPending = { markerId, markerType };
         const wrap = document.getElementById('crowdConfirm');
         const title = document.getElementById('crowdConfirmTitle');
@@ -8819,6 +8849,29 @@
     // expose for inline onclick
     window.crowdConfirmAnswer = crowdConfirmAnswer;
     window.crowdConfirmHide = crowdConfirmHide;
+
+    function formatMinutesRu(min) {
+        const m = Math.max(0, Math.round(Number(min) || 0));
+        const mod10 = m % 10;
+        const mod100 = m % 100;
+        let w = 'минут';
+        if (mod100 >= 11 && mod100 <= 14) w = 'минут';
+        else if (mod10 === 1) w = 'минуту';
+        else if (mod10 >= 2 && mod10 <= 4) w = 'минуты';
+        return `${m} ${w}`;
+    }
+
+    function getMarkerAgeMinutes(marker) {
+        try {
+            const tsMs = (typeof parseMarkerTimestampToMs === 'function') ? parseMarkerTimestampToMs(marker?.ts) : NaN;
+            if (!Number.isFinite(tsMs) || tsMs <= 0) return null;
+            const diff = Date.now() - tsMs;
+            if (diff < 0) return null;
+            return Math.floor(diff / (60 * 1000));
+        } catch (e) {
+            return null;
+        }
+    }
 
     // SOS: отметить "Я в пути" (кто едет помогать)
     window.sosEnroute = async (markerId) => {
