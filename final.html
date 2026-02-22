@@ -2382,16 +2382,27 @@
 
         target.style.transform = 'translate(-50%, -50%)';
 
+        // Базируемся на реальной видимой области карты (а не на window.innerHeight),
+        // чтобы нижний виджет не перекрывал прицел.
+        let mapRect = null;
+        try {
+            mapRect = document.getElementById('map')?.getBoundingClientRect?.() || null;
+        } catch (e) {
+            mapRect = null;
+        }
+        const mapTop = mapRect ? mapRect.top : 0;
+        const mapBottom = mapRect ? mapRect.bottom : window.innerHeight;
+
         const card = document.getElementById('actionCard');
         if (!actionCardVisible || !card || card.classList.contains('hidden')) {
-            target.style.top = '50%';
+            const mid = mapTop + (mapBottom - mapTop) * 0.5;
+            target.style.top = `${Math.round(mid)}px`;
             return;
         }
 
         const cardRect = card.getBoundingClientRect();
-        const visibleBottom = Math.max(0, cardRect.top - TARGET_CARD_GAP_PX);
-        // Центрируем прицел относительно видимой части карты (верх экрана -> верх панели)
-        const desiredTop = Math.max(TARGET_MIN_TOP_PX, Math.round(visibleBottom * 0.5));
+        const visibleBottom = Math.max(mapTop + 80, Math.min(mapBottom, cardRect.top - TARGET_CARD_GAP_PX));
+        const desiredTop = Math.max(TARGET_MIN_TOP_PX, mapTop + (visibleBottom - mapTop) * 0.5);
         target.style.top = `${Math.round(desiredTop)}px`;
     }
 
@@ -10160,6 +10171,20 @@
             // Если actionCard скрыт по умолчанию, показываем кнопку открытия
             const openBtn = document.getElementById('openActionBtn');
             if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
+
+            // Следим за изменением высоты нижнего виджета, чтобы прицел не перекрывался
+            try {
+                const card = document.getElementById('actionCard');
+                if (card && !card.__targetObserverBound) {
+                    card.__targetObserverBound = true;
+                    card.addEventListener('transitionend', () => { try { updateTargetAnchorPosition(); } catch(e) {} });
+                    if ('ResizeObserver' in window) {
+                        const ro = new ResizeObserver(() => { try { updateTargetAnchorPosition(); } catch(e) {} });
+                        ro.observe(card);
+                        card.__targetRO = ro;
+                    }
+                }
+            } catch (e) {}
             
             // Скрываем экран приветствия
             hideSplashScreenImmediately();
