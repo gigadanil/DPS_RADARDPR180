@@ -2158,11 +2158,29 @@
     function applyResponsiveUiScale() {
         try {
             const h = Math.max(0, Number(window.innerHeight) || 0);
+            const w = Math.max(0, Number(window.innerWidth) || 0);
+            const isLandscape = w > h;
+
             // Базовая настройка: чем ниже экран — тем меньше UI.
+            // Под реальные устройства:
+            // - iPhone 14 Pro (CSS ~ 393x852)
+            // - Redmi 12 (CSS обычно ~ 392..412 ширина, высота ~ 800..900)
+            // На них scale должен быть 1.0.
             let scale = 1;
-            if (h && h < 610) scale = 0.86;
-            else if (h && h < 680) scale = 0.92;
-            else if (h && h < 740) scale = 0.96;
+
+            if (isLandscape) {
+                // В ландшафте высота резко меньше — уменьшаем сильнее
+                scale = 0.86;
+            } else if (h && h < 610) {
+                scale = 0.86;
+            } else if (h && h < 680) {
+                scale = 0.92;
+            } else if (h && h < 740) {
+                scale = 0.96;
+            } else if (h && h > 940 && w && w >= 430) {
+                // Очень большие экраны (планшеты/фолды) — слегка увеличим читаемость
+                scale = 1.02;
+            }
             document.documentElement.style.setProperty('--ui-scale', String(scale));
         } catch (e) {}
     }
