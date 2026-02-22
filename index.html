@@ -6,11 +6,12 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="theme-color" content="#007aff">
+    <meta name="theme-color" content="#212121">
     <link rel="manifest" href="manifest.json">
     <title>EASY RIDE — RELIABLE</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://api-maps.yandex.ru/2.1/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <style>
         :root { --blue: #007aff; --bg: #f2f2f7; --gray: #8e8e93;
@@ -367,14 +368,45 @@
         .fab-chat { bottom: calc(100px + var(--safe-area-inset-bottom)); }
         .fab-heatmap { bottom: calc(220px + var(--safe-area-inset-bottom)); }
         .fab-heatmap-patrol { bottom: calc(160px + var(--safe-area-inset-bottom)); }
+        .fab-ptt { bottom: calc(130px + var(--safe-area-inset-bottom)); }
         .fab-notif { bottom: calc(280px + var(--safe-area-inset-bottom)); }
         .fab-activity { bottom: calc(340px + var(--safe-area-inset-bottom)); }
         @media (max-height: 760px) {
             .fab-heatmap { bottom: calc(205px + var(--safe-area-inset-bottom)); }
             .fab-heatmap-patrol { bottom: calc(150px + var(--safe-area-inset-bottom)); }
+            .fab-ptt { bottom: calc(125px + var(--safe-area-inset-bottom)); }
             .fab-notif { bottom: calc(260px + var(--safe-area-inset-bottom)); }
             .fab-activity { bottom: calc(315px + var(--safe-area-inset-bottom)); }
         }
+        .ptt-btn { background: #34c759; font-size: 20px; }
+        .ptt-hold-btn {
+            width: 100%;
+            height: 68px;
+            border-radius: 16px;
+            border: none;
+            background: #34c759;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 800;
+            cursor: pointer;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        .ptt-hold-btn.disabled { background: #9ca3af; cursor: not-allowed; }
+        .ptt-hold-btn.busy { background: #6b7280; cursor: not-allowed; }
+        .ptt-status { font-size: 12px; color: #111; margin-top: 10px; text-align:center; }
+        .ptt-sub { font-size: 11px; color: var(--gray); margin-top: 6px; text-align:center; }
+        .ptt-actions { display:flex; gap:10px; margin-top: 12px; }
+        .ptt-complain {
+            flex: 1;
+            height: 44px;
+            border-radius: 12px;
+            border: 1px solid #ddd;
+            background: #fff;
+            font-weight: 800;
+            cursor: pointer;
+        }
+        .ptt-complain:disabled { opacity: 0.5; cursor: not-allowed; }
         .notif-btn { background: #5856d6; }
         .notif-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; border: 2px solid #fff; display: none; padding: 0 4px; box-sizing: border-box; }
         .notif-toast-wrap { position: absolute; top: calc(58px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 1900; width: min(92vw, 440px); pointer-events: none; }
@@ -695,6 +727,8 @@
     
     <!-- Кнопка чата -->
     <button class="chat-btn fab-chat" onclick="openChatModal()">💬</button>
+    <!-- Кнопка Рации (Push-to-Talk) -->
+    <button class="chat-btn ptt-btn fab-ptt" onclick="openPttModal()" title="Рация: удерживай, чтобы говорить">🎙️</button>
     <!-- Кнопка активности ДПС/Спецбат -->
     <button class="chat-btn activity-btn fab-activity" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС и Спецбат за месяц">👮🛡️</button>
     <!-- Кнопка тепловой карты -->
@@ -730,6 +764,22 @@
                     <button class="chat-photo-btn" onclick="document.getElementById('chatPhotoInput').click()">📷</button>
                 </div>
                 <button class="chat-send-btn" onclick="sendChatMessage()">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно Рации (PTT) -->
+    <div id="pttModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 style="margin: 0;">🎙️ Рация</h2>
+                <button class="modal-close" onclick="closePttModal()">✕</button>
+            </div>
+            <button id="pttHoldBtn" class="ptt-hold-btn">Удерживай, чтобы говорить</button>
+            <div id="pttStatus" class="ptt-status">Готово.</div>
+            <div id="pttSub" class="ptt-sub">Ограничение: 7 сек. Таймаут после реплики: 10 сек.</div>
+            <div class="ptt-actions">
+                <button id="pttComplainBtn" class="ptt-complain" disabled>🚫 Пожаловаться на последнюю реплику</button>
             </div>
         </div>
     </div>
@@ -1331,6 +1381,17 @@
                 </div>
                 <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
                     <span id="voiceStyleDescription">Выбран: Стандартный стиль</span>
+                </div>
+            </div>
+
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">🗣️ Голосовые уведомления</div>
+                <label style="display:flex; align-items:center; justify-content:space-between; gap:10px; font-size: 12px; font-weight:700; color:#111;">
+                    <span>Включить озвучку</span>
+                    <input id="voice-enable" type="checkbox" style="width:22px; height:22px;">
+                </label>
+                <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
+                    Работает через системный синтез речи. В фоне зависит от Android/WebView.
                 </div>
             </div>
 
@@ -2476,11 +2537,160 @@
     function registerServiceWorker() {
         if (!('serviceWorker' in navigator)) return;
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js').catch(err => {
+            navigator.serviceWorker.register('service-worker.js').catch(err => {
                 console.warn('Service Worker registration failed:', err);
             });
         });
     }
+
+    // ===================== PWA: Web Push + background location bridge =====================
+    // ВАЖНО:
+    // - Web Push работает только в поддерживаемых браузерах и обычно требует HTTPS + установленную PWA.
+    // - Геолокация недоступна в Service Worker; поэтому координаты берём на странице и шлём в SW.
+
+    // Вставьте сюда ваш VAPID public key (base64url, без '=' в конце обычно).
+    // Пример формата: "BEl6..." (это НЕ секрет, в отличие от private key).
+    const WEB_PUSH_VAPID_PUBLIC_KEY = 'BCKNXhwDka5GLPLOGJib2ONjp2Hw985myXXwBOWeH2d5m50A6yiBt7ykM0tbxRtbMo5IBH7HP0EpeMwcA4sLvtE';
+    const PUSH_SUB_LOCALSTORAGE_KEY = 'safedrive180:pushSubscription';
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+        return outputArray;
+    }
+
+    async function getActiveServiceWorkerForMessaging() {
+        if (!('serviceWorker' in navigator)) return null;
+        try {
+            if (navigator.serviceWorker.controller) return navigator.serviceWorker.controller;
+            const reg = await navigator.serviceWorker.ready;
+            return reg.active || reg.waiting || reg.installing || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function storePushSubscription(subscription) {
+        try {
+            localStorage.setItem(PUSH_SUB_LOCALSTORAGE_KEY, JSON.stringify(subscription));
+        } catch (e) {}
+    }
+
+    function clearStoredPushSubscription() {
+        try { localStorage.removeItem(PUSH_SUB_LOCALSTORAGE_KEY); } catch (e) {}
+    }
+
+    async function saveWebPushSubscriptionOnServer(subscriptionJson) {
+        try {
+            if (!subscriptionJson || !subscriptionJson.endpoint) return false;
+            if (typeof SUPABASE_URL === 'undefined' || !SUPABASE_URL) return false;
+
+            const resp = await fetch(`${SUPABASE_URL}/functions/v1/push-subscribe`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    subscription: subscriptionJson,
+                    userId: (typeof uid !== 'undefined' && uid) ? String(uid) : null,
+                    userAgent: (navigator && navigator.userAgent) ? navigator.userAgent : ''
+                })
+            });
+            if (!resp.ok) {
+                const t = await resp.text().catch(() => '');
+                console.warn('Web Push: push-subscribe failed:', resp.status, t);
+                return false;
+            }
+            return true;
+        } catch (e) {
+            console.warn('Web Push: save subscription error:', e?.message || e);
+            return false;
+        }
+    }
+
+    async function enableWebPush() {
+        if (!('serviceWorker' in navigator)) throw new Error('Service Worker не поддерживается в этом окружении');
+        if (!('PushManager' in window)) throw new Error('PushManager не поддерживается (Web Push недоступен)');
+        if (!('Notification' in window)) throw new Error('Notification API не поддерживается');
+
+        let permission = Notification.permission;
+        if (permission === 'default') {
+            permission = await Notification.requestPermission();
+        }
+        if (permission !== 'granted') {
+            throw new Error('Нет разрешения на уведомления (Notification.permission != granted)');
+        }
+
+        const reg = await navigator.serviceWorker.ready;
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+            storePushSubscription(existing.toJSON());
+            saveWebPushSubscriptionOnServer(existing.toJSON()).catch(()=>{});
+            return existing;
+        }
+
+        const key = String(WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
+        if (!key) {
+            throw new Error('Не задан WEB_PUSH_VAPID_PUBLIC_KEY — без него подписку создать нельзя');
+        }
+
+        const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(key)
+        });
+
+        storePushSubscription(sub.toJSON());
+        console.log('Web Push subscription created:', sub.toJSON());
+        saveWebPushSubscriptionOnServer(sub.toJSON()).catch(()=>{});
+        return sub;
+    }
+
+    async function disableWebPush() {
+        if (!('serviceWorker' in navigator)) return false;
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            const sub = await reg.pushManager.getSubscription();
+            if (sub) await sub.unsubscribe();
+            clearStoredPushSubscription();
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    async function postLocationToServiceWorker(position) {
+        const sw = await getActiveServiceWorkerForMessaging();
+        if (!sw || typeof sw.postMessage !== 'function') return;
+        const coords = position?.coords;
+        if (!coords) return;
+
+        // Клонируем только простые поля (не тащим прототипы GeolocationCoordinates)
+        const payload = {
+            latitude: Number(coords.latitude),
+            longitude: Number(coords.longitude),
+            accuracy: Number(coords.accuracy),
+            altitude: coords.altitude == null ? null : Number(coords.altitude),
+            altitudeAccuracy: coords.altitudeAccuracy == null ? null : Number(coords.altitudeAccuracy),
+            heading: coords.heading == null ? null : Number(coords.heading),
+            speed: coords.speed == null ? null : Number(coords.speed)
+        };
+
+        sw.postMessage({
+            type: 'LOCATION_UPDATE',
+            coords: payload,
+            timestamp: Number.isFinite(position?.timestamp) ? position.timestamp : Date.now()
+        });
+    }
+
+    // Экспортируем минимальный API, чтобы можно было включать через существующие кнопки/жесты.
+    window.SafeDrivePwa = {
+        enableWebPush,
+        disableWebPush,
+        postLocationToServiceWorker
+    };
 
     function getNotifStorageKey() {
         return `${NOTIF_STORAGE_PREFIX}${String(uid || 'anon')}`;
@@ -2619,6 +2829,14 @@
             try { permission = await Notification.requestPermission(); } catch (e) { return; }
         }
         if (permission !== 'granted') return;
+
+        // Если задан VAPID public key — создаём Web Push подписку (без нового UI).
+        try {
+            const key = String(typeof WEB_PUSH_VAPID_PUBLIC_KEY !== 'undefined' ? WEB_PUSH_VAPID_PUBLIC_KEY : '').trim();
+            if (key && window.SafeDrivePwa && typeof window.SafeDrivePwa.enableWebPush === 'function') {
+                window.SafeDrivePwa.enableWebPush().catch(()=>{});
+            }
+        } catch (e) {}
 
         const options = {
             body: notification.body || '',
@@ -3234,22 +3452,287 @@
         }
     }
 
+    // ===================== MONOLITH 180: Voice + WakeLock + Background keep-alive =====================
+    const MONOLITH_VOICE_ENABLED_KEY = 'monolith180:voice_enabled';
+    let monolithVoiceEnabled = true;
+
+    let monolithWakeLock = null;
+    let monolithNavigationActive = false;
+
+    let monolithTtsQueue = [];
+    let monolithTtsIsSpeaking = false;
+    let monolithSelectedRuVoice = null;
+
+    let monolithKeepAliveAudio = null;
+    let monolithKeepAliveTimerId = null;
+    let monolithTtsResumeTimerId = null;
+    let monolithAudioPrimed = false;
+
+    // very small silent WAV (short) as data URI
+    const MONOLITH_SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
+
+    function isMonolithVoiceEnabled() {
+        return !!monolithVoiceEnabled;
+    }
+
+    function loadMonolithVoiceEnabled() {
+        try {
+            const raw = localStorage.getItem(MONOLITH_VOICE_ENABLED_KEY);
+            if (raw === 'true' || raw === 'false') monolithVoiceEnabled = (raw === 'true');
+        } catch (e) {}
+    }
+
+    function saveMonolithVoiceEnabled() {
+        try { localStorage.setItem(MONOLITH_VOICE_ENABLED_KEY, monolithVoiceEnabled ? 'true' : 'false'); } catch (e) {}
+    }
+
+    function applyMonolithVoiceToggleUI() {
+        const el = document.getElementById('voice-enable');
+        if (!el) return;
+        el.checked = !!monolithVoiceEnabled;
+    }
+
+    function initMonolithVoiceToggle() {
+        loadMonolithVoiceEnabled();
+        applyMonolithVoiceToggleUI();
+        const el = document.getElementById('voice-enable');
+        if (!el) return;
+        el.addEventListener('change', () => {
+            monolithVoiceEnabled = !!el.checked;
+            saveMonolithVoiceEnabled();
+            if (!monolithVoiceEnabled) {
+                try { monolithClearTtsQueue(true); } catch (e) {}
+                try { monolithStopKeepAliveAudio(); } catch (e) {}
+                try { monolithReleaseWakeLock(); } catch (e) {}
+            } else {
+                try { monolithMaybeUpdateWakeLock(); } catch (e) {}
+            }
+        });
+    }
+
+    function monolithPickRussianVoice() {
+        if (!window.speechSynthesis) return null;
+        try {
+            const voices = window.speechSynthesis.getVoices ? (window.speechSynthesis.getVoices() || []) : [];
+            const ru = voices.filter(v => String(v?.lang || '').toLowerCase().startsWith('ru'));
+            if (!ru.length) return null;
+            const preferred = ru.find(v => /google|yandex|windows|microsoft/i.test(String(v?.name || '')));
+            return preferred || ru[0];
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function monolithEnsureVoicesReady() {
+        if (!window.speechSynthesis) return;
+        try { window.speechSynthesis.getVoices(); } catch (e) {}
+        try {
+            window.speechSynthesis.onvoiceschanged = () => {
+                monolithSelectedRuVoice = monolithPickRussianVoice();
+            };
+        } catch (e) {}
+        monolithSelectedRuVoice = monolithPickRussianVoice();
+    }
+
+    function monolithSpeakNextFromQueue() {
+        if (!isMonolithVoiceEnabled()) return;
+        if (!window.speechSynthesis) return;
+        if (monolithTtsIsSpeaking) return;
+        if (!monolithTtsQueue.length) return;
+
+        const next = monolithTtsQueue.shift();
+        if (!next) return;
+
+        monolithTtsIsSpeaking = true;
+        const utterance = new SpeechSynthesisUtterance(String(next));
+        utterance.lang = 'ru-RU';
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        if (!monolithSelectedRuVoice) monolithSelectedRuVoice = monolithPickRussianVoice();
+        if (monolithSelectedRuVoice) utterance.voice = monolithSelectedRuVoice;
+
+        utterance.onend = () => {
+            monolithTtsIsSpeaking = false;
+            monolithSpeakNextFromQueue();
+        };
+        utterance.onerror = () => {
+            monolithTtsIsSpeaking = false;
+            monolithSpeakNextFromQueue();
+        };
+
+        try {
+            window.speechSynthesis.speak(utterance);
+        } catch (e) {
+            monolithTtsIsSpeaking = false;
+        }
+    }
+
+    function monolithClearTtsQueue(cancelNow = false) {
+        monolithTtsQueue = [];
+        monolithTtsIsSpeaking = false;
+        if (cancelNow && window.speechSynthesis) {
+            try { window.speechSynthesis.cancel(); } catch (e) {}
+        }
+    }
+
+    // Требование: если синтез уже говорит — новые фразы в очередь, не прерывать.
+    function aiSpeak(text) {
+        const t = String(text || '').trim();
+        if (!t) return;
+        if (!isMonolithVoiceEnabled()) return;
+        if (!window.speechSynthesis) return;
+
+        monolithEnsureVoicesReady();
+        monolithTtsQueue.push(t);
+
+        // при старте озвучки пытаемся удержать процесс живым (в пределах возможностей браузера)
+        try { monolithMaybeUpdateWakeLock(); } catch (e) {}
+        try { monolithMaybeStartKeepAliveAudio(); } catch (e) {}
+
+        monolithSpeakNextFromQueue();
+    }
+
+    async function monolithRequestWakeLock() {
+        if (!('wakeLock' in navigator)) return;
+        if (!monolithNavigationActive) return;
+        if (!isMonolithVoiceEnabled()) return;
+        if (document.hidden) return; // screen wake lock обычно требует видимую вкладку
+
+        try {
+            if (monolithWakeLock) return;
+            monolithWakeLock = await navigator.wakeLock.request('screen');
+            monolithWakeLock.addEventListener('release', () => {
+                monolithWakeLock = null;
+            });
+        } catch (e) {
+            monolithWakeLock = null;
+        }
+    }
+
+    function monolithReleaseWakeLock() {
+        try {
+            if (monolithWakeLock) {
+                monolithWakeLock.release();
+                monolithWakeLock = null;
+            }
+        } catch (e) {
+            monolithWakeLock = null;
+        }
+    }
+
+    function monolithSetNavigationActive(active) {
+        monolithNavigationActive = !!active;
+        monolithMaybeUpdateWakeLock();
+        if (!monolithNavigationActive) {
+            monolithStopKeepAliveAudio();
+        }
+    }
+
+    function monolithMaybeUpdateWakeLock() {
+        if (!monolithNavigationActive || !isMonolithVoiceEnabled()) {
+            monolithReleaseWakeLock();
+            return;
+        }
+        monolithRequestWakeLock();
+    }
+
+    function monolithPrimeAudioOnce() {
+        if (monolithAudioPrimed) return;
+        monolithAudioPrimed = true;
+        try {
+            const a = new Audio(MONOLITH_SILENT_WAV);
+            a.volume = 0.001;
+            a.play().then(() => {
+                try { a.pause(); } catch(e) {}
+            }).catch(() => {
+                // ignore
+            });
+        } catch (e) {}
+    }
+
+    function monolithMaybeStartKeepAliveAudio() {
+        if (!isMonolithVoiceEnabled()) return;
+        if (!monolithNavigationActive) return;
+
+        // многие браузеры запрещают autoplay без user gesture
+        if (!monolithAudioPrimed) return;
+
+        if (!monolithKeepAliveAudio) {
+            monolithKeepAliveAudio = new Audio(MONOLITH_SILENT_WAV);
+            monolithKeepAliveAudio.loop = true;
+            monolithKeepAliveAudio.volume = 0.001;
+        }
+
+        if (monolithKeepAliveTimerId) return;
+        monolithKeepAliveTimerId = setInterval(() => {
+            try {
+                if (!monolithKeepAliveAudio) return;
+                if (!document.hidden) return; // keep-alive нужен именно при сворачивании
+                monolithKeepAliveAudio.play().catch(() => {});
+            } catch (e) {}
+        }, 25000);
+
+        // первый старт
+        try {
+            if (document.hidden) monolithKeepAliveAudio.play().catch(() => {});
+        } catch (e) {}
+
+        // небольшой "пинок" для TTS в фоне (мягко)
+        if (!monolithTtsResumeTimerId) {
+            monolithTtsResumeTimerId = setInterval(() => {
+                try {
+                    if (!document.hidden) return;
+                    if (!window.speechSynthesis) return;
+                    if (window.speechSynthesis.speaking) {
+                        window.speechSynthesis.resume();
+                    }
+                } catch (e) {}
+            }, 3000);
+        }
+    }
+
+    function monolithStopKeepAliveAudio() {
+        if (monolithKeepAliveTimerId) {
+            clearInterval(monolithKeepAliveTimerId);
+            monolithKeepAliveTimerId = null;
+        }
+        if (monolithTtsResumeTimerId) {
+            clearInterval(monolithTtsResumeTimerId);
+            monolithTtsResumeTimerId = null;
+        }
+        try {
+            if (monolithKeepAliveAudio) {
+                monolithKeepAliveAudio.pause();
+                monolithKeepAliveAudio.currentTime = 0;
+            }
+        } catch (e) {}
+    }
+
+    // Prime audio on first user interaction (needed for background keep-alive hacks)
+    window.addEventListener('touchstart', monolithPrimeAudioOnce, { passive: true, once: true });
+    window.addEventListener('click', monolithPrimeAudioOnce, { passive: true, once: true });
+
+    document.addEventListener('visibilitychange', () => {
+        // Требование: при сворачивании звук продолжал работать.
+        // Реальность: браузер/ОС могут всё равно душить TTS. Здесь — best-effort.
+        try {
+            if (document.hidden) {
+                monolithMaybeStartKeepAliveAudio();
+            } else {
+                monolithStopKeepAliveAudio();
+                monolithMaybeUpdateWakeLock();
+                if (window.speechSynthesis) {
+                    try { window.speechSynthesis.resume(); } catch(e) {}
+                }
+            }
+        } catch (e) {}
+    });
+
     function speakSmartHintText(text) {
         const t = String(text || '').trim();
         if (!t) return;
-        try { stopWarningOutput(); } catch(e) {}
-        if (!window.speechSynthesis) return;
-        try {
-            if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(t);
-            utterance.lang = 'ru-RU';
-            utterance.rate = 0.92;
-            utterance.pitch = 1.0;
-            utterance.volume = 1.0;
-            window.speechSynthesis.speak(utterance);
-        } catch (e) {
-            console.warn('Не удалось озвучить подсказку:', e?.message || e);
-        }
+        try { aiSpeak(t); } catch(e) {}
     }
 
     let lastSmartHintCheckAt = 0;
@@ -3512,28 +3995,9 @@
             text = messageByType[type] || `Впереди дорожное событие через ${distancePretty} метров. Будьте внимательны.`;
         }
         
-        // Отменяем предыдущую речь если есть
-        if (window.speechSynthesis.speaking) {
-            window.speechSynthesis.cancel();
-        }
-        
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ru-RU';
-        const ruVoice = pickRussianVoice();
-        if (ruVoice) utterance.voice = ruVoice;
-        utterance.rate = 0.9;  // Немного медленнее
-        utterance.pitch = 1.0;
-        utterance.volume = 1.0;
-        
-        // Логируем попытку
+        // Требование MONOLITH 180: не прерывать друг друга — ставим в очередь
         console.log(`🔊 Озвучка (${voiceStyle}): ${text.substring(0, 50)}...`);
-        
-        // Отслеживаем события
-        utterance.onstart = () => console.log('✅ Озвучка началась');
-        utterance.onend = () => console.log('✅ Озвучка завершена');
-        utterance.onerror = (event) => console.error('❌ Ошибка озвучки:', event.error);
-        
-        window.speechSynthesis.speak(utterance);
+        aiSpeak(text);
     }
     
     /**
@@ -3602,20 +4066,17 @@
             clearActiveProximityMarker(markerId);
         }
 
-        // Первое уведомление: зона предупреждения
-        if (distance >= warningMin && distance <= warningMax && currentNotification !== 'far') {
-            speakWarning(distance, marker.type, marker.comment);
-            distanceNotifications.set(markerId, 'far');
-            console.log(`📍 Первое уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
-        }
-        // Второе уведомление: ближняя зона
-        else if (distance < nearThreshold && currentNotification !== 'near') {
-            speakWarning(distance, marker.type, marker.comment);
-            distanceNotifications.set(markerId, 'near');
-            console.log(`📍 Второе уведомление за маркер ${markerId} (${distance.toFixed(0)}м)`);
-        }
-        // Очищаем уведомление если маркер слишком далеко
-        else if (distance > warningMax && currentNotification) {
+        // MONOLITH 180: простая логика — озвучиваем только при < 1000м
+        if (!isMonolithVoiceEnabled()) return;
+        const threshold = 1000;
+        const hysteresis = 1100;
+
+        if (distance < threshold && currentNotification !== 'near1k') {
+            const label = getMarkerLabel(marker.type);
+            aiSpeak(`Внимание, впереди ${label}`);
+            distanceNotifications.set(markerId, 'near1k');
+            console.log(`📍 Голос: маркер ${markerId} (${distance.toFixed(0)}м)`);
+        } else if (distance > hysteresis && currentNotification) {
             distanceNotifications.delete(markerId);
         }
     }
@@ -3827,6 +4288,14 @@
                     userLocation = [latitude, longitude];
                     lastReliableUserLocation = [latitude, longitude];
 
+                    // Пишем последнюю координату в service worker (как "фоновой" источник правды)
+                    // Важно: сам service worker не может запрашивать геолокацию.
+                    try {
+                        if (window.SafeDrivePwa && typeof window.SafeDrivePwa.postLocationToServiceWorker === 'function') {
+                            window.SafeDrivePwa.postLocationToServiceWorker(position);
+                        }
+                    } catch (e) {}
+
                     // обновляем опорную точку для радиуса Telegram-уведомлений (если пользователь подписан)
                     syncHelpSubscriberHomeCoords(false).catch(()=>{});
 
@@ -3995,6 +4464,7 @@
         }
         autoFollow = true;
         updateFollowButton();
+        try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
     }
 
@@ -4002,6 +4472,7 @@
     function toggleFollow() {
         autoFollow = !autoFollow;
         updateFollowButton();
+        try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         if (autoFollow && userLocation && myMap) {
             try { myMap.setCenter(userLocation, 17); } catch(e) { console.warn(e); }
         }
@@ -4023,6 +4494,7 @@
         const icon = autoFollow ? '👁️' : '🚫';
         const badge = proximityRequiresFollow ? '<span class="follow-badge">P</span>' : '';
         btn.innerHTML = `<span class="follow-icon">${icon}</span>${badge}`;
+        try { monolithSetNavigationActive(autoFollow); } catch(e) {}
     }
     
     // Функция для расчета расстояния между двумя точками (формула гаверсинусов)
@@ -4230,6 +4702,7 @@
 
         // Загружаем сохраненный стиль озвучки
         loadVoiceStyle();
+        try { initMonolithVoiceToggle(); } catch(e) {}
         loadProximityMode();
         loadWarningDistance();
         loadSpeedometerPreference();
@@ -4244,6 +4717,14 @@
         }
         updateSpeedometerUI(userSpeedKmh);
         registerServiceWorker();
+        // Авто-подключаем Web Push, если разрешение уже выдано (без новых диалогов)
+        try {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                if (window.SafeDrivePwa && typeof window.SafeDrivePwa.enableWebPush === 'function') {
+                    window.SafeDrivePwa.enableWebPush().catch(()=>{});
+                }
+            }
+        } catch (e) {}
         startProximityBannerLoop();
 
         // Инициализируем админ-канал и статус невидимки
@@ -6844,6 +7325,454 @@
         document.getElementById('chatModal').classList.remove('active');
         if (chatUpdateInterval) clearInterval(chatUpdateInterval);
     }
+
+    // ===================== Рация (Push-to-Talk) — клиент =====================
+    // Требует: Socket.io client (cdn), MediaRecorder, HTTPS для микрофона.
+    const PTT_SERVER_URL = 'https://monolith-180-ptt.onrender.com'; // если пусто — используем текущий origin
+    const PTT_SERVER_URL_STORAGE_KEY = 'ptt:serverUrl';
+    const PTT_MAX_RECORD_MS = 7000;
+    const PTT_COOLDOWN_MS = 10000;
+
+    let pttSocket = null;
+    let pttMediaStream = null;
+    let pttMediaRecorder = null;
+    let pttChunks = [];
+
+    let pttIsPressed = false;
+    let pttCooldownUntil = 0;
+    let pttRecordAutoStopTimer = null;
+    let pttCooldownTimer = null;
+
+    let pttChannelBusy = null; // { userId, name }
+    let pttBanned = false;
+
+    let pttLastMessageId = null;
+    let pttReporterId = null;
+
+    let pttWakeLock = null;
+
+    function pttBaseUrl() {
+        try {
+            const stored = localStorage.getItem(PTT_SERVER_URL_STORAGE_KEY);
+            const raw = String(stored || PTT_SERVER_URL || '').trim();
+            if (raw) return raw.replace(/\/$/, '');
+        } catch (e) {}
+        return location.origin;
+    }
+
+    // Удобная настройка без пересборки: в консоли можно выполнить
+    // localStorage.setItem('ptt:serverUrl','https://xxx.onrender.com')
+    // затем перезагрузить страницу.
+
+    function pttEl(id) { return document.getElementById(id); }
+
+    function pttGetName() {
+        try {
+            const driverName = String(currentDriver?.name || '').trim();
+            if (driverName) return driverName.slice(0, 32);
+        } catch (e) {}
+        try {
+            const tgName = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || '').trim();
+            if (tgName) return tgName.slice(0, 32);
+        } catch (e) {}
+        return 'Водитель';
+    }
+
+    function pttGetUserId() {
+        try {
+            if (typeof uid !== 'undefined' && uid) return String(uid);
+        } catch (e) {}
+        // fallback
+        try {
+            const k = 'ptt:userId';
+            const stored = localStorage.getItem(k);
+            if (stored) return stored;
+            const gen = String(Math.random()).slice(2, 10);
+            localStorage.setItem(k, gen);
+            return gen;
+        } catch (e) {
+            return 'anon';
+        }
+    }
+
+    function pttLogStatus(text) {
+        const el = pttEl('pttStatus');
+        if (el) el.textContent = String(text || '');
+    }
+
+    function pttSetHoldButtonState(state) {
+        const btn = pttEl('pttHoldBtn');
+        if (!btn) return;
+        btn.classList.remove('disabled', 'busy');
+        btn.disabled = false;
+
+        if (pttBanned) {
+            btn.classList.add('disabled');
+            btn.disabled = true;
+            btn.textContent = '🚫 Вы забанены в рации (30 мин)';
+            return;
+        }
+
+        const now = Date.now();
+        const cooldownLeft = Math.max(0, pttCooldownUntil - now);
+        if (cooldownLeft > 0) {
+            btn.classList.add('disabled');
+            btn.disabled = true;
+            const sec = Math.ceil(cooldownLeft / 1000);
+            btn.textContent = `⏳ Подожди ${sec}с`;
+            return;
+        }
+
+        const myId = pttGetUserId();
+        if (pttChannelBusy && String(pttChannelBusy.userId) !== String(myId)) {
+            btn.classList.add('busy');
+            btn.disabled = true;
+            btn.textContent = `Канал занят: ${pttChannelBusy.name}`;
+            return;
+        }
+
+        if (state === 'pressed') {
+            btn.textContent = '🎙️ Говорю… отпусти для отправки';
+            return;
+        }
+
+        btn.textContent = '🎙️ Удерживай, чтобы говорить';
+    }
+
+    function pttStartCooldown() {
+        pttCooldownUntil = Date.now() + PTT_COOLDOWN_MS;
+        if (pttCooldownTimer) clearInterval(pttCooldownTimer);
+        pttCooldownTimer = setInterval(() => {
+            pttSetHoldButtonState('idle');
+            if (Date.now() >= pttCooldownUntil) {
+                clearInterval(pttCooldownTimer);
+                pttCooldownTimer = null;
+                pttSetHoldButtonState('idle');
+            }
+        }, 250);
+        pttSetHoldButtonState('idle');
+    }
+
+    async function pttRequestWakeLock() {
+        try {
+            if (!('wakeLock' in navigator)) return;
+            if (document.hidden) return;
+            if (pttWakeLock) return;
+            pttWakeLock = await navigator.wakeLock.request('screen');
+            pttWakeLock.addEventListener('release', () => { pttWakeLock = null; });
+        } catch (e) {
+            pttWakeLock = null;
+        }
+    }
+
+    function pttReleaseWakeLock() {
+        try { pttWakeLock?.release(); } catch (e) {}
+        pttWakeLock = null;
+    }
+
+    async function pttEnsureMic() {
+        if (pttMediaStream) return pttMediaStream;
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error('getUserMedia unsupported');
+        pttMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        return pttMediaStream;
+    }
+
+    function pttStartRecording() {
+        pttChunks = [];
+
+        const options = {};
+        try {
+            if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+                options.mimeType = 'audio/webm;codecs=opus';
+            }
+        } catch (e) {}
+
+        pttMediaRecorder = new MediaRecorder(pttMediaStream, options);
+        pttMediaRecorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) pttChunks.push(e.data);
+        };
+        pttMediaRecorder.onstop = () => {
+            try {
+                const blob = new Blob(pttChunks, { type: pttMediaRecorder.mimeType || 'audio/webm' });
+                pttUpload(blob).catch(() => {});
+            } catch (e) {
+                pttLogStatus('Ошибка сборки записи');
+            }
+        };
+
+        pttMediaRecorder.start();
+    }
+
+    function pttStopRecording() {
+        try {
+            if (!pttMediaRecorder) return;
+            if (pttMediaRecorder.state !== 'inactive') pttMediaRecorder.stop();
+        } catch (e) {}
+    }
+
+    async function pttUpload(blob) {
+        const fd = new FormData();
+        fd.append('userId', pttGetUserId());
+        fd.append('name', pttGetName());
+        fd.append('audio', blob, `ptt-${Date.now()}.webm`);
+
+        pttLogStatus('Отправка…');
+
+        const resp = await fetch(`${pttBaseUrl()}/ptt/upload`, { method: 'POST', body: fd });
+        if (!resp.ok) {
+            const t = await resp.text().catch(() => '');
+            if (resp.status === 409) {
+                pttLogStatus('Канал занят');
+            } else if (resp.status === 403) {
+                pttLogStatus('Вы забанены в рации');
+                pttBanned = true;
+            } else {
+                pttLogStatus(`Ошибка upload: ${resp.status}`);
+            }
+            console.warn('ptt upload error:', resp.status, t);
+            pttSetHoldButtonState('idle');
+            return;
+        }
+
+        pttLogStatus('Отправлено ✅');
+        pttStartCooldown();
+    }
+
+    function pttClearAutoStopTimer() {
+        if (pttRecordAutoStopTimer) {
+            clearTimeout(pttRecordAutoStopTimer);
+            pttRecordAutoStopTimer = null;
+        }
+    }
+
+    function pttCanTalkNow() {
+        if (pttBanned) return false;
+        if (Date.now() < pttCooldownUntil) return false;
+        const myId = pttGetUserId();
+        if (pttChannelBusy && String(pttChannelBusy.userId) !== String(myId)) return false;
+        return true;
+    }
+
+    async function pttPressStart() {
+        if (pttIsPressed) return;
+        if (!pttCanTalkNow()) {
+            pttSetHoldButtonState('idle');
+            return;
+        }
+
+        try {
+            await pttRequestWakeLock();
+            await pttEnsureMic();
+            pttConnectSocket();
+            try { pttSocket?.emit('ptt:start'); } catch (e) {}
+
+            pttIsPressed = true;
+            pttSetHoldButtonState('pressed');
+            pttLogStatus('Запись…');
+
+            pttStartRecording();
+
+            pttClearAutoStopTimer();
+            pttRecordAutoStopTimer = setTimeout(() => {
+                if (!pttIsPressed) return;
+                pttPressEnd(true);
+            }, PTT_MAX_RECORD_MS);
+        } catch (e) {
+            pttIsPressed = false;
+            pttLogStatus('Нет доступа к микрофону');
+            pttSetHoldButtonState('idle');
+        }
+    }
+
+    function pttPressEnd(auto = false) {
+        if (!pttIsPressed) return;
+        pttIsPressed = false;
+        pttClearAutoStopTimer();
+
+        try { pttSocket?.emit('ptt:stop'); } catch (e) {}
+        pttStopRecording();
+
+        pttLogStatus(auto ? '7 сек — отправляю…' : 'Отпущено — отправляю…');
+        pttSetHoldButtonState('idle');
+    }
+
+    function pttAttachHoldHandlers() {
+        const btn = pttEl('pttHoldBtn');
+        if (!btn) return;
+
+        btn.addEventListener('mousedown', (e) => { e.preventDefault(); pttPressStart(); });
+        window.addEventListener('mouseup', () => pttPressEnd(false));
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); pttPressStart(); }, { passive: false });
+        window.addEventListener('touchend', () => pttPressEnd(false));
+        btn.addEventListener('mouseleave', () => pttPressEnd(false));
+    }
+
+    function pttEnsureReporterId() {
+        if (pttReporterId) return pttReporterId;
+        try {
+            const k = 'ptt:reporterId';
+            const stored = localStorage.getItem(k);
+            if (stored) { pttReporterId = stored; return stored; }
+            const gen = String(Math.random()).slice(2, 12);
+            localStorage.setItem(k, gen);
+            pttReporterId = gen;
+            return gen;
+        } catch (e) {
+            pttReporterId = 'anon';
+            return 'anon';
+        }
+    }
+
+    async function pttComplainLast() {
+        if (!pttLastMessageId) return;
+        const btn = pttEl('pttComplainBtn');
+        if (btn) btn.disabled = true;
+        try {
+            const resp = await fetch(`${pttBaseUrl()}/ptt/complaint`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reporterId: pttEnsureReporterId(), messageId: pttLastMessageId })
+            });
+            const data = await resp.json().catch(() => null);
+            if (!resp.ok) {
+                pttLogStatus('Жалоба не отправлена');
+                return;
+            }
+            pttLogStatus(`Жалоба отправлена (счётчик: ${data?.count || 0})`);
+        } catch (e) {
+            pttLogStatus('Жалоба не отправлена');
+        } finally {
+            setTimeout(() => { if (btn) btn.disabled = false; }, 1500);
+        }
+    }
+
+    async function pttPlayIncoming(msg) {
+        const speakerName = String(msg?.speakerName || 'Кто-то');
+        const url = String(msg?.url || '');
+        if (!url) return;
+
+        // Голосовой штурман: сначала имя
+        try {
+            if (typeof aiSpeak === 'function') aiSpeak(`На связи ${speakerName}`);
+            else if (window.speechSynthesis) {
+                const u = new SpeechSynthesisUtterance(`На связи ${speakerName}`);
+                u.lang = 'ru-RU'; u.rate = 1.0;
+                window.speechSynthesis.speak(u);
+            }
+        } catch (e) {}
+
+        // небольшая пауза, чтобы не слипалось
+        await new Promise(r => setTimeout(r, 450));
+
+        try {
+            await pttRequestWakeLock();
+            const a = new Audio(`${pttBaseUrl()}${url.startsWith('/') ? '' : '/'}${url}`);
+            a.volume = 1.0;
+            await a.play();
+        } catch (e) {
+            console.warn('PTT play blocked:', e);
+        }
+    }
+
+    function pttConnectSocket() {
+        if (pttSocket) return;
+        if (typeof io !== 'function') {
+            pttLogStatus('Socket.io недоступен');
+            return;
+        }
+
+        pttSocket = io(pttBaseUrl(), { transports: ['websocket', 'polling'] });
+
+        pttSocket.on('connect', () => {
+            try { pttSocket.emit('hello', { userId: pttGetUserId(), name: pttGetName() }); } catch (e) {}
+            pttLogStatus('Подключено к рации');
+            pttSetHoldButtonState('idle');
+            pttRequestWakeLock();
+        });
+
+        pttSocket.on('ptt:state', (state) => {
+            pttChannelBusy = state?.busy || null;
+            pttBanned = !!state?.banned;
+            pttSetHoldButtonState(pttIsPressed ? 'pressed' : 'idle');
+        });
+
+        pttSocket.on('ptt:busy', (busy) => {
+            pttChannelBusy = busy || null;
+            pttSetHoldButtonState(pttIsPressed ? 'pressed' : 'idle');
+        });
+
+        pttSocket.on('ptt:free', () => {
+            pttChannelBusy = null;
+            pttSetHoldButtonState(pttIsPressed ? 'pressed' : 'idle');
+        });
+
+        pttSocket.on('ptt:denied', (info) => {
+            if (info?.reason === 'banned') {
+                pttBanned = true;
+                pttLogStatus('Вы забанены в рации');
+            } else if (info?.reason === 'busy') {
+                pttChannelBusy = info?.busy || pttChannelBusy;
+                pttLogStatus('Канал занят');
+            }
+            pttSetHoldButtonState('idle');
+        });
+
+        pttSocket.on('ptt:banned', (info) => {
+            if (String(info?.userId) === String(pttGetUserId())) {
+                pttBanned = true;
+                pttLogStatus('Автобан в рации на 30 минут');
+                pttSetHoldButtonState('idle');
+            }
+        });
+
+        pttSocket.on('ptt:message', (msg) => {
+            pttLastMessageId = String(msg?.id || '') || null;
+            const btn = pttEl('pttComplainBtn');
+            if (btn) btn.disabled = !pttLastMessageId;
+
+            // своё не воспроизводим
+            if (String(msg?.speakerId) === String(pttGetUserId())) return;
+            pttPlayIncoming(msg).catch(() => {});
+        });
+    }
+
+    function pttDisconnectSocket() {
+        try { pttSocket?.disconnect(); } catch (e) {}
+        pttSocket = null;
+    }
+
+    function openPttModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'hidden';
+        const modal = pttEl('pttModal');
+        if (modal) modal.classList.add('active');
+        pttAttachHoldHandlers();
+        const complainBtn = pttEl('pttComplainBtn');
+        if (complainBtn && !complainBtn.__pttBound) {
+            complainBtn.__pttBound = true;
+            complainBtn.addEventListener('click', pttComplainLast);
+        }
+        pttConnectSocket();
+        pttSetHoldButtonState('idle');
+        pttRequestWakeLock();
+    }
+
+    function closePttModal() {
+        const target = document.querySelector('.target');
+        if (target) target.style.visibility = 'visible';
+        const modal = pttEl('pttModal');
+        if (modal) modal.classList.remove('active');
+        try { pttPressEnd(false); } catch(e) {}
+        pttDisconnectSocket();
+        pttReleaseWakeLock();
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        try {
+            if (!document.hidden) pttRequestWakeLock();
+            else pttReleaseWakeLock();
+        } catch (e) {}
+    });
 
     // Функция удаления одного сообщения
     async function deleteMessage(messageId, authorId) {
