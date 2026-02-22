@@ -490,6 +490,39 @@
             cursor: pointer;
         }
         .ptt-complain:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Crowdsourcing quick confirm ("Тут ещё стоят?") */
+        .crowd-confirm {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: calc(100px + var(--safe-area-inset-bottom));
+            z-index: 2100;
+            width: min(92vw, 520px);
+            background: rgba(255,255,255,0.98);
+            backdrop-filter: blur(14px);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+            border: 1px solid rgba(0,0,0,0.06);
+            padding: 12px;
+            display: none;
+        }
+        .crowd-confirm.active { display: block; }
+        .crowd-confirm-title { font-size: 13px; font-weight: 900; color: #111; text-align:center; }
+        .crowd-confirm-sub { font-size: 11px; color: var(--gray); text-align:center; margin-top: 4px; }
+        .crowd-confirm-actions { display:flex; gap:10px; margin-top: 10px; }
+        .crowd-confirm-actions button {
+            flex: 1;
+            border: none;
+            border-radius: 14px;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .crowd-btn-yes { background: #34c759; color: #fff; }
+        .crowd-btn-no { background: #ff3b30; color: #fff; }
+        .crowd-btn-skip { background: #f0f0f5; color: #111; flex: 0.8; }
         .notif-btn { background: #5856d6; }
         .notif-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; border: 2px solid #fff; display: none; padding: 0 4px; box-sizing: border-box; }
         .notif-toast-wrap { position: absolute; top: calc(58px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 1900; width: min(92vw, 440px); pointer-events: none; }
@@ -797,6 +830,17 @@
     <div id="broadcastBanner" class="broadcast-banner"></div>
     <!-- Динамический баннер приближения -->
     <div id="proximityBanner" class="proximity-banner"></div>
+
+    <!-- Crowdsourcing: "Тут ещё стоят?" -->
+    <div id="crowdConfirm" class="crowd-confirm" role="dialog" aria-label="Подтверждение метки">
+        <div id="crowdConfirmTitle" class="crowd-confirm-title">Тут ещё стоят?</div>
+        <div id="crowdConfirmSub" class="crowd-confirm-sub">Один тап — и карта станет точнее</div>
+        <div class="crowd-confirm-actions">
+            <button class="crowd-btn-yes" onclick="crowdConfirmAnswer(true)">Да</button>
+            <button class="crowd-btn-no" onclick="crowdConfirmAnswer(false)">Нет</button>
+            <button class="crowd-btn-skip" onclick="crowdConfirmHide()">Позже</button>
+        </div>
+    </div>
 
     <!-- Спидометр -->
     <div id="speedometer" class="speedometer">
@@ -4142,6 +4186,27 @@
         }
         markerDistanceState.set(markerId, { lastDistance: distance, lastTrend: trend, lastUpdate: Date.now() });
 
+        // Crowdsourcing: если проехали мимо и начинаем удаляться — спросить "Тут ещё стоят?"
+        try {
+            if (shouldCrowdConfirmType(marker.type)) {
+                const now = Date.now();
+                const st = crowdConfirmState.get(markerId) || { askedAt: 0, wasNear: false };
+
+                // считаем "рядом" если подходили ближе 120м
+                if (distance < 120) st.wasNear = true;
+
+                const cooldownOk = !st.askedAt || (now - st.askedAt) > CROWD_CONFIRM_COOLDOWN_MS;
+                if (trend === 'away' && st.wasNear && cooldownOk) {
+                    st.askedAt = now;
+                    st.wasNear = false;
+                    crowdConfirmState.set(markerId, st);
+                    crowdConfirmShow(markerId, marker.type);
+                } else {
+                    crowdConfirmState.set(markerId, st);
+                }
+            }
+        } catch (e) {}
+
         if (trend === 'away') {
             if (currentNotification) {
                 distanceNotifications.delete(markerId);
@@ -4380,6 +4445,13 @@
 
                     userLocation = [latitude, longitude];
                     lastReliableUserLocation = [latitude, longitude];
+
+                    // Рация: отправляем координаты на сервер (для радиуса 5 км)
+                    try {
+                        if (pttSocket && typeof pttSocket.emit === 'function') {
+                            pttSocket.emit('ptt:loc', { lat: Number(latitude), lon: Number(longitude) });
+                        }
+                    } catch (e) {}
 
                     // Пишем последнюю координату в service worker (как "фоновой" источник правды)
                     // Важно: сам service worker не может запрашивать геолокацию.
@@ -7610,6 +7682,16 @@
         const fd = new FormData();
         fd.append('userId', pttGetUserId());
         fd.append('name', pttGetName());
+        try {
+            if (Array.isArray(userLocation) && userLocation.length >= 2) {
+                const lat = Number(userLocation[0]);
+                const lon = Number(userLocation[1]);
+                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                    fd.append('lat', String(lat));
+                    fd.append('lon', String(lon));
+                }
+            }
+        } catch (e) {}
         fd.append('audio', blob, `ptt-${Date.now()}.webm`);
 
         pttLogStatus('Отправка…');
@@ -7796,6 +7878,16 @@
         pttSocket.on('connect', () => {
             // hello отправляем сразу при connect, чтобы имя было известно серверу
             try { pttSocket.emit('hello', { userId: pttGetUserId(), name: pttGetName() }); } catch (e) {}
+            // сразу отправим координаты, если они уже есть
+            try {
+                if (Array.isArray(userLocation) && userLocation.length >= 2) {
+                    const lat = Number(userLocation[0]);
+                    const lon = Number(userLocation[1]);
+                    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                        pttSocket.emit('ptt:loc', { lat, lon });
+                    }
+                }
+            } catch (e) {}
             pttLogStatus('Подключено к рации');
             pttSetHoldButtonState('idle');
             pttRequestWakeLock();
@@ -8581,10 +8673,11 @@
     };
 
     // Функция подтверждения актуальности метки (голосование "Стоят" или "Уехали")
-    window.confirmMarker = async (markerId, status) => {
+    window.confirmMarker = async (markerId, status, options = {}) => {
         // status: 'stay' или 'leave'
+        const silent = !!options?.silent;
         if (!uid) {
-            alert('Пожалуйста, авторизуйтесь через Telegram');
+            if (!silent) alert('Пожалуйста, авторизуйтесь через Telegram');
             const overlay = document.getElementById('tgAuthOverlay'); if (overlay) overlay.style.display = 'flex';
             return;
         }
@@ -8593,7 +8686,7 @@
             const { data: markerInfo } = await _sb.from('markers').select('author_id,type').eq('id', markerId).maybeSingle();
             const isAdminMarker = markerInfo && isAdminUserId(markerInfo.author_id);
             if (isAdminMarker && status === 'leave') {
-                alert('Эта метка подтверждена администрацией и не удаляется голосами.');
+                if (!silent) alert('Эта метка подтверждена администрацией и не удаляется голосами.');
                 return;
             }
 
@@ -8602,7 +8695,7 @@
                 .select('id').eq('marker_id', markerId).eq('user_id', uid).maybeSingle();
             
             if (existing) {
-                alert(`Вы уже голосовали за эту метку. Один голос на метку.`);
+                if (!silent) alert(`Вы уже голосовали за эту метку. Один голос на метку.`);
                 return;
             }
 
@@ -8625,7 +8718,7 @@
                     // Если достаточно подтверждений - удаляем метку
                     if (newCount >= (typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3)) {
                         await expireMarkerById(markerId);
-                        alert(`✅ Метка удалена - ${newCount} человека подтвердили что объект уехал.`);
+                        if (!silent) alert(`✅ Метка удалена - ${newCount} человека подтвердили что объект уехал.`);
                         myMap.balloon.close();
                         loadMarkers();
                         return;
@@ -8653,7 +8746,7 @@
                 // Если достаточно подтверждений - удаляем метку
                 if (leaveCount >= (typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3)) {
                     await expireMarkerById(markerId);
-                    alert(`✅ Метка удалена - ${leaveCount} человека подтвердили что объект уехал.`);
+                    if (!silent) alert(`✅ Метка удалена - ${leaveCount} человека подтвердили что объект уехал.`);
                     myMap.balloon.close();
                     loadMarkers();
                     return;
@@ -8661,19 +8754,71 @@
                 
                 // Иначе показываем обновлённый счётчик
                 if (status === 'stay') {
-                    alert(`✅ Подтверждение принято.${sosBonusText}`);
+                    if (!silent) alert(`✅ Подтверждение принято.${sosBonusText}`);
                 } else {
-                    alert(`✅ Ваш голос учтён (${leaveCount}/${typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3} для удаления)`);
+                    if (!silent) alert(`✅ Ваш голос учтён (${leaveCount}/${typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3} для удаления)`);
                 }
                 loadMarkers(); // обновляем карту с новым счётчиком
             } else if (insertError) {
-                alert('Ошибка при голосовании: ' + (insertError.message || 'неизвестная ошибка'));
+                if (!silent) alert('Ошибка при голосовании: ' + (insertError.message || 'неизвестная ошибка'));
             }
         } catch (e) {
             console.warn('Ошибка при подтверждении метки:', e?.message || e);
-            alert('Ошибка при голосовании: ' + (e?.message || e));
+            if (!silent) alert('Ошибка при голосовании: ' + (e?.message || e));
         }
     };
+
+    // Crowdsourcing quick confirm state
+    const CROWD_CONFIRM_COOLDOWN_MS = 10 * 60 * 1000;
+    const crowdConfirmState = new Map(); // markerId -> { askedAt, wasNear }
+    let crowdConfirmPending = null; // { markerId, markerType }
+
+    function shouldCrowdConfirmType(type) {
+        return ['dps', 'patrol', 'specbat', 'motobat', 'cargo_control', 'camera'].includes(String(type || ''));
+    }
+
+    function crowdConfirmShow(markerId, markerType) {
+        crowdConfirmPending = { markerId, markerType };
+        const wrap = document.getElementById('crowdConfirm');
+        const title = document.getElementById('crowdConfirmTitle');
+        const sub = document.getElementById('crowdConfirmSub');
+        const label = getMarkerLabel(markerType);
+        if (title) title.textContent = `Тут ещё стоят? (${label})`;
+        if (sub) sub.textContent = 'Один тап: подтвердить или убрать метку';
+        if (wrap) wrap.classList.add('active');
+        try { if (typeof aiSpeak === 'function') aiSpeak('Тут ещё стоят?'); } catch (e) {}
+    }
+
+    function crowdConfirmHide() {
+        const wrap = document.getElementById('crowdConfirm');
+        if (wrap) wrap.classList.remove('active');
+        crowdConfirmPending = null;
+    }
+
+    async function crowdConfirmAnswer(isYes) {
+        const pending = crowdConfirmPending;
+        crowdConfirmHide();
+        if (!pending?.markerId) return;
+        try {
+            await window.confirmMarker(pending.markerId, isYes ? 'stay' : 'leave', { silent: true });
+            // маленький in-app фидбек
+            try {
+                if (typeof showInAppNotification === 'function') {
+                    showInAppNotification({
+                        title: '✅ Спасибо!',
+                        body: isYes ? 'Метка подтверждена' : 'Голос "уехали" учтён',
+                        priority: 'low'
+                    });
+                }
+            } catch (e2) {}
+        } catch (e) {
+            console.warn('crowdConfirmAnswer error:', e?.message || e);
+        }
+    }
+
+    // expose for inline onclick
+    window.crowdConfirmAnswer = crowdConfirmAnswer;
+    window.crowdConfirmHide = crowdConfirmHide;
 
     // SOS: отметить "Я в пути" (кто едет помогать)
     window.sosEnroute = async (markerId) => {

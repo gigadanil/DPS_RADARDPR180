@@ -32,8 +32,11 @@ function nowMs() {
 }
 
 // ====== In-memory state (MVP) ======
-// кто сейчас удерживает канал
-let channelBusy = null; // { userId, name, sinceMs }
+// Радиус рации (км)
+const PTT_RADIUS_KM = Number(process.env.PTT_RADIUS_KM || 5);
+
+// кто сейчас удерживает канал (по регионам ~5км)
+const regionBusy = new Map(); // regionKey -> { userId, name, sinceMs, lat, lon }
 
 // бан по userId
 const bans = new Map(); // userId -> banUntilMs
@@ -43,6 +46,53 @@ const messages = new Map(); // messageId -> { speakerId, tsMs }
 
 // жалобы
 const complaints = new Map(); // messageId -> { firstTsMs, count, reporters:Set<string> }
+
+// last known location
+const socketLoc = new Map(); // socketId -> { lat, lon, tsMs, userId, name }
+const userLoc = new Map(); // userId -> { lat, lon, tsMs }
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = (x) => x * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function regionKey(lat, lon) {
+  const a = Number(lat);
+  const b = Number(lon);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return 'unknown';
+  // 0.05 градуса ~ 5-6 км
+  const qLat = Math.round(a * 20);
+  const qLon = Math.round(b * 20);
+  return `${qLat}:${qLon}`;
+}
+
+function emitToRadius(event, payload, center) {
+  const lat = Number(center?.lat);
+  const lon = Number(center?.lon);
+
+  // если центр неизвестен — fallback: всем
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    io.emit(event, payload);
+    return;
+  }
+
+  for (const [id, socket] of io.sockets.sockets) {
+    const loc = socketLoc.get(id);
+    const sLat = Number(loc?.lat);
+    const sLon = Number(loc?.lon);
+    // если клиент не прислал координаты — для совместимости тоже отправим
+    if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) {
+      socket.emit(event, payload);
+      continue;
+    }
+    const d = haversineKm(lat, lon, sLat, sLon);
+    if (d <= PTT_RADIUS_KM) socket.emit(event, payload);
+  }
+}
 
 function isBanned(userId) {
   const uid = String(userId || '').trim();
@@ -62,9 +112,10 @@ function banUser(userId, minutes) {
   bans.set(uid, nowMs() + minutes * 60 * 1000);
 }
 
-function canTakeChannel(userId) {
-  if (!channelBusy) return true;
-  return String(channelBusy.userId) === String(userId);
+function canTakeChannelForRegion(userId, rKey) {
+  const busy = regionBusy.get(rKey);
+  if (!busy) return true;
+  return String(busy.userId) === String(userId);
 }
 
 // ====== Multer upload ======
@@ -95,13 +146,16 @@ app.use('/', express.static(path.join(__dirname, 'public')));
 app.post('/ptt/upload', upload.single('audio'), (req, res) => {
   const userId = String(req.body?.userId || '').trim() || 'anon';
   const name = sanitizeName(req.body?.name);
+  const lat = Number(req.body?.lat);
+  const lon = Number(req.body?.lon);
+  const rKey = regionKey(lat, lon);
 
   if (isBanned(userId)) {
     return res.status(403).json({ error: 'banned' });
   }
 
-  if (!canTakeChannel(userId)) {
-    return res.status(409).json({ error: 'channel_busy', busy: channelBusy });
+  if (!canTakeChannelForRegion(userId, rKey)) {
+    return res.status(409).json({ error: 'channel_busy' });
   }
 
   if (!req.file) {
@@ -114,9 +168,12 @@ app.post('/ptt/upload', upload.single('audio'), (req, res) => {
 
   messages.set(id, { speakerId: userId, tsMs: nowMs(), name });
 
-  // release channel
-  channelBusy = null;
-  io.emit('ptt:free');
+  // release region channel
+  const busy = regionBusy.get(rKey);
+  if (busy && String(busy.userId) === String(userId)) {
+    regionBusy.delete(rKey);
+    emitToRadius('ptt:free', { region: rKey }, { lat, lon });
+  }
 
   const payload = {
     id,
@@ -124,10 +181,12 @@ app.post('/ptt/upload', upload.single('audio'), (req, res) => {
     speakerName: name,
     url,
     mime,
+    lat: Number.isFinite(lat) ? lat : null,
+    lon: Number.isFinite(lon) ? lon : null,
     createdAtMs: nowMs()
   };
 
-  io.emit('ptt:message', payload);
+  emitToRadius('ptt:message', payload, { lat, lon });
   return res.json({ ok: true, message: payload });
 });
 
@@ -187,9 +246,18 @@ io.on('connection', (socket) => {
     socket.data.name = sanitizeName(payload?.name);
 
     socket.emit('ptt:state', {
-      busy: channelBusy,
+      busy: null,
       banned: isBanned(socket.data.userId)
     });
+  });
+
+  socket.on('ptt:loc', (payload) => {
+    const lat = Number(payload?.lat);
+    const lon = Number(payload?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const entry = { lat, lon, tsMs: nowMs(), userId: socket.data.userId, name: socket.data.name };
+    socketLoc.set(socket.id, entry);
+    if (socket.data.userId) userLoc.set(String(socket.data.userId), { lat, lon, tsMs: nowMs() });
   });
 
   socket.on('ptt:start', () => {
@@ -201,28 +269,43 @@ io.on('connection', (socket) => {
       return;
     }
 
-    if (channelBusy && String(channelBusy.userId) !== String(userId)) {
-      socket.emit('ptt:denied', { reason: 'busy', busy: channelBusy });
+    const loc = socketLoc.get(socket.id) || userLoc.get(String(userId)) || null;
+    const lat = Number(loc?.lat);
+    const lon = Number(loc?.lon);
+    const rKey = regionKey(lat, lon);
+
+    const busy = regionBusy.get(rKey);
+    if (busy && String(busy.userId) !== String(userId)) {
+      socket.emit('ptt:denied', { reason: 'busy', busy });
       return;
     }
 
-    channelBusy = { userId, name, sinceMs: nowMs() };
-    io.emit('ptt:busy', channelBusy);
+    const next = { userId, name, sinceMs: nowMs(), lat: Number.isFinite(lat) ? lat : null, lon: Number.isFinite(lon) ? lon : null };
+    regionBusy.set(rKey, next);
+    emitToRadius('ptt:busy', next, { lat, lon });
   });
 
   socket.on('ptt:stop', () => {
     const userId = socket.data.userId;
-    if (channelBusy && String(channelBusy.userId) === String(userId)) {
-      channelBusy = null;
-      io.emit('ptt:free');
+    const loc = socketLoc.get(socket.id) || userLoc.get(String(userId)) || null;
+    const rKey = regionKey(loc?.lat, loc?.lon);
+    const busy = regionBusy.get(rKey);
+    if (busy && String(busy.userId) === String(userId)) {
+      regionBusy.delete(rKey);
+      emitToRadius('ptt:free', { region: rKey }, { lat: loc?.lat, lon: loc?.lon });
     }
   });
 
   socket.on('disconnect', () => {
     const userId = socket.data.userId;
-    if (channelBusy && String(channelBusy.userId) === String(userId)) {
-      channelBusy = null;
-      io.emit('ptt:free');
+    socketLoc.delete(socket.id);
+
+    const loc = userLoc.get(String(userId)) || null;
+    const rKey = regionKey(loc?.lat, loc?.lon);
+    const busy = regionBusy.get(rKey);
+    if (busy && String(busy.userId) === String(userId)) {
+      regionBusy.delete(rKey);
+      emitToRadius('ptt:free', { region: rKey }, { lat: loc?.lat, lon: loc?.lon });
     }
   });
 });
