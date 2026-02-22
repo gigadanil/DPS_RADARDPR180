@@ -13,11 +13,15 @@
   --btn-size: min(8vw, 50px);
   --ptt-size: min(12vw, 70px);
   --btn-gap: 1.5vh;
+  --tg-header-height: 45px;
+  --tg-header-offset: 0px; /* JS ставит 45px внутри Telegram */
+  --tg-viewport-height: 0px; /* JS обновляет из WebApp.viewportHeight */
 }
 
 /* Убираем 300мс задержку и делаем клики резче */
 button,
 .right-bar .action-btn,
+.action-btn,
 .type-btn,
 .main-btn,
 .chat-send-btn,
@@ -28,7 +32,7 @@ button,
 /* Контейнер правых кнопок: резиновая верстка + safe area */
 .right-bar {
   position: fixed;
-  top: calc(2% + var(--safe-area-inset-top));
+  top: calc(2% + var(--tg-header-offset) + var(--safe-area-inset-top));
   right: calc(2% + var(--safe-area-inset-right));
   z-index: 2000;
   display: flex;
@@ -36,6 +40,11 @@ button,
   gap: var(--btn-gap);
   pointer-events: none;
   transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Верхний онлайн-бейдж: отступаем от шапки Telegram */
+#onlineCountBadge.online-count {
+  top: calc(2% + var(--tg-header-offset) + var(--safe-area-inset-top));
 }
 
 .right-bar.hidden {

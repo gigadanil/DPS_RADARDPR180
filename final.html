@@ -2208,6 +2208,50 @@
         applyResponsiveUiScale();
     } catch (e) {}
 
+    // ============= Telegram Mini App UI fixes (header overlay + viewport height) =============
+    let tgViewportHeightPx = 0;
+
+    function applyTelegramUiVars() {
+        try {
+            const isTg = !!window.Telegram?.WebApp;
+            document.documentElement.style.setProperty('--tg-header-offset', isTg ? '45px' : '0px');
+        } catch (e) {}
+
+        try {
+            const vh = Number(window.Telegram?.WebApp?.viewportHeight || 0);
+            if (vh && Number.isFinite(vh)) {
+                tgViewportHeightPx = Math.max(0, Math.round(vh));
+                document.documentElement.style.setProperty('--tg-viewport-height', `${tgViewportHeightPx}px`);
+            }
+        } catch (e) {}
+    }
+
+    function initTelegramWebAppUi() {
+        try {
+            const wa = window.Telegram?.WebApp;
+            if (!wa) {
+                applyTelegramUiVars();
+                return;
+            }
+
+            try { wa.ready(); } catch (e) {}
+            try { wa.expand(); } catch (e) {}
+            try { wa.setHeaderColor('#000000'); } catch (e) {}
+            try { wa.enableClosingConfirmation(); } catch (e) {}
+
+            applyTelegramUiVars();
+
+            try {
+                wa.onEvent?.('viewportChanged', () => {
+                    applyTelegramUiVars();
+                    try { updateTargetAnchorPosition(); } catch(e) {}
+                });
+            } catch (e) {}
+        } catch (e) {}
+    }
+
+    try { initTelegramWebAppUi(); } catch (e) {}
+
     function getTelegramDisplayUser() {
         return window.Telegram?.WebApp?.initDataUnsafe?.user || siteTelegramUser;
     }
@@ -2501,7 +2545,9 @@
             mapRect = null;
         }
         const mapTop = mapRect ? mapRect.top : 0;
-        const mapBottom = mapRect ? mapRect.bottom : window.innerHeight;
+        const baseBottom = mapRect ? mapRect.bottom : window.innerHeight;
+        const tgBottom = (tgViewportHeightPx && tgViewportHeightPx > 0) ? (mapTop + tgViewportHeightPx) : 0;
+        const mapBottom = tgBottom ? Math.min(baseBottom, tgBottom) : baseBottom;
 
         const card = document.getElementById('actionCard');
         if (!actionCardVisible || !card || card.classList.contains('hidden')) {
