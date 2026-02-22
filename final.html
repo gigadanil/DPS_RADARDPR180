@@ -913,16 +913,17 @@
 
     <div class="target" aria-hidden="true"></div>
 
-    <!-- Overlay: Требуется вход через Telegram -->
+    <!-- Overlay: Требуется Telegram для регистрации/действий -->
     <div id="tgAuthOverlay" class="auth-overlay" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
         <div style="background:#fff; padding:40px 25px; border-radius:16px; max-width:420px; width:95%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.3); animation: slideUp 0.4s ease;">
             <div style="font-size:48px; margin-bottom:20px; animation: pulse 2s ease-in-out infinite;">🔐</div>
             <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; color:#333;">Доступ ограничен</h2>
             <p style="color:#666; font-size:16px; line-height:1.6; margin:0 0 25px 0;">
-                Это приложение доступно только через<br><strong>Telegram Mini App</strong>.
+                <strong>Регистрация и отправка</strong> (метки/чат/профиль)
+                доступны только через<br><strong>Telegram Mini App</strong>.
             </p>
             <p style="color:#888; font-size:14px; line-height:1.5; margin:0 0 30px 0;">
-                Пожалуйста, откройте его в Telegram.
+                Карту можно смотреть в браузере, но для действий откройте в Telegram.
             </p>
             <div style="display:flex; flex-direction:column; gap:12px; justify-content:center;">
                 <button onclick="openTelegramBot()" style="padding:14px 20px; border-radius:12px; border:none; background:linear-gradient(135deg, #007aff 0%, #0051d5 100%); color:#fff; font-weight:700; font-size:16px; cursor:pointer; transition:all 0.3s; box-shadow:0 4px 12px rgba(0,122,255,0.3);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,122,255,0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,122,255,0.3)'">
@@ -5027,64 +5028,61 @@
         const betaOverlay = document.getElementById('betaInviteOverlay');
         if (betaOverlay) betaOverlay.style.display = 'none';
 
-        // Получаем данные Telegram
+        // Получаем данные Telegram (если есть) — без Telegram запускаем режим "гость"
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-        if (!tgUser) {
-            // Показываем оверлей с требованием открыть через Telegram
-            const overlay = document.getElementById('tgAuthOverlay');
-            if (overlay) overlay.style.display = 'flex';
-            // Скрываем splash screen
-            const splash = document.getElementById('splashScreen');
-            if (splash) splash.classList.add('hidden');
-            initAppInProgress = false;
-            return;
-        }
-
-        // Успешно загрузили Telegram - скрываем overlay если был показан
+        const isTelegram = !!tgUser;
+        // В режиме "гость" не показываем блокирующий оверлей — карта должна открываться.
         const overlay = document.getElementById('tgAuthOverlay');
         if (overlay) overlay.style.display = 'none';
 
-        // Определяем админа раньше для проверки ТО
-        isAdmin = String(tgUser.id) === String(ADMIN_ID);
+        if (isTelegram) {
+            // Определяем админа раньше для проверки ТО
+            isAdmin = String(tgUser.id) === String(ADMIN_ID);
 
-        // Переключаем Supabase на authenticated (JWT из Telegram)
-        await ensureSupabaseAuth();
+            // Переключаем Supabase на authenticated (JWT из Telegram)
+            await ensureSupabaseAuth();
 
-        // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
-        try {
-            if (localStorage.getItem('beta_access_granted') === 'true') {
-                await ensureUserAchievement(uid, 'beta_tester');
-            }
-        } catch(e) {}
-
-        try {
-            // Проверяем, не забанен ли пользователь (с таймаутом)
-            const banInfo = await Promise.race([
-                isUserBanned(uid),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Ban check timeout')), 5000)
-                )
-            ]).catch(() => ({ isBanned: false })); // Если ошибка, продолжаем работу
-            
-            if (banInfo.isBanned) {
-                let banMessage = '❌ Вы заблокированы администратором и не можете использовать приложение.';
-                if (banInfo.reason) {
-                    banMessage += `\n\nПричина: ${banInfo.reason}`;
+            // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
+            try {
+                if (localStorage.getItem('beta_access_granted') === 'true') {
+                    await ensureUserAchievement(uid, 'beta_tester');
                 }
-                alert(banMessage);
-                return;
-            }
+            } catch(e) {}
+        } else {
+            // Гость: без Telegram не регистрируем и не пишем в профили/чаты/метки.
+            isAdmin = false;
+        }
 
-            // ПРОВЕРЯЕМ ТЕХНИЧЕСКОЕ ОБСЛУЖИВАНИЕ
-            const isMaintenanceActive = await checkMaintenanceStatus(isAdmin);
-            if (isMaintenanceActive) {
-                initAppInProgress = false;
-                return; // Оверлей ТО заблокирует интерфейс
-            }
+        if (isTelegram) {
+            try {
+                // Проверяем, не забанен ли пользователь (с таймаутом)
+                const banInfo = await Promise.race([
+                    isUserBanned(uid),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Ban check timeout')), 5000)
+                    )
+                ]).catch(() => ({ isBanned: false })); // Если ошибка, продолжаем работу
+                
+                if (banInfo.isBanned) {
+                    let banMessage = '❌ Вы заблокированы администратором и не можете использовать приложение.';
+                    if (banInfo.reason) {
+                        banMessage += `\n\nПричина: ${banInfo.reason}`;
+                    }
+                    alert(banMessage);
+                    return;
+                }
 
-        } catch (e) {
-            console.warn('Ошибка проверки блокировки:', e?.message || e);
-            // Продолжаем работу при ошибке
+                // ПРОВЕРЯЕМ ТЕХНИЧЕСКОЕ ОБСЛУЖИВАНИЕ
+                const isMaintenanceActive = await checkMaintenanceStatus(isAdmin);
+                if (isMaintenanceActive) {
+                    initAppInProgress = false;
+                    return; // Оверлей ТО заблокирует интерфейс
+                }
+
+            } catch (e) {
+                console.warn('Ошибка проверки блокировки:', e?.message || e);
+                // Продолжаем работу при ошибке
+            }
         }
 
         // Проверяем, является ли пользователь администратором
@@ -5096,27 +5094,29 @@
         // Показываем онлайн-бейдж (если поддерживается)
         try { document.getElementById('onlineCountBadge')?.classList?.add('visible'); } catch(e) {}
 
-        // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
-        try {
-            const { data: driver } = await Promise.race([
-                _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle(),
-                new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('Driver check timeout')), 8000)
-                )
-            ]);
-            if (!driver) {
-                // Если нет, показываем форму для добавления данных об авто
+        if (isTelegram) {
+            // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
+            try {
+                const { data: driver } = await Promise.race([
+                    _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle(),
+                    new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error('Driver check timeout')), 8000)
+                    )
+                ]);
+                if (!driver) {
+                    // Если нет, показываем форму для добавления данных об авто
+                    document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
+                    openRegistrationModal();
+                } else {
+                    // Если да, загружаем его данные
+                    currentDriver = driver;
+                }
+            } catch (e) {
+                // Если запрос к таблице drivers падает из-за несинхронизированной схемы, всё равно покажем форму
+                console.warn('drivers table read failed:', e.message || e);
                 document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
                 openRegistrationModal();
-            } else {
-                // Если да, загружаем его данные
-                currentDriver = driver;
             }
-        } catch (e) {
-            // Если запрос к таблице drivers падает из-за несинхронизированной схемы, всё равно покажем форму
-            console.warn('drivers table read failed:', e.message || e);
-            document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
-            openRegistrationModal();
         }
 
         // Начинаем обновлять last_seen и загружать онлайн-статистику
@@ -5339,6 +5339,12 @@
 
     // Функция открытия модального окна регистрации
     function openRegistrationModal() {
+        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        if (!tgUser) {
+            const overlay = document.getElementById('tgAuthOverlay');
+            if (overlay) overlay.style.display = 'flex';
+            return;
+        }
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
         document.getElementById('registrationModal').classList.add('active');
@@ -5357,6 +5363,11 @@
 
         // Получаем данные Telegram
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        if (!tgUser || !uid) {
+            const overlay = document.getElementById('tgAuthOverlay');
+            if (overlay) overlay.style.display = 'flex';
+            return;
+        }
         const name = (tgUser?.first_name || '') + ' ' + (tgUser?.last_name || '');
         const car = document.getElementById('driver-car').value;
         const plate = document.getElementById('driver-plate').value;
