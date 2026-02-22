@@ -1,0 +1,19 @@
+{
+  "name": "SafeDrive 180",
+  "short_name": "SafeDrive 180",
+  "description": "SafeDrive 180 — PWA с уведомлениями и доступом к геолокации.",
+  "lang": "ru",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#212121",
+  "theme_color": "#212121",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
