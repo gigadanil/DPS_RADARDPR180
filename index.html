@@ -313,6 +313,89 @@
         .admin-btn { position: absolute; top: calc(15px + var(--safe-area-inset-top)); left: calc(15px + var(--safe-area-inset-left)); z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: #ff9500; border: 2px solid white; cursor: pointer; font-size: 22px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
         .admin-btn.visible { display: block; }
         .admin-btn:active { transform: scale(1.05); }
+
+        /* ============= ГРУППИРОВКА КНОПОК (MONOLITH 180) ============= */
+        .top-controls {
+            position: fixed;
+            top: calc(15px + var(--safe-area-inset-top));
+            right: calc(15px + var(--safe-area-inset-right));
+            z-index: 1600;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .top-controls .profile-btn,
+        .top-controls .admin-btn {
+            position: relative;
+            top: auto;
+            right: auto;
+            left: auto;
+        }
+
+        .fab-stack {
+            position: fixed;
+            right: calc(15px + var(--safe-area-inset-right));
+            bottom: calc(18px + var(--safe-area-inset-bottom));
+            z-index: 1600;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            align-items: flex-end;
+        }
+
+        .fab-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .fab-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+            width: 100%;
+        }
+
+        /* Все кнопки внутри стека становятся относительными */
+        .fab-stack .chat-btn,
+        .fab-stack .loc-btn {
+            position: relative;
+            bottom: auto;
+            right: auto;
+            top: auto;
+            left: auto;
+        }
+
+        /* Оперативные: рация самая крупная, чат под ней */
+        .fab-stack .fab-ptt {
+            width: 68px;
+            height: 68px;
+            font-size: 28px;
+        }
+
+        .fab-stack .fab-chat {
+            width: 52px;
+            height: 52px;
+            font-size: 24px;
+        }
+
+        /* Навигационные: слои меньше, центрирование обычное */
+        .fab-stack .layers-btn {
+            width: 46px;
+            height: 46px;
+            font-size: 18px;
+        }
+
+        .fab-stack .loc-btn {
+            width: 52px;
+            height: 52px;
+            font-size: 20px;
+            border: 2px solid var(--blue);
+        }
         
         .admin-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         .admin-table th, .admin-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; font-size: 12px; }
@@ -407,6 +490,39 @@
             cursor: pointer;
         }
         .ptt-complain:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Crowdsourcing quick confirm ("Тут ещё стоят?") */
+        .crowd-confirm {
+            position: fixed;
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: calc(100px + var(--safe-area-inset-bottom));
+            z-index: 2100;
+            width: min(92vw, 520px);
+            background: rgba(255,255,255,0.98);
+            backdrop-filter: blur(14px);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+            border: 1px solid rgba(0,0,0,0.06);
+            padding: 12px;
+            display: none;
+        }
+        .crowd-confirm.active { display: block; }
+        .crowd-confirm-title { font-size: 13px; font-weight: 900; color: #111; text-align:center; }
+        .crowd-confirm-sub { font-size: 11px; color: var(--gray); text-align:center; margin-top: 4px; }
+        .crowd-confirm-actions { display:flex; gap:10px; margin-top: 10px; }
+        .crowd-confirm-actions button {
+            flex: 1;
+            border: none;
+            border-radius: 14px;
+            padding: 12px;
+            font-size: 14px;
+            font-weight: 900;
+            cursor: pointer;
+        }
+        .crowd-btn-yes { background: #34c759; color: #fff; }
+        .crowd-btn-no { background: #ff3b30; color: #fff; }
+        .crowd-btn-skip { background: #f0f0f5; color: #111; flex: 0.8; }
         .notif-btn { background: #5856d6; }
         .notif-badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff3b30; color: #fff; font-size: 10px; font-weight: 800; line-height: 18px; text-align: center; border: 2px solid #fff; display: none; padding: 0 4px; box-sizing: border-box; }
         .notif-toast-wrap { position: absolute; top: calc(58px + var(--safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 1900; width: min(92vw, 440px); pointer-events: none; }
@@ -715,6 +831,17 @@
     <!-- Динамический баннер приближения -->
     <div id="proximityBanner" class="proximity-banner"></div>
 
+    <!-- Crowdsourcing: "Тут ещё стоят?" -->
+    <div id="crowdConfirm" class="crowd-confirm" role="dialog" aria-label="Подтверждение метки">
+        <div id="crowdConfirmTitle" class="crowd-confirm-title">Тут ещё стоят?</div>
+        <div id="crowdConfirmSub" class="crowd-confirm-sub">Один тап — и карта станет точнее</div>
+        <div class="crowd-confirm-actions">
+            <button class="crowd-btn-yes" onclick="crowdConfirmAnswer(true)">Да</button>
+            <button class="crowd-btn-no" onclick="crowdConfirmAnswer(false)">Нет</button>
+            <button class="crowd-btn-skip" onclick="crowdConfirmHide()">Позже</button>
+        </div>
+    </div>
+
     <!-- Спидометр -->
     <div id="speedometer" class="speedometer">
         <div>
@@ -725,16 +852,14 @@
     </div>
     <button class="speedometer-open-btn" id="speedometerOpenBtn" onclick="toggleSpeedometer(true)" title="Показать спидометр">🧭</button>
     
-    <!-- Кнопка чата -->
-    <button class="chat-btn fab-chat" onclick="openChatModal()">💬</button>
-    <!-- Кнопка Рации (Push-to-Talk) -->
-    <button class="chat-btn ptt-btn fab-ptt" onclick="openPttModal()" title="Рация: удерживай, чтобы говорить">🎙️</button>
+    <!-- Верхний блок (Управление): Профиль, Настройки -->
+    <div class="top-controls">
+        <button class="profile-btn" id="profileBtn" onclick="openProfileModal()" title="Профиль">👤</button>
+        <button class="admin-btn" id="adminBtn" onclick="openAdminModal()" title="Настройки">⚙️</button>
+    </div>
+
     <!-- Кнопка активности ДПС/Спецбат -->
     <button class="chat-btn activity-btn fab-activity" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС и Спецбат за месяц">👮🛡️</button>
-    <!-- Кнопка тепловой карты -->
-    <button class="chat-btn heatmap-toggle-btn fab-heatmap" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" title="Тепловая карта ДТП">🗂️🔥</button>
-    <!-- Зоркий глаз: тепловая карта "засад" ДПС/Спецбат -->
-    <button class="chat-btn heatmap-toggle-btn fab-heatmap-patrol" id="patrolHeatmapBtn" onclick="togglePatrolHeatmap()" title="Зоркий глаз: засады ДПС/Спецбат">👁️</button>
     <!-- Кнопка уведомлений -->
     <button class="chat-btn notif-btn fab-notif" onclick="openNotificationsDrawer()" title="Уведомления">
         🔔
@@ -801,16 +926,28 @@
         </div>
     </div>
     
-    <!-- Кнопка админа -->
-    <button class="admin-btn" id="adminBtn" onclick="openAdminModal()">⚙️</button>
-    <!-- Кнопка профиля -->
-    <button class="profile-btn" id="profileBtn" onclick="openProfileModal()" title="Профиль">👤</button>
     <!-- Кнопка отправки нареканий -->
     <button class="feedback-btn" id="feedbackBtn" onclick="openBugReportModal()" title="Сообщить о баге">🐛</button>
-    <!-- Кнопка 'Где я' -->
-    <button class="loc-btn" id="locBtn" onclick="centerOnMyLocation()" title="Где я">📍</button>
     <!-- Переключатель автослежения GPS -->
     <button class="follow-toggle" id="followToggleBtn" onclick="toggleFollow()" title="Автослежение GPS">🔔</button>
+
+    <!-- Правый нижний угол: 2 блока (Оперативные / Навигационные) -->
+    <div class="fab-stack" aria-label="Быстрые действия">
+        <!-- Навигационные: Слои + Центрирование -->
+        <div class="fab-group" aria-label="Навигационные">
+            <div class="fab-row">
+                <button class="chat-btn heatmap-toggle-btn layers-btn" id="patrolHeatmapBtn" onclick="togglePatrolHeatmap()" title="Слои: засад ДПС/Спецбат">👁️</button>
+                <button class="chat-btn heatmap-toggle-btn layers-btn" id="dtpHeatmapBtn" onclick="toggleDtpHeatmap()" title="Слои: тепловая карта ДТП">🗂️🔥</button>
+            </div>
+            <button class="loc-btn" id="locBtn" onclick="centerOnMyLocation()" title="Центрирование (Где я)">📍</button>
+        </div>
+
+        <!-- Оперативные: Рация (самая крупная), Чат под ней -->
+        <div class="fab-group" aria-label="Оперативные">
+            <button class="chat-btn ptt-btn fab-ptt" onclick="openPttModal()" title="Рация: удерживай, чтобы говорить">🎙️</button>
+            <button class="chat-btn fab-chat" onclick="openChatModal()" title="Чат">💬</button>
+        </div>
+    </div>
     
     <!-- Модальное окно отправки отчета о баге -->
     <div id="bugReportModal" class="modal">
@@ -4049,6 +4186,27 @@
         }
         markerDistanceState.set(markerId, { lastDistance: distance, lastTrend: trend, lastUpdate: Date.now() });
 
+        // Crowdsourcing: если проехали мимо и начинаем удаляться — спросить "Тут ещё стоят?"
+        try {
+            if (shouldCrowdConfirmType(marker.type)) {
+                const now = Date.now();
+                const st = crowdConfirmState.get(markerId) || { askedAt: 0, wasNear: false };
+
+                // считаем "рядом" если подходили ближе 120м
+                if (distance < 120) st.wasNear = true;
+
+                const cooldownOk = !st.askedAt || (now - st.askedAt) > CROWD_CONFIRM_COOLDOWN_MS;
+                if (trend === 'away' && st.wasNear && cooldownOk) {
+                    st.askedAt = now;
+                    st.wasNear = false;
+                    crowdConfirmState.set(markerId, st);
+                    crowdConfirmShow(markerId, marker.type);
+                } else {
+                    crowdConfirmState.set(markerId, st);
+                }
+            }
+        } catch (e) {}
+
         if (trend === 'away') {
             if (currentNotification) {
                 distanceNotifications.delete(markerId);
@@ -4287,6 +4445,13 @@
 
                     userLocation = [latitude, longitude];
                     lastReliableUserLocation = [latitude, longitude];
+
+                    // Рация: отправляем координаты на сервер (для радиуса 5 км)
+                    try {
+                        if (pttSocket && typeof pttSocket.emit === 'function') {
+                            pttSocket.emit('ptt:loc', { lat: Number(latitude), lon: Number(longitude) });
+                        }
+                    } catch (e) {}
 
                     // Пишем последнюю координату в service worker (как "фоновой" источник правды)
                     // Важно: сам service worker не может запрашивать геолокацию.
@@ -4726,6 +4891,9 @@
             }
         } catch (e) {}
         startProximityBannerLoop();
+
+        // Рация: держим подключение постоянно, чтобы реплики приходили без открытой модалки.
+        try { pttConnectSocket(); } catch (e) {}
 
         // Инициализируем админ-канал и статус невидимки
         initAdminBroadcastChannel();
@@ -7514,6 +7682,16 @@
         const fd = new FormData();
         fd.append('userId', pttGetUserId());
         fd.append('name', pttGetName());
+        try {
+            if (Array.isArray(userLocation) && userLocation.length >= 2) {
+                const lat = Number(userLocation[0]);
+                const lon = Number(userLocation[1]);
+                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                    fd.append('lat', String(lat));
+                    fd.append('lon', String(lon));
+                }
+            }
+        } catch (e) {}
         fd.append('audio', blob, `ptt-${Date.now()}.webm`);
 
         pttLogStatus('Отправка…');
@@ -7564,6 +7742,9 @@
             await pttRequestWakeLock();
             await pttEnsureMic();
             pttConnectSocket();
+            // Важно: сначала отправляем hello (userId/name), потом ptt:start.
+            // Иначе сервер может зафиксировать имя как "Неизвестный".
+            try { pttSocket?.emit('hello', { userId: pttGetUserId(), name: pttGetName() }); } catch (e) {}
             try { pttSocket?.emit('ptt:start'); } catch (e) {}
 
             pttIsPressed = true;
@@ -7671,6 +7852,17 @@
             await a.play();
         } catch (e) {
             console.warn('PTT play blocked:', e);
+
+            // Если autoplay заблокирован — покажем in-app уведомление.
+            try {
+                if (typeof showInAppNotification === 'function') {
+                    showInAppNotification({
+                        title: `🎙️ Рация: ${speakerName}`,
+                        body: 'Новая реплика. Откройте 🎙️ «Рация», чтобы прослушать.',
+                        priority: 'high'
+                    });
+                }
+            } catch (e2) {}
         }
     }
 
@@ -7684,7 +7876,18 @@
         pttSocket = io(pttBaseUrl(), { transports: ['websocket', 'polling'] });
 
         pttSocket.on('connect', () => {
+            // hello отправляем сразу при connect, чтобы имя было известно серверу
             try { pttSocket.emit('hello', { userId: pttGetUserId(), name: pttGetName() }); } catch (e) {}
+            // сразу отправим координаты, если они уже есть
+            try {
+                if (Array.isArray(userLocation) && userLocation.length >= 2) {
+                    const lat = Number(userLocation[0]);
+                    const lon = Number(userLocation[1]);
+                    if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                        pttSocket.emit('ptt:loc', { lat, lon });
+                    }
+                }
+            } catch (e) {}
             pttLogStatus('Подключено к рации');
             pttSetHoldButtonState('idle');
             pttRequestWakeLock();
@@ -7755,6 +7958,12 @@
         pttConnectSocket();
         pttSetHoldButtonState('idle');
         pttRequestWakeLock();
+
+        // Если уже есть последняя реплика — включим кнопку жалобы
+        try {
+            const btn = pttEl('pttComplainBtn');
+            if (btn) btn.disabled = !pttLastMessageId;
+        } catch (e) {}
     }
 
     function closePttModal() {
@@ -7763,7 +7972,6 @@
         const modal = pttEl('pttModal');
         if (modal) modal.classList.remove('active');
         try { pttPressEnd(false); } catch(e) {}
-        pttDisconnectSocket();
         pttReleaseWakeLock();
     }
 
@@ -8465,10 +8673,11 @@
     };
 
     // Функция подтверждения актуальности метки (голосование "Стоят" или "Уехали")
-    window.confirmMarker = async (markerId, status) => {
+    window.confirmMarker = async (markerId, status, options = {}) => {
         // status: 'stay' или 'leave'
+        const silent = !!options?.silent;
         if (!uid) {
-            alert('Пожалуйста, авторизуйтесь через Telegram');
+            if (!silent) alert('Пожалуйста, авторизуйтесь через Telegram');
             const overlay = document.getElementById('tgAuthOverlay'); if (overlay) overlay.style.display = 'flex';
             return;
         }
@@ -8477,7 +8686,7 @@
             const { data: markerInfo } = await _sb.from('markers').select('author_id,type').eq('id', markerId).maybeSingle();
             const isAdminMarker = markerInfo && isAdminUserId(markerInfo.author_id);
             if (isAdminMarker && status === 'leave') {
-                alert('Эта метка подтверждена администрацией и не удаляется голосами.');
+                if (!silent) alert('Эта метка подтверждена администрацией и не удаляется голосами.');
                 return;
             }
 
@@ -8486,7 +8695,7 @@
                 .select('id').eq('marker_id', markerId).eq('user_id', uid).maybeSingle();
             
             if (existing) {
-                alert(`Вы уже голосовали за эту метку. Один голос на метку.`);
+                if (!silent) alert(`Вы уже голосовали за эту метку. Один голос на метку.`);
                 return;
             }
 
@@ -8509,7 +8718,7 @@
                     // Если достаточно подтверждений - удаляем метку
                     if (newCount >= (typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3)) {
                         await expireMarkerById(markerId);
-                        alert(`✅ Метка удалена - ${newCount} человека подтвердили что объект уехал.`);
+                        if (!silent) alert(`✅ Метка удалена - ${newCount} человека подтвердили что объект уехал.`);
                         myMap.balloon.close();
                         loadMarkers();
                         return;
@@ -8537,7 +8746,7 @@
                 // Если достаточно подтверждений - удаляем метку
                 if (leaveCount >= (typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3)) {
                     await expireMarkerById(markerId);
-                    alert(`✅ Метка удалена - ${leaveCount} человека подтвердили что объект уехал.`);
+                    if (!silent) alert(`✅ Метка удалена - ${leaveCount} человека подтвердили что объект уехал.`);
                     myMap.balloon.close();
                     loadMarkers();
                     return;
@@ -8545,19 +8754,71 @@
                 
                 // Иначе показываем обновлённый счётчик
                 if (status === 'stay') {
-                    alert(`✅ Подтверждение принято.${sosBonusText}`);
+                    if (!silent) alert(`✅ Подтверждение принято.${sosBonusText}`);
                 } else {
-                    alert(`✅ Ваш голос учтён (${leaveCount}/${typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3} для удаления)`);
+                    if (!silent) alert(`✅ Ваш голос учтён (${leaveCount}/${typeof MARKER_LEAVE_THRESHOLD !== 'undefined' ? MARKER_LEAVE_THRESHOLD : 3} для удаления)`);
                 }
                 loadMarkers(); // обновляем карту с новым счётчиком
             } else if (insertError) {
-                alert('Ошибка при голосовании: ' + (insertError.message || 'неизвестная ошибка'));
+                if (!silent) alert('Ошибка при голосовании: ' + (insertError.message || 'неизвестная ошибка'));
             }
         } catch (e) {
             console.warn('Ошибка при подтверждении метки:', e?.message || e);
-            alert('Ошибка при голосовании: ' + (e?.message || e));
+            if (!silent) alert('Ошибка при голосовании: ' + (e?.message || e));
         }
     };
+
+    // Crowdsourcing quick confirm state
+    const CROWD_CONFIRM_COOLDOWN_MS = 10 * 60 * 1000;
+    const crowdConfirmState = new Map(); // markerId -> { askedAt, wasNear }
+    let crowdConfirmPending = null; // { markerId, markerType }
+
+    function shouldCrowdConfirmType(type) {
+        return ['dps', 'patrol', 'specbat', 'motobat', 'cargo_control', 'camera'].includes(String(type || ''));
+    }
+
+    function crowdConfirmShow(markerId, markerType) {
+        crowdConfirmPending = { markerId, markerType };
+        const wrap = document.getElementById('crowdConfirm');
+        const title = document.getElementById('crowdConfirmTitle');
+        const sub = document.getElementById('crowdConfirmSub');
+        const label = getMarkerLabel(markerType);
+        if (title) title.textContent = `Тут ещё стоят? (${label})`;
+        if (sub) sub.textContent = 'Один тап: подтвердить или убрать метку';
+        if (wrap) wrap.classList.add('active');
+        try { if (typeof aiSpeak === 'function') aiSpeak('Тут ещё стоят?'); } catch (e) {}
+    }
+
+    function crowdConfirmHide() {
+        const wrap = document.getElementById('crowdConfirm');
+        if (wrap) wrap.classList.remove('active');
+        crowdConfirmPending = null;
+    }
+
+    async function crowdConfirmAnswer(isYes) {
+        const pending = crowdConfirmPending;
+        crowdConfirmHide();
+        if (!pending?.markerId) return;
+        try {
+            await window.confirmMarker(pending.markerId, isYes ? 'stay' : 'leave', { silent: true });
+            // маленький in-app фидбек
+            try {
+                if (typeof showInAppNotification === 'function') {
+                    showInAppNotification({
+                        title: '✅ Спасибо!',
+                        body: isYes ? 'Метка подтверждена' : 'Голос "уехали" учтён',
+                        priority: 'low'
+                    });
+                }
+            } catch (e2) {}
+        } catch (e) {
+            console.warn('crowdConfirmAnswer error:', e?.message || e);
+        }
+    }
+
+    // expose for inline onclick
+    window.crowdConfirmAnswer = crowdConfirmAnswer;
+    window.crowdConfirmHide = crowdConfirmHide;
 
     // SOS: отметить "Я в пути" (кто едет помогать)
     window.sosEnroute = async (markerId) => {
