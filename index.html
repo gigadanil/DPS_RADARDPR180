@@ -279,16 +279,16 @@
         .type-selector { display: flex; justify-content: space-between; margin-bottom: 12px; gap: 6px; flex-wrap: wrap; }
         .type-btn { 
             border: none; background: none; cursor: pointer; display: flex; flex-direction: column; 
-            align-items: center; gap: 6px; width: 31%; padding: 8px; border-radius: 14px; 
-            transition: all 0.25s ease; position: relative;
+            align-items: center; gap: 4px; width: 32%; padding: 6px; border-radius: 14px; 
+            transition: all 0.3s ease; position: relative;
         }
         .type-btn:active { transform: scale(0.95); }
         .icon-circle { 
-            width: 54px; height: 54px; background: #f0f0f5; border-radius: 16px; display: flex; 
+            width: 46px; height: 46px; background: #f0f0f5; border-radius: 14px; display: flex; 
             align-items: center; justify-content: center; border: 3px solid transparent; 
-            transition: all 0.25s ease; font-size: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: all 0.3s ease; font-size: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
-        .type-btn span { font-size: 11px; font-weight: 700; color: var(--gray); text-transform: uppercase; letter-spacing: 0.3px; }
+        .type-btn span { font-size: 10px; font-weight: 800; color: var(--gray); text-transform: uppercase; letter-spacing: 0.3px; }
         .type-btn:hover .icon-circle { transform: translateY(-4px); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
         .type-btn.active { color: var(--blue); background: rgba(0, 122, 255, 0.08); }
         .type-btn.active .icon-circle { background: #fff; border-color: var(--blue); box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3); }
@@ -417,7 +417,19 @@
             100% { box-shadow: 0 0 0 0 rgba(52,199,89,0.0); }
         }
 
-        .control-cluster {
+        .top-right-actions {
+            position: fixed;
+            top: calc(12px + var(--safe-area-inset-top));
+            right: calc(12px + var(--safe-area-inset-right));
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+        }
+
+        .side-actions {
             position: fixed;
             top: 50%;
             right: calc(12px + var(--safe-area-inset-right));
@@ -426,10 +438,20 @@
             display: flex;
             flex-direction: column;
             gap: 10px;
-            transition: opacity 0.3s ease;
-            pointer-events: none; /* карта под ним должна перетаскиваться в пустых местах */
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
         }
-        .control-cluster .cc-btn {
+
+        /* Чистый экран: когда открыта нижняя панель выбора (.action-panel) */
+        .top-right-actions.hidden,
+        .side-actions.hidden {
+            opacity: 0;
+            transform: translateX(80px);
+            pointer-events: none;
+        }
+
+        .top-right-actions .action-btn,
+        .side-actions .action-btn {
             width: 50px;
             height: 50px;
             border-radius: 50%;
@@ -447,14 +469,19 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.28);
             pointer-events: auto;
         }
-        .control-cluster .cc-btn:active { transform: scale(0.95); }
-        .control-cluster .cc-btn.active { border-color: rgba(52,199,89,0.65); box-shadow: 0 0 0 3px rgba(52,199,89,0.18), 0 10px 30px rgba(0,0,0,0.28); }
-        .control-cluster .cc-btn.off { opacity: 0.65; }
+        .top-right-actions .action-btn:active,
+        .side-actions .action-btn:active { transform: scale(0.95); }
+
+        .top-right-actions .action-btn.active,
+        .side-actions .action-btn.active { border-color: rgba(52,199,89,0.65); box-shadow: 0 0 0 3px rgba(52,199,89,0.18), 0 10px 30px rgba(0,0,0,0.28); }
+
+        .top-right-actions .action-btn.off,
+        .side-actions .action-btn.off { opacity: 0.65; }
 
         .locate-btn {
             position: fixed;
-            left: calc(12px + var(--safe-area-inset-left));
-            bottom: calc(12px + var(--safe-area-inset-bottom));
+            left: calc(25px + var(--safe-area-inset-left));
+            bottom: calc(25px + var(--safe-area-inset-bottom));
             z-index: 2000;
             width: 60px;
             height: 60px;
@@ -475,8 +502,8 @@
 
         .ptt-btn.ptt-fab {
             position: fixed;
-            right: calc(12px + var(--safe-area-inset-right));
-            bottom: calc(12px + var(--safe-area-inset-bottom));
+            right: calc(25px + var(--safe-area-inset-right));
+            bottom: calc(25px + var(--safe-area-inset-bottom));
             z-index: 2000;
             width: 70px;
             height: 70px;
@@ -510,8 +537,6 @@
             0% { transform: scale(0.85); opacity: 0.75; }
             100% { transform: scale(1.35); opacity: 0; }
         }
-
-        .side-dimmed { opacity: 0.2 !important; pointer-events: none !important; }
 
         /* Прячем старые плавающие элементы, чтобы интерфейс соответствовал ТЗ */
         .top-controls, .fab-stack, .follow-toggle, .feedback-btn { display: none !important; }
@@ -993,14 +1018,18 @@
     <div id="map"></div>
     <div id="mapDimmingOverlay"></div>
 
-    <!-- Правый центр: control-cluster (Профиль / Настройки / Слои / Голос) -->
-    <div class="control-cluster" id="controlCluster" aria-label="Быстрые настройки">
-        <button class="cc-btn" id="ccProfileBtn" onclick="openProfileModal()" title="Профиль" aria-label="Профиль">👤</button>
-        <button class="cc-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
-        <button class="cc-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
-        <button class="cc-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
-        <button class="cc-btn" id="ccChatBtn" onclick="openChatModal()" title="Чат" aria-label="Чат">💬</button>
-        <button class="cc-btn" id="ccActivityBtn" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС/Спецбат" aria-label="Активность ДПС/Спецбат">👮🛡️</button>
+    <!-- Верхний правый угол: Профиль / Настройки -->
+    <div class="top-right-actions" id="topRightActions" aria-label="Профиль и настройки">
+        <button class="action-btn" id="ccProfileBtn" onclick="openProfileModal()" title="Профиль" aria-label="Профиль">👤</button>
+        <button class="action-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
+    </div>
+
+    <!-- Правый центр: Слои / Динамик -->
+    <div class="side-actions" id="sideActions" aria-label="Слои и голос">
+        <button class="action-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
+        <button class="action-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
+        <button class="action-btn" id="ccChatBtn" onclick="openChatModal()" title="Чат" aria-label="Чат">💬</button>
+        <button class="action-btn" id="ccActivityBtn" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС/Спецбат" aria-label="Активность ДПС/Спецбат">👮🛡️</button>
     </div>
 
     <!-- Нижний левый угол: locate-btn (центрирование/слежение) -->
@@ -2313,17 +2342,15 @@
             card.classList.add('hidden');
             if (openBtn) openBtn.classList.add('visible');
         }
-        try { setSideControlsDimmed(!!actionCardVisible); } catch(e) {}
+        try { setRightActionsHidden(!!actionCardVisible); } catch(e) {}
         updateTargetAnchorPosition();
     }
 
-    function setSideControlsDimmed(dimmed) {
-        const ids = ['controlCluster', 'locateBtn', 'pttFabBtn'];
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.classList.toggle('side-dimmed', !!dimmed);
-        });
+    function setRightActionsHidden(hidden) {
+        const top = document.getElementById('topRightActions');
+        const side = document.getElementById('sideActions');
+        if (top) top.classList.toggle('hidden', !!hidden);
+        if (side) side.classList.toggle('hidden', !!hidden);
     }
 
     function updateTargetAnchorPosition() {
@@ -5178,7 +5205,7 @@
         try { updateFollowButton(); } catch (e) {}
         try { updateVoiceBtnUiState(); } catch (e) {}
         try { updateLayersBtnUiState(); } catch (e) {}
-        try { setSideControlsDimmed(!!actionCardVisible); } catch (e) {}
+        try { setRightActionsHidden(!!actionCardVisible); } catch (e) {}
 
         // Инициализируем админ-канал и статус невидимки
         initAdminBroadcastChannel();
