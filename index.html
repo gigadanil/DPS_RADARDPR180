@@ -2313,7 +2313,11 @@
             try {
                 localStorage.setItem('sb_jwt', token);
                 localStorage.setItem('site_uid', String(uid));
-                localStorage.setItem('sb_jwt_exp', String(Math.floor(Date.now()/1000) + 24*60*60));
+                if (data?.exp) {
+                    localStorage.setItem('sb_jwt_exp', String(Number(data.exp) || 0));
+                } else {
+                    localStorage.setItem('sb_jwt_exp', String(Math.floor(Date.now()/1000) + 24*60*60));
+                }
             } catch(e) {}
 
             try {
