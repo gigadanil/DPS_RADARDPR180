@@ -44,18 +44,18 @@ supabase link --project-ref $ProjectRef | Out-Host
 Write-Host ""
 Write-Host "3) Enter secrets (they are NOT saved into the repository)" -ForegroundColor Cyan
 $botTokenSec = Read-Host "TELEGRAM_BOT_TOKEN" -AsSecureString
-$jwtSecretSec = Read-Host "JWT_SECRET (Supabase Settings -> API -> JWT Secret)" -AsSecureString
+$serviceRoleSec = Read-Host "SERVICE_ROLE_KEY (Supabase Settings -> API -> service_role key)" -AsSecureString
 
 $botToken = (SecureToPlain $botTokenSec).Trim()
-$jwtSecret = (SecureToPlain $jwtSecretSec).Trim()
+$serviceRole = (SecureToPlain $serviceRoleSec).Trim()
 
 if (-not $botToken) { throw "Empty TELEGRAM_BOT_TOKEN" }
-if (-not $jwtSecret) { throw "Empty JWT_SECRET" }
+if (-not $serviceRole) { throw "Empty SERVICE_ROLE_KEY" }
 
 Write-Host ""
 Write-Host "4) Set secrets" -ForegroundColor Cyan
 supabase secrets set TELEGRAM_BOT_TOKEN=$botToken | Out-Host
-supabase secrets set JWT_SECRET=$jwtSecret | Out-Host
+supabase secrets set SERVICE_ROLE_KEY=$serviceRole | Out-Host
 
 if (-not $SkipDeploy) {
   Write-Host ""
