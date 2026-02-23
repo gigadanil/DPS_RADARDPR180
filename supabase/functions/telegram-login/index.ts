@@ -2,32 +2,73 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 
 const BOT_TOKEN = (Deno.env.get("TELEGRAM_BOT_TOKEN") || "").trim();
-const JWT_SECRET = (Deno.env.get("JWT_SECRET") || "").trim();
+const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
+const SERVICE_ROLE_KEY = (Deno.env.get("SERVICE_ROLE_KEY") || "").trim();
 const MAX_AUTH_AGE_SEC = 24 * 60 * 60;
 
 const encoder = new TextEncoder();
 
-function base64UrlEncode(input: Uint8Array): string {
-  let str = "";
-  for (let i = 0; i < input.length; i++) str += String.fromCharCode(input[i]);
-  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+function bytesToHex(buf: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buf))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-async function signJwt(payload: Record<string, unknown>): Promise<string> {
-  const header = { alg: "HS256", typ: "JWT" };
-  const encHeader = base64UrlEncode(encoder.encode(JSON.stringify(header)));
-  const encPayload = base64UrlEncode(encoder.encode(JSON.stringify(payload)));
-  const data = `${encHeader}.${encPayload}`;
-
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(JWT_SECRET),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
+async function derivePassword(tgUserId: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    encoder.encode(`${BOT_TOKEN}:tg:${tgUserId}:sd180`)
   );
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(data));
-  return `${data}.${base64UrlEncode(new Uint8Array(sig))}`;
+  return bytesToHex(digest);
+}
+
+function tgEmail(tgUserId: string): string {
+  return `tg_${String(tgUserId)}@telegram.local`;
+}
+
+async function ensureSupabaseUserExists(email: string, password: string, tgUserId: string) {
+  const url = `${SUPABASE_URL}/auth/v1/admin/users`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${SERVICE_ROLE_KEY}`
+    },
+    body: JSON.stringify({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { telegram_user_id: String(tgUserId) }
+    })
+  });
+
+  if (res.ok) return;
+  if (res.status === 422) return;
+  const t = await res.text().catch(() => "");
+  throw new Error(`auth.admin createUser failed (${res.status}): ${t || "empty"}`);
+}
+
+async function signInWithPassword(email: string, password: string) {
+  const url = `${SUPABASE_URL}/auth/v1/token?grant_type=password`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: SERVICE_ROLE_KEY
+    },
+    body: JSON.stringify({ email, password })
+  });
+
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.access_token) {
+    const msg = JSON.stringify(json || {});
+    throw new Error(`auth token failed (${res.status}): ${msg}`);
+  }
+  return {
+    access_token: String(json.access_token),
+    expires_in: Number(json.expires_in || 0)
+  };
 }
 
 function jsonResponse(body: Record<string, unknown>, status = 200) {
@@ -86,7 +127,7 @@ serve(async (req) => {
     });
   }
 
-  if (!BOT_TOKEN || !JWT_SECRET) {
+  if (!BOT_TOKEN || !SUPABASE_URL || !SERVICE_ROLE_KEY) {
     return jsonResponse({ error: "Missing Config" }, 500);
   }
 
@@ -122,26 +163,35 @@ serve(async (req) => {
     return jsonResponse({ error: "Invalid hash" }, 401);
   }
 
-  const token = await signJwt({
-    iss: "supabase",
-    sub: userId,
-    aud: "authenticated",
-    role: "authenticated",
-    iat: now,
-    exp: now + 60 * 60 * 24, // 24h
-  });
+  try {
+    const email = tgEmail(userId);
+    const password = await derivePassword(userId);
 
-  // Возвращаем минимум + user (для сайта, чтобы можно было зарегистрировать name без Mini App)
-  return jsonResponse({
-    token,
-    user_id: userId,
-    user: {
-      id: userId,
-      first_name: safeString(user.first_name),
-      last_name: safeString(user.last_name),
-      username: safeString(user.username),
-      photo_url: safeString(user.photo_url),
-      auth_date: authDate,
-    },
-  });
+    let session;
+    try {
+      session = await signInWithPassword(email, password);
+    } catch (e) {
+      await ensureSupabaseUserExists(email, password, userId);
+      session = await signInWithPassword(email, password);
+    }
+
+    const exp = now + (session.expires_in ? Math.max(0, session.expires_in) : 24 * 60 * 60);
+
+    // Возвращаем минимум + user (для сайта, чтобы можно было зарегистрировать name без Mini App)
+    return jsonResponse({
+      token: session.access_token,
+      user_id: userId,
+      exp,
+      user: {
+        id: userId,
+        first_name: safeString(user.first_name),
+        last_name: safeString(user.last_name),
+        username: safeString(user.username),
+        photo_url: safeString(user.photo_url),
+        auth_date: authDate,
+      },
+    });
+  } catch (e) {
+    return jsonResponse({ error: String(e?.message || e || "Auth error") }, 500);
+  }
 });
