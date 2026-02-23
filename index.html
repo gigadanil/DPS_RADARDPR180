@@ -1926,7 +1926,8 @@
     const SUPABASE_URL = "https://phazbjchjhsruwalddis.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
-    const BOT_USERNAME = 'DPSRADARDPR180bot';
+    // Формат: '@YourBot'
+    const BOT_USERNAME = '@DPSRADARDPR180bot';
     function createSupabaseClient(token = null) {
         const options = {
             auth: {
@@ -2329,15 +2330,17 @@
     // Открыть бот в Telegram (пытаемся сначала tg://, затем https://)
     function openTelegramBot() {
         try {
-            const tgUrl = `tg://resolve?domain=${BOT_USERNAME}`;
-            const webUrl = `https://t.me/${BOT_USERNAME}`;
+            const botUser = String(BOT_USERNAME || '').replace(/^@/, '').trim();
+            const tgUrl = `tg://resolve?domain=${botUser}`;
+            const webUrl = `https://t.me/${botUser}`;
             // Попытка открыть в приложении
             window.open(tgUrl, '_blank');
             // Через 300ms открываем веб-вариант как fallback
             setTimeout(() => { window.open(webUrl, '_blank'); }, 300);
         } catch (e) {
             console.warn('Не удалось открыть Telegram:', e);
-            window.open(`https://t.me/${BOT_USERNAME}`, '_blank');
+            const botUser = String(BOT_USERNAME || '').replace(/^@/, '').trim();
+            window.open(`https://t.me/${botUser}`, '_blank');
         }
     }
     
