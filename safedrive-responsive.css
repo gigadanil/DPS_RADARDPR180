@@ -1,0 +1,134 @@
+/* SafeDrive 180 — Responsive UI overrides (iOS + Android)
+   Требования:
+   - обычные кнопки: min(8vw, 50px)
+   - рация: min(12vw, 70px)
+   - safe-area-inset для контейнеров
+   - right-bar: right: 2%
+   - gap: 1.5vh
+   - touch-action: manipulation (Android)
+*/
+
+:root {
+  --ui-scale: 1;
+  --btn-size: min(8vw, 50px);
+  --ptt-size: min(12vw, 70px);
+  --btn-gap: 1.5vh;
+  --tg-header-height: 45px;
+  --tg-header-offset: 0px; /* JS ставит 45px внутри Telegram */
+  --tg-viewport-height: 0px; /* JS обновляет из WebApp.viewportHeight */
+}
+
+/* Убираем 300мс задержку и делаем клики резче */
+button,
+.right-bar .action-btn,
+.action-btn,
+.type-btn,
+.main-btn,
+.chat-send-btn,
+.locate-btn {
+  touch-action: manipulation;
+}
+
+/* Контейнер правых кнопок: резиновая верстка + safe area */
+.right-bar {
+  position: fixed;
+  top: calc(2% + var(--tg-header-offset) + var(--safe-area-inset-top));
+  right: calc(2% + var(--safe-area-inset-right));
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--btn-gap);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Верхний онлайн-бейдж: отступаем от шапки Telegram */
+#onlineCountBadge.online-count {
+  top: calc(2% + var(--tg-header-offset) + var(--safe-area-inset-top));
+}
+
+.right-bar.hidden {
+  opacity: 0;
+  transform: translateX(100px);
+  pointer-events: none;
+}
+
+.right-bar .action-btn {
+  width: calc(var(--btn-size) * var(--ui-scale));
+  height: calc(var(--btn-size) * var(--ui-scale));
+  border-radius: 50%;
+  font-size: calc((var(--btn-size) * 0.40) * var(--ui-scale));
+  pointer-events: auto;
+}
+
+/* Нижние углы: контейнер для safe-area */
+.bottom-controls {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  pointer-events: none;
+}
+
+.bottom-controls .locate-btn,
+.bottom-controls .ptt-btn.ptt-fab {
+  pointer-events: auto;
+}
+
+.bottom-controls .locate-btn {
+  left: calc(2% + var(--safe-area-inset-left));
+  bottom: calc(2% + var(--safe-area-inset-bottom));
+  width: calc(var(--btn-size) * var(--ui-scale));
+  height: calc(var(--btn-size) * var(--ui-scale));
+}
+
+.bottom-controls .locate-btn .locate-icon {
+  font-size: calc((var(--btn-size) * 0.42) * var(--ui-scale));
+}
+
+.bottom-controls .ptt-btn.ptt-fab {
+  right: calc(2% + var(--safe-area-inset-right));
+  bottom: calc(2% + var(--safe-area-inset-bottom));
+  width: calc(var(--ptt-size) * var(--ui-scale));
+  height: calc(var(--ptt-size) * var(--ui-scale));
+  font-size: calc((var(--ptt-size) * 0.42) * var(--ui-scale));
+}
+
+/* PTT удержание: оставляем touch-action:none чтобы не было скролла при удержании */
+.bottom-controls .ptt-btn.ptt-fab {
+  touch-action: none;
+}
+
+/* Кнопки выбора патруля — чуть компактнее (2 ряда) */
+.type-btn {
+  width: 32%;
+  padding: 6px;
+}
+
+.icon-circle {
+  width: 46px;
+  height: 46px;
+}
+
+/* Маленькие экраны: автоматически уменьшаем/группируем правые кнопки парами */
+@media (max-height: 680px) {
+  :root {
+    --ui-scale: 0.92;
+    --btn-gap: 1.2vh;
+  }
+}
+
+@media (max-height: 610px) {
+  :root {
+    --ui-scale: 0.86;
+    --btn-gap: 1.0vh;
+  }
+
+  .right-bar {
+    display: grid;
+    grid-template-columns: repeat(2, calc(var(--btn-size) * var(--ui-scale)));
+    grid-auto-rows: calc(var(--btn-size) * var(--ui-scale));
+    gap: var(--btn-gap);
+    align-content: start;
+    justify-content: end;
+  }
+}
