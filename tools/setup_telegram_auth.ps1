@@ -11,9 +11,9 @@ $ErrorActionPreference = 'Stop'
 function Require-Command($name) {
   $cmd = Get-Command $name -ErrorAction SilentlyContinue
   if (-not $cmd) {
-    Write-Host "❌ Не найдено: $name" -ForegroundColor Red
-    Write-Host "Установи Supabase CLI и перезапусти PowerShell." -ForegroundColor Yellow
-    Write-Host "Проверка: supabase --version" -ForegroundColor Gray
+    Write-Host ("ERROR: command not found: {0}" -f $name) -ForegroundColor Red
+    Write-Host "Install Supabase CLI and restart PowerShell." -ForegroundColor Yellow
+    Write-Host "Check: supabase --version" -ForegroundColor Gray
     exit 1
   }
 }
@@ -27,38 +27,44 @@ function SecureToPlain([Security.SecureString]$sec) {
 Require-Command supabase
 
 Write-Host "== SafeDrive 180: Telegram Auth setup ==" -ForegroundColor Cyan
-Write-Host "ProjectRef: $ProjectRef" -ForegroundColor Gray
+Write-Host ("ProjectRef: {0}" -f $ProjectRef) -ForegroundColor Gray
 
-Write-Host "\n1) Supabase login (если уже логинился — можно закрыть браузер)" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "1) Supabase login (if already logged in, you can close the browser)" -ForegroundColor Cyan
 try {
   supabase login | Out-Host
 } catch {
-  Write-Host "⚠️ supabase login не выполнился автоматически. Продолжу дальше." -ForegroundColor Yellow
+  Write-Host "WARN: supabase login did not run automatically. Continue..." -ForegroundColor Yellow
 }
 
-Write-Host "\n2) Link project" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "2) Link project" -ForegroundColor Cyan
 supabase link --project-ref $ProjectRef | Out-Host
 
-Write-Host "\n3) Введи секреты (они НЕ сохраняются в репозиторий)" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "3) Enter secrets (they are NOT saved into the repository)" -ForegroundColor Cyan
 $botTokenSec = Read-Host "TELEGRAM_BOT_TOKEN" -AsSecureString
-$jwtSecretSec = Read-Host "JWT_SECRET (Supabase Settings → API → JWT Secret)" -AsSecureString
+$jwtSecretSec = Read-Host "JWT_SECRET (Supabase Settings -> API -> JWT Secret)" -AsSecureString
 
 $botToken = (SecureToPlain $botTokenSec).Trim()
 $jwtSecret = (SecureToPlain $jwtSecretSec).Trim()
 
-if (-not $botToken) { throw "Пустой TELEGRAM_BOT_TOKEN" }
-if (-not $jwtSecret) { throw "Пустой JWT_SECRET" }
+if (-not $botToken) { throw "Empty TELEGRAM_BOT_TOKEN" }
+if (-not $jwtSecret) { throw "Empty JWT_SECRET" }
 
-Write-Host "\n4) Set secrets" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "4) Set secrets" -ForegroundColor Cyan
 supabase secrets set TELEGRAM_BOT_TOKEN=$botToken | Out-Host
 supabase secrets set JWT_SECRET=$jwtSecret | Out-Host
 
 if (-not $SkipDeploy) {
-  Write-Host "\n5) Deploy functions" -ForegroundColor Cyan
+  Write-Host ""
+  Write-Host "5) Deploy functions" -ForegroundColor Cyan
   supabase functions deploy telegram-auth | Out-Host
   supabase functions deploy telegram-login | Out-Host
 }
 
-Write-Host "\n✅ Готово." -ForegroundColor Green
-Write-Host "Дальше в @BotFather нужно: /setdomain (для Login Widget) на домен сайта." -ForegroundColor Yellow
-Write-Host "И проверь BOT_USERNAME в final.html (это @username бота, НЕ токен)." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "DONE." -ForegroundColor Green
+Write-Host "Next in @BotFather: /setdomain (for Login Widget) to your site domain." -ForegroundColor Yellow
+Write-Host "Also check BOT_USERNAME in final.html (this is @botusername, NOT the token)." -ForegroundColor Yellow
