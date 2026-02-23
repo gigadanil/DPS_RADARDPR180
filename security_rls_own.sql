@@ -6,24 +6,6 @@
 -- ============================================================
 
 -- ============================================================
--- ВАЖНО (Telegram Auth):
--- Edge Function telegram-auth создаёт Supabase Auth пользователя и выдаёт access_token.
--- В этом JWT `sub` = UUID пользователя Supabase, а Telegram ID лежит в
--- `user_metadata.telegram_user_id`.
--- Таблицы приложения используют Telegram ID (author_id/user_id), поэтому
--- политики должны проверять именно telegram_user_id.
--- ============================================================
-
-CREATE OR REPLACE FUNCTION jwt_tg_user_id()
-RETURNS TEXT AS $$
-    SELECT NULLIF(current_setting('request.jwt.claims', true), '')::json
-        -> 'user_metadata'
-        ->> 'telegram_user_id';
-$$ LANGUAGE sql STABLE;
-
-GRANT EXECUTE ON FUNCTION jwt_tg_user_id TO authenticated;
-
--- ============================================================
 -- MARKERS (МЕТКИ)
 -- ============================================================
 
@@ -43,23 +25,23 @@ CREATE POLICY "markers_select_all" ON public.markers
 -- Создание: любой авторизованный может создать метку
 CREATE POLICY "markers_insert_own" ON public.markers
     FOR INSERT TO authenticated 
-    WITH CHECK (author_id::text = jwt_tg_user_id());
+    WITH CHECK (author_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Редактирование: только свои метки
 CREATE POLICY "markers_update_own" ON public.markers
     FOR UPDATE TO authenticated 
-    USING (author_id::text = jwt_tg_user_id())
-    WITH CHECK (author_id::text = jwt_tg_user_id());
+    USING (author_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')))
+    WITH CHECK (author_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Удаление: только свои метки
 CREATE POLICY "markers_delete_own" ON public.markers
     FOR DELETE TO authenticated 
-    USING (author_id::text = jwt_tg_user_id());
+    USING (author_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Удаление: админ может удалять любые метки
 CREATE POLICY "markers_delete_admin" ON public.markers
     FOR DELETE TO authenticated 
-    USING (is_admin(jwt_tg_user_id()));
+    USING (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))));
 
 -- ============================================================
 -- MESSAGES (СООБЩЕНИЯ)
@@ -87,23 +69,23 @@ CREATE POLICY "messages_select_all" ON public.messages
 -- Создание: авторизованный может создать сообщение
 CREATE POLICY "messages_insert_own" ON public.messages
     FOR INSERT TO authenticated 
-    WITH CHECK (author_id::text = jwt_tg_user_id());
+    WITH CHECK (author_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Редактирование: только свои сообщения
 CREATE POLICY "messages_update_own" ON public.messages
     FOR UPDATE TO authenticated 
-    USING (author_id::text = jwt_tg_user_id())
-    WITH CHECK (author_id::text = jwt_tg_user_id());
+    USING (author_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')))
+    WITH CHECK (author_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Удаление: только свои сообщения
 CREATE POLICY "messages_delete_own" ON public.messages
     FOR DELETE TO authenticated 
-    USING (author_id::text = jwt_tg_user_id());
+    USING (author_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Удаление: админ может удалять любые сообщения
 CREATE POLICY "messages_delete_admin" ON public.messages
     FOR DELETE TO authenticated 
-    USING (is_admin(jwt_tg_user_id()));
+    USING (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))));
 
 -- ============================================================
 -- UNBAN_REQUESTS (ЗАПРОСЫ НА РАЗБАН)
@@ -125,19 +107,19 @@ CREATE POLICY "unban_select_all" ON public.unban_requests
 -- Создание: авторизованный может создать запрос
 CREATE POLICY "unban_insert_own" ON public.unban_requests
     FOR INSERT TO authenticated 
-    WITH CHECK (user_id::text = jwt_tg_user_id());
+    WITH CHECK (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Редактирование: только свои запросы (пока на рассмотрении)
 CREATE POLICY "unban_update_own" ON public.unban_requests
     FOR UPDATE TO authenticated 
-    USING (user_id::text = jwt_tg_user_id() AND status = 'pending')
-    WITH CHECK (user_id::text = jwt_tg_user_id() AND status = 'pending');
+    USING (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')) AND status = 'pending')
+    WITH CHECK (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')) AND status = 'pending');
 
 -- Редактирование: админ может менять статус
 CREATE POLICY "unban_update_admin" ON public.unban_requests
     FOR UPDATE TO authenticated 
-    USING (is_admin(jwt_tg_user_id()))
-    WITH CHECK (is_admin(jwt_tg_user_id()));
+    USING (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))))
+    WITH CHECK (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))));
 
 -- ============================================================
 -- USER_SETTINGS (НАСТРОЙКИ ПОЛЬЗОВАТЕЛЕЙ)
@@ -156,23 +138,23 @@ DROP POLICY IF EXISTS "settings_delete_own" ON public.user_settings;
 -- Просмотр: только свои настройки
 CREATE POLICY "settings_select_own" ON public.user_settings
     FOR SELECT TO authenticated 
-    USING (user_id::text = jwt_tg_user_id());
+    USING (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Создание: только свои настройки
 CREATE POLICY "settings_insert_own" ON public.user_settings
     FOR INSERT TO authenticated 
-    WITH CHECK (user_id::text = jwt_tg_user_id());
+    WITH CHECK (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Редактирование: только свои настройки
 CREATE POLICY "settings_update_own" ON public.user_settings
     FOR UPDATE TO authenticated 
-    USING (user_id::text = jwt_tg_user_id())
-    WITH CHECK (user_id::text = jwt_tg_user_id());
+    USING (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')))
+    WITH CHECK (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Удаление: только свои настройки
 CREATE POLICY "settings_delete_own" ON public.user_settings
     FOR DELETE TO authenticated 
-    USING (user_id::text = jwt_tg_user_id());
+    USING (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- ============================================================
 -- REPORTS (ЖАЛОБЫ) - только свои для просмотра/редактирования
@@ -193,29 +175,29 @@ DROP POLICY IF EXISTS "reports_update_admin" ON public.reports;
 -- Просмотр: только свои жалобы
 CREATE POLICY "reports_select_own" ON public.reports
     FOR SELECT TO authenticated 
-    USING (reporter_id::text = jwt_tg_user_id());
+    USING (reporter_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Просмотр: админ видит все жалобы
 CREATE POLICY "reports_select_admin" ON public.reports
     FOR SELECT TO authenticated 
-    USING (is_admin(jwt_tg_user_id()));
+    USING (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))));
 
 -- Создание: авторизованный может создать жалобу
 CREATE POLICY "reports_insert_own" ON public.reports
     FOR INSERT TO authenticated 
-    WITH CHECK (reporter_id::text = jwt_tg_user_id());
+    WITH CHECK (reporter_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- Редактирование: только свои жалобы (до обработки)
 CREATE POLICY "reports_update_own" ON public.reports
     FOR UPDATE TO authenticated 
-    USING (reporter_id::text = jwt_tg_user_id() AND status = 'pending')
-    WITH CHECK (reporter_id::text = jwt_tg_user_id() AND status = 'pending');
+    USING (reporter_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')) AND status = 'pending')
+    WITH CHECK (reporter_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')) AND status = 'pending');
 
 -- Редактирование: админ может менять статус
 CREATE POLICY "reports_update_admin" ON public.reports
     FOR UPDATE TO authenticated 
-    USING (is_admin(jwt_tg_user_id()))
-    WITH CHECK (is_admin(jwt_tg_user_id()));
+    USING (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))))
+    WITH CHECK (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))));
 
 -- ============================================================
 -- ОСТАЛЬНЫЕ ТАБЛИЦЫ: ПРОСМОТР ДЛЯ ВСЕХ
@@ -235,12 +217,12 @@ CREATE POLICY "drivers_select_all" ON public.drivers
 -- Создание: любой авторизованный может зарегистрироваться как водитель
 CREATE POLICY "drivers_insert_own" ON public.drivers
     FOR INSERT TO authenticated 
-    WITH CHECK (user_id::text = jwt_tg_user_id());
+    WITH CHECK (true);
 
 CREATE POLICY "drivers_update_own" ON public.drivers
     FOR UPDATE TO authenticated 
-    USING (user_id::text = jwt_tg_user_id())
-    WITH CHECK (user_id::text = jwt_tg_user_id());
+    USING (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')))
+    WITH CHECK (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- BANS (только чтение для пользователей, админ управляет через функцию)
 ALTER TABLE public.bans ENABLE ROW LEVEL SECURITY;
@@ -264,7 +246,7 @@ CREATE POLICY "marker_conf_select_all" ON public.marker_confirmations
 
 CREATE POLICY "marker_conf_insert_own" ON public.marker_confirmations
     FOR INSERT TO authenticated 
-    WITH CHECK (user_id::text = jwt_tg_user_id());
+    WITH CHECK (user_id::text = coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub')));
 
 -- FEEDBACK (обратная связь)
 ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
@@ -307,7 +289,7 @@ CREATE POLICY "beta_select_all" ON public.beta_invites
 
 CREATE POLICY "beta_update_admin" ON public.beta_invites
     FOR UPDATE TO authenticated 
-    USING (is_admin(jwt_tg_user_id()));
+    USING (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))));
 
 -- APP_MAINTENANCE (техническое обслуживание)
 ALTER TABLE public.app_maintenance ENABLE ROW LEVEL SECURITY;
@@ -322,7 +304,7 @@ CREATE POLICY "maintenance_select_all" ON public.app_maintenance
 
 CREATE POLICY "maintenance_update_admin" ON public.app_maintenance
     FOR UPDATE TO authenticated 
-    USING (is_admin(jwt_tg_user_id()));
+    USING (is_admin(coalesce(current_setting('request.jwt.claim.sub', true), (nullif(current_setting('request.jwt.claims', true), '')::json->>'sub'))));
 
 -- ============================================================
 -- ФУНКЦИЯ АДМИНИСТРАТОРА
