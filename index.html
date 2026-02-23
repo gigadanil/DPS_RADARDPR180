@@ -23,15 +23,50 @@
             --blue: #00d4ff; /* Electric Blue */
             --neon: #39ff14; /* Neon Green */
             --gray: rgba(255,255,255,0.65);
+            --text-primary: rgba(255, 255, 255, 0.95);
             --card: rgba(22, 22, 26, 0.72);
             --card-strong: rgba(18, 18, 22, 0.86);
             --stroke: rgba(255,255,255,0.10);
+            --critical-outline: 0 1px 0 rgba(0,0,0,0.95), 0 -1px 0 rgba(0,0,0,0.95), 1px 0 0 rgba(0,0,0,0.95), -1px 0 0 rgba(0,0,0,0.95);
             --safe-area-inset-top: env(safe-area-inset-top);
             --safe-area-inset-bottom: env(safe-area-inset-bottom);
             --safe-area-inset-left: env(safe-area-inset-left);
             --safe-area-inset-right: env(safe-area-inset-right);
         }
-        body, html { width: 100%; height: 100%; margin: 0; padding: 0; font-family: 'Rajdhani','Montserrat',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; background: var(--bg); overflow: hidden; }
+        body, html {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: 'Rajdhani','Montserrat',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+            background: #0d0d0d;
+            color: var(--text-primary);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: geometricPrecision;
+            letter-spacing: 0.03em;
+        }
+
+        h1, h2, h3, h4, h5, h6 { font-weight: 700; }
+
+        /* Подписи кнопок */
+        .main-btn,
+        .chat-send-btn,
+        .ptt-hold-btn,
+        .type-tab-btn,
+        .type-btn span {
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+
+        /* Критически важные данные: скорость/дистанция */
+        .speedometer-value,
+        #speedValue,
+        .proximity-banner-distance,
+        #warningDistanceLabel {
+            text-shadow: var(--critical-outline);
+        }
         
         /* Отключение выделения и улучшение тап-реакций */
         * {
@@ -51,7 +86,6 @@
             top: 0;
             left: 0;
             width: 100%;
-            height: 100%;
             background: linear-gradient(135deg, #007aff 0%, #0051d5 100%);
             z-index: 10000;
             display: flex;
@@ -63,7 +97,6 @@
         }
         
         #splashScreen.hidden {
-            opacity: 0;
             visibility: hidden;
             pointer-events: none;
         }
@@ -893,13 +926,13 @@
         .achievement.locked { opacity: 0.55; }
 
         /* Спидометр */
-        .speedometer { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; background: rgba(255,255,255,0.95); border-radius: 16px; padding: 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); display: none; align-items: center; gap: 10px; min-width: 120px; }
+        .speedometer { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; background: rgba(0,0,0,0.55); border-radius: 16px; padding: 10px 12px; box-shadow: 0 10px 26px rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.10); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: none; align-items: center; gap: 10px; min-width: 120px; }
         .speedometer.visible { display: flex; }
-        .speedometer-value { font-size: 22px; font-weight: 800; color: #000; line-height: 1; }
-        .speedometer-unit { font-size: 11px; color: var(--gray); margin-left: 4px; font-weight: 700; }
-        .speedometer-label { font-size: 10px; color: var(--gray); font-weight: 600; }
+        .speedometer-value { font-size: 22px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+        .speedometer-unit { font-size: 11px; color: rgba(255,255,255,0.70); margin-left: 4px; font-weight: 700; }
+        .speedometer-label { font-size: 10px; color: rgba(255,255,255,0.65); font-weight: 600; }
         .speedometer-toggle { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; border: none; background: #ff3b30; color: white; font-size: 14px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
-        .speedometer-open-btn { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; width: 40px; height: 40px; border-radius: 50%; background: white; border: 2px solid var(--blue); display: none; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); cursor: pointer; }
+        .speedometer-open-btn { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,0.55); color: var(--text-primary); border: 1px solid rgba(255,255,255,0.12); display: none; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 10px 26px rgba(0,0,0,0.35); cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
         .speedometer-open-btn.visible { display: flex; }
 
         /* Админский маркер и имя */
@@ -6832,9 +6865,40 @@
         if (!_sb) {
             throw new Error('Supabase client не инициализирован');
         }
+
+        // Важно: если передать headers без Authorization, supabase-js может не добавить токен автоматически.
+        // Поэтому явно прокидываем Bearer access_token.
+        let token = '';
+        try {
+            const expRaw = String(localStorage.getItem('sb_jwt_exp') || '').trim();
+            const expSec = expRaw ? Number(expRaw) : 0;
+            const stored = String(localStorage.getItem('sb_jwt') || '').trim();
+            const expired = expSec ? ((Date.now() / 1000) > (expSec - 60)) : false;
+            if (stored && stored.split('.').length === 3 && !expired) token = stored;
+        } catch (e) {
+            token = '';
+        }
+
+        if (!token) {
+            // пробуем обновить токен через Edge Function telegram-auth (если мы в Telegram Mini App)
+            try {
+                const refreshed = await ensureSupabaseAuth();
+                if (refreshed && String(refreshed).split('.').length === 3) token = String(refreshed);
+            } catch (e) {
+                token = '';
+            }
+        }
+
+        if (!token) {
+            throw new Error('Нет авторизации для админ‑функций. Откройте приложение через Telegram Mini App и попробуйте снова.');
+        }
+
         const { data, error } = await _sb.functions.invoke(functionName, {
             body: payload,
-            headers: { 'Content-Type': 'application/json' }
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+            }
         });
         if (error) {
             const errMsg = String(error?.message || error || `Edge Function ${functionName} error`);
