@@ -5927,60 +5927,55 @@
         status.style.display = 'block';
 
         try {
-            // Проверяем код в БД
-            const { data, error } = await _sb.rpc('validate_beta_invite', { 
-                p_code: code 
+            // Проверяем код через Edge Function (без прямого RPC к beta_invites)
+            const validate = await fetch(`${SUPABASE_URL}/functions/v1/beta-invite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'validate', code })
             });
+            const validatePayload = await validate.json().catch(() => null);
 
-            if (error) {
-                throw new Error(error.message || 'Ошибка проверки кода');
+            if (!validate.ok) {
+                throw new Error(validatePayload?.error || `Ошибка проверки (${validate.status})`);
             }
 
-            if (data && data.length > 0) {
-                const result = data[0];
-                
-                if (!result.is_valid) {
-                    status.textContent = '❌ ' + (result.message || 'Код не валиден');
-                    status.style.color = '#dc3545';
-                    status.style.display = 'block';
-                    codeInput.style.borderColor = '#dc3545';
-                    return;
-                }
-
-                // Код валиден! Используем его
-                const { error: claimError } = await _sb.rpc('claim_beta_invite', { 
-                    p_code: code,
-                    p_user_id: String(uid)
-                });
-
-                if (claimError) {
-                    throw claimError;
-                }
-
-                // Успешно! Сохраняем в localStorage и перезагружаем
-                localStorage.setItem('beta_access_granted', 'true');
-                localStorage.setItem('beta_code_used', code);
-                localStorage.setItem('beta_access_date', new Date().toISOString());
-
-                // Ачивка за вход в ЗБТ
-                try { await ensureUserAchievement(uid, 'beta_tester'); } catch(e) {}
-
-                status.textContent = '✅ Доступ предоставлен! Загрузка...';
-                status.style.color = '#28a745';
-                status.style.display = 'block';
-
-                // Скрываем overlay и инициализируем приложение
-                setTimeout(() => {
-                    document.getElementById('betaInviteOverlay').style.display = 'none';
-                    initAppInProgress = false;  // Сбрасываем флаг перед инициализацией
-                    initApp();
-                }, 800);
-
-            } else {
-                status.textContent = '❌ Код не найден';
+            if (!validatePayload?.is_valid) {
+                status.textContent = '❌ ' + (validatePayload?.message || 'Код не валиден');
                 status.style.color = '#dc3545';
                 status.style.display = 'block';
+                codeInput.style.borderColor = '#dc3545';
+                return;
             }
+
+            // Код валиден! Применяем его
+            const claim = await fetch(`${SUPABASE_URL}/functions/v1/beta-invite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'claim', code, userId: uid ? String(uid) : '' })
+            });
+            const claimPayload = await claim.json().catch(() => null);
+            if (!claim.ok || !claimPayload?.success) {
+                throw new Error(claimPayload?.error || `Ошибка активации (${claim.status})`);
+            }
+
+            // Успешно! Сохраняем в localStorage и перезагружаем
+            localStorage.setItem('beta_access_granted', 'true');
+            localStorage.setItem('beta_code_used', code);
+            localStorage.setItem('beta_access_date', new Date().toISOString());
+
+            // Ачивка за вход в ЗБТ
+            try { await ensureUserAchievement(uid, 'beta_tester'); } catch(e) {}
+
+            status.textContent = '✅ Доступ предоставлен! Загрузка...';
+            status.style.color = '#28a745';
+            status.style.display = 'block';
+
+            // Скрываем overlay и инициализируем приложение
+            setTimeout(() => {
+                document.getElementById('betaInviteOverlay').style.display = 'none';
+                initAppInProgress = false;  // Сбрасываем флаг перед инициализацией
+                initApp();
+            }, 800);
 
         } catch (err) {
             console.error('Ошибка при проверке кода:', err);
