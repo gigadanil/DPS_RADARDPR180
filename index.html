@@ -23,16 +23,17 @@
             --blue: #00d4ff; /* Electric Blue */
             --neon: #39ff14; /* Neon Green */
             --gray: rgba(255,255,255,0.65);
-            --text-primary: rgba(255, 255, 255, 0.95);
-            --card: rgba(22, 22, 26, 0.72);
-            --card-strong: rgba(18, 18, 22, 0.86);
+            --text-primary: rgba(255, 255, 255, 0.92);
+            --card: rgba(26, 26, 26, 0.72);
+            --card-strong: rgba(26, 26, 26, 0.88);
             --stroke: rgba(255,255,255,0.10);
             --critical-outline: 0 1px 0 rgba(0,0,0,0.95), 0 -1px 0 rgba(0,0,0,0.95), 1px 0 0 rgba(0,0,0,0.95), -1px 0 0 rgba(0,0,0,0.95);
             --safe-area-inset-top: env(safe-area-inset-top);
             --safe-area-inset-bottom: env(safe-area-inset-bottom);
             --safe-area-inset-left: env(safe-area-inset-left);
             --safe-area-inset-right: env(safe-area-inset-right);
-            --ui-safe-top: calc(env(safe-area-inset-top) + 35px);
+            /* iPhone 14 Pro / Redmi: сдвиг UI ниже системных элементов */
+            --ui-safe-top: calc(env(safe-area-inset-top) + 20px);
         }
         body, html {
             width: 100%;
@@ -49,7 +50,11 @@
             letter-spacing: 0.03em;
         }
 
-        h1, h2, h3, h4, h5, h6 { font-weight: 700; }
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 800;
+            color: var(--blue);
+            text-shadow: 0 0 14px rgba(0, 212, 255, 0.28), 0 1px 0 rgba(0,0,0,0.55);
+        }
 
         /* Подписи кнопок */
         .main-btn,
@@ -1085,16 +1090,17 @@
 
         /* ============= SAFE AREA TOP OFFSET (iPhone 14 Pro / Redmi) ============= */
         /* Требование: сдвинуть основной UI и модалки ниже системных кнопок ("Закрыть", "...") */
-        .top-controls { top: calc(15px + var(--ui-safe-top)) !important; }
-        #onlineCountBadge.online-count { top: calc(12px + var(--ui-safe-top)) !important; }
-        .right-bar { top: calc(12px + var(--ui-safe-top)) !important; }
+        .top-controls { top: var(--ui-safe-top) !important; }
+        #onlineCountBadge.online-count { top: var(--ui-safe-top) !important; }
+        .right-bar { top: var(--ui-safe-top) !important; }
         .admin-btn,
         .profile-btn,
         .feedback-btn,
         .loc-btn,
-        .follow-toggle { top: calc(15px + var(--ui-safe-top)) !important; }
-        .broadcast-banner { top: calc(12px + var(--ui-safe-top)) !important; }
-        .proximity-banner { top: calc(52px + var(--ui-safe-top)) !important; }
+        .follow-toggle { top: var(--ui-safe-top) !important; }
+        .broadcast-banner { top: var(--ui-safe-top) !important; }
+        .proximity-banner { top: calc(var(--ui-safe-top) + 44px) !important; }
+        .notif-toast-wrap { top: calc(var(--ui-safe-top) + 58px) !important; }
 
         /* Модальные окна и оверлеи: добавляем padding-top, чтобы контент не залезал под верхние системные зоны */
         .modal { padding-top: var(--ui-safe-top); box-sizing: border-box; }
@@ -1123,6 +1129,10 @@
         [style*="background: #f9f9f9"],
         [style*="background:#f0f7ff"],
         [style*="background: #f0f7ff"],
+        [style*="background:#f0f0f5"],
+        [style*="background: #f0f0f5"],
+        [style*="background:#ececf1"],
+        [style*="background: #ececf1"],
         [style*="background-color:#fff"],
         [style*="background-color: #fff"],
         [style*="background-color:white"],
@@ -1145,6 +1155,21 @@
         #betaInviteOverlay {
             color: var(--text-primary);
         }
+
+        /* Общие светлые элементы UI → в тёмный premium */
+        .icon-circle,
+        .b-poll-btn,
+        .admin-stat-card,
+        .admin-table th {
+            background: rgba(26, 26, 26, 0.92) !important;
+            color: var(--text-primary) !important;
+            border-color: rgba(0, 212, 255, 0.20) !important;
+        }
+        .admin-table th,
+        .admin-table td {
+            border-bottom-color: rgba(255,255,255,0.12) !important;
+        }
+        .admin-table tr:hover { background: rgba(0, 212, 255, 0.08) !important; }
 
         /* Текст внутри проблемных светлых блоков (в т.ч. с inline color:#333/#666/#888) */
         #tgAuthOverlay h1,
@@ -1250,28 +1275,31 @@
 
     <!-- Overlay: Требуется Telegram для регистрации/действий -->
     <div id="tgAuthOverlay" class="auth-overlay" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
-        <div style="background:#fff; padding:40px 25px; border-radius:16px; max-width:420px; width:95%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.3); animation: slideUp 0.4s ease;">
+        <div style="background:rgba(26,26,26,0.88); border:1px solid rgba(0,212,255,0.2); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); padding:40px 25px; border-radius:16px; max-width:460px; width:95%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.45); animation: slideUp 0.4s ease; color:rgba(255,255,255,0.92);">
             <div style="font-size:48px; margin-bottom:20px; animation: pulse 2s ease-in-out infinite;">🔐</div>
-            <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; color:#333;">Доступ ограничен</h2>
-            <p style="color:#666; font-size:16px; line-height:1.6; margin:0 0 25px 0;">
-                <strong>Регистрация и отправка</strong> (метки/чат/профиль)
-                доступны только через<br><strong>Telegram Mini App</strong>.
+            <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; color:#00d4ff; text-shadow:0 0 12px rgba(0,212,255,0.28);">Вход в Monolith 180</h2>
+            <p style="color:rgba(255,255,255,0.92); font-size:15px; line-height:1.65; margin:0 0 14px 0;">
+                Для сайта/PWA сначала выполните вход через Telegram.<br>
+                В <strong>Telegram Mini App</strong> вход происходит автоматически.
             </p>
-            <p style="color:#888; font-size:14px; line-height:1.5; margin:0 0 30px 0;">
-                Карту можно смотреть в браузере, но для действий откройте в Telegram.
+            <p style="color:rgba(255,255,255,0.72); font-size:13px; line-height:1.5; margin:0 0 20px 0;">
+                Если вы в браузере/приложении — нажмите «Войти через Telegram» ниже.
             </p>
             <div style="display:flex; flex-direction:column; gap:12px; justify-content:center;">
                 <div id="tgLoginWidget" style="display:flex; justify-content:center;"></div>
                 <button onclick="openTelegramBot()" style="padding:14px 20px; border-radius:12px; border:none; background:linear-gradient(135deg, #007aff 0%, #0051d5 100%); color:#fff; font-weight:700; font-size:16px; cursor:pointer; transition:all 0.3s; box-shadow:0 4px 12px rgba(0,122,255,0.3);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,122,255,0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,122,255,0.3)'">
                     📱 Открыть в Telegram
                 </button>
-                <button onclick="location.reload()" style="padding:12px 20px; border-radius:12px; border:2px solid #ddd; background:#fff; color:#666; font-weight:600; font-size:15px; cursor:pointer; transition:all 0.3s;" onmouseover="this.style.borderColor='#bbb'; this.style.background='#f5f5f5'" onmouseout="this.style.borderColor='#ddd'; this.style.background='#fff'">
+                <button onclick="location.reload()" style="padding:12px 20px; border-radius:12px; border:1px solid rgba(0,212,255,0.25); background:rgba(26,26,26,0.92); color:rgba(255,255,255,0.86); font-weight:700; font-size:15px; cursor:pointer; transition:all 0.3s;" onmouseover="this.style.borderColor='rgba(0,212,255,0.5)'" onmouseout="this.style.borderColor='rgba(0,212,255,0.25)'">
                     🔄 Перезагрузить страницу
                 </button>
             </div>
-            <div style="margin-top:25px; padding:15px; background:#f0f7ff; border-radius:10px; border-left:4px solid #007aff;">
-                <p style="margin:0; font-size:12px; color:#0051d5; line-height:1.5;">
-                    💡 <strong>Совет:</strong> Найдите бота <strong>@DPSRADARDPR180bot</strong> в Telegram или перейдите по ссылке выше.
+            <div style="margin-top:18px; padding:12px; background:rgba(26,26,26,0.92); border-radius:10px; border:1px solid rgba(0,212,255,0.2); text-align:left;">
+                <p style="margin:0 0 8px 0; font-size:12px; color:#00d4ff; line-height:1.5; font-weight:800;">📲 Установка PWA:</p>
+                <p style="margin:0; font-size:12px; color:rgba(255,255,255,0.80); line-height:1.5;">
+                    iPhone: Safari → Поделиться → «На экран Домой».<br>
+                    Android: меню браузера → «Установить приложение».<br>
+                    После установки войдите через Telegram Widget выше.
                 </p>
             </div>
         </div>
@@ -2637,9 +2665,49 @@
                 const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle();
                 if (driver) currentDriver = driver;
             } catch(e) {}
+
+            // Продолжаем инициализацию приложения (initApp мог выйти раньше из-за отсутствия токена)
+            try {
+                initAppInProgress = false;
+                initApp();
+            } catch (e) {}
         } catch (e) {
             console.warn('handleTelegramSiteAuth error:', e?.message || e);
         }
+    }
+
+    /**
+     * Auth Variant B (Monolith 180):
+     * - Telegram Mini App: используем initData → Edge Function telegram-auth.
+     * - Web/PWA: используем сохранённый sb_jwt; если нет — показываем оверлей с Telegram Login Widget.
+     */
+    async function checkAppEnvironment() {
+        const overlay = document.getElementById('tgAuthOverlay');
+        const splash = document.getElementById('splashScreen');
+
+        const initData = window.Telegram?.WebApp?.initData;
+        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        const isTelegram = !!(initData && tgUser);
+
+        if (isTelegram) {
+            // Mini App: авторизация должна обновляться через initData
+            const token = await ensureSupabaseAuth();
+            if (overlay) overlay.style.display = 'none';
+            return { mode: 'telegram', isTelegram: true, token };
+        }
+
+        // Web/PWA: пробуем восстановить токен из localStorage
+        const token = await ensureSupabaseAuth();
+        if (token) {
+            if (overlay) overlay.style.display = 'none';
+            return { mode: 'web', isTelegram: false, token };
+        }
+
+        // Нет токена → показываем модалку входа и монтируем Telegram Login Widget
+        try { ensureTelegramLoginWidgetRendered(); } catch (e) {}
+        if (overlay) overlay.style.display = 'flex';
+        if (splash) splash.classList.add('hidden');
+        return { mode: 'web-need-auth', isTelegram: false, token: null };
     }
 
     // Открыть бот в Telegram (пытаемся сначала tg://, затем https://)
@@ -5610,36 +5678,32 @@
         const betaOverlay = document.getElementById('betaInviteOverlay');
         if (betaOverlay) betaOverlay.style.display = 'none';
 
-        // Получаем данные Telegram (если есть) — без Telegram запускаем режим "гость"
-        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-        const isTelegram = !!(window.Telegram?.WebApp?.initData && tgUser);
-        // В режиме "гость" не показываем блокирующий оверлей — карта должна открываться.
+        // Auth Variant B: Telegram Mini App или Web/PWA login
+        const env = await checkAppEnvironment();
+        const isTelegram = !!env?.isTelegram;
+        const authedToken = env?.token;
         const overlay = document.getElementById('tgAuthOverlay');
-        if (overlay) overlay.style.display = 'none';
-        // На сайте (без Mini App) сразу готовим Login Widget, чтобы можно было авторизоваться.
-        if (!isTelegram) {
-            try { ensureTelegramLoginWidgetRendered(); } catch(e) {}
+        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        const displayUser = isTelegram ? tgUser : siteTelegramUser;
+
+        // Если токена нет — пользователь должен войти через Telegram (модалка уже показана)
+        if (!authedToken) {
+            if (overlay) overlay.style.display = 'flex';
+            initAppInProgress = false;
+            return;
         }
 
-        if (isTelegram) {
-            // Определяем админа раньше для проверки ТО
-            isAdmin = String(tgUser.id) === String(ADMIN_ID);
+        // Если токен есть — определяем админа по Telegram ID (и в Mini App, и в Web/PWA)
+        isAdmin = !!uid && String(uid) === String(ADMIN_ID);
 
-            // Переключаем Supabase на authenticated (JWT из Telegram)
-            await ensureSupabaseAuth();
+        // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
+        try {
+            if (localStorage.getItem('beta_access_granted') === 'true') {
+                await ensureUserAchievement(uid, 'beta_tester');
+            }
+        } catch(e) {}
 
-            // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
-            try {
-                if (localStorage.getItem('beta_access_granted') === 'true') {
-                    await ensureUserAchievement(uid, 'beta_tester');
-                }
-            } catch(e) {}
-        } else {
-            // Гость: без Telegram не регистрируем и не пишем в профили/чаты/метки.
-            isAdmin = false;
-        }
-
-        if (isTelegram) {
+        if (authedToken) {
             try {
                 // Проверяем, не забанен ли пользователь (с таймаутом)
                 const banInfo = await Promise.race([
@@ -5680,7 +5744,7 @@
         // Показываем онлайн-бейдж (если поддерживается)
         try { document.getElementById('onlineCountBadge')?.classList?.add('visible'); } catch(e) {}
 
-        if (isTelegram) {
+        if (authedToken) {
             // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
             try {
                 const { data: driver } = await Promise.race([
@@ -5691,7 +5755,9 @@
                 ]);
                 if (!driver) {
                     // Если нет, показываем форму для добавления данных об авто
-                    document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
+                    const first = String(displayUser?.first_name || '').trim();
+                    const last = String(displayUser?.last_name || '').trim();
+                    document.getElementById('reg-user-name').textContent = `${first} ${last}`.trim() || 'Водитель';
                     openRegistrationModal();
                 } else {
                     // Если да, загружаем его данные
@@ -5700,7 +5766,9 @@
             } catch (e) {
                 // Если запрос к таблице drivers падает из-за несинхронизированной схемы, всё равно покажем форму
                 console.warn('drivers table read failed:', e.message || e);
-                document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
+                const first = String(displayUser?.first_name || '').trim();
+                const last = String(displayUser?.last_name || '').trim();
+                document.getElementById('reg-user-name').textContent = `${first} ${last}`.trim() || 'Водитель';
                 openRegistrationModal();
             }
         }
