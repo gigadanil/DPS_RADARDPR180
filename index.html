@@ -4048,7 +4048,7 @@
             const sinceIso = new Date(Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS).toISOString();
             const { data: markers, error } = await _sb
                 .from('markers')
-                .select('id,type,ts,comment,coords,leave_confirmations,author_id')
+                .select('id,type,ts,comment,coords,author_id')
                 .in('type', ['sos', 'dtp'])
                 .gte('ts', sinceIso)
                 .order('ts', { ascending: false })
@@ -4071,8 +4071,7 @@
                     return;
                 }
 
-                const confirms = Number(marker?.leave_confirmations || 0);
-                if (marker.type === 'dtp' && confirms >= CRITICAL_DTP_CONFIRMATIONS) {
+                if (marker.type === 'dtp') {
                     upsertAppNotification(buildFeedMarkerNotification(marker, 'critical_dtp', distanceMeters), { silent });
                 }
             });
@@ -7195,25 +7194,33 @@
     // ============= ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ЗБТ КОДАМИ =============
 
     async function invokeAdminFunction(functionName, payload = {}) {
-        if (!_sb) {
-            throw new Error('Supabase client не инициализирован');
+        function getJwtExp(token) {
+            try {
+                const parts = String(token || '').split('.');
+                if (parts.length !== 3) return 0;
+                const payloadPart = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
+                const json = JSON.parse(atob(normalized));
+                const exp = Number(json?.exp || 0);
+                return Number.isFinite(exp) ? exp : 0;
+            } catch (e) {
+                return 0;
+            }
         }
 
-        // Важно: если передать headers без Authorization, supabase-js может не добавить токен автоматически.
-        // Поэтому явно прокидываем Bearer access_token.
         let token = '';
         try {
-            const expRaw = String(localStorage.getItem('sb_jwt_exp') || '').trim();
-            const expSec = expRaw ? Number(expRaw) : 0;
             const stored = String(localStorage.getItem('sb_jwt') || '').trim();
-            const expired = expSec ? ((Date.now() / 1000) > (expSec - 60)) : false;
+            const expRaw = Number(localStorage.getItem('sb_jwt_exp') || 0);
+            const expFromToken = getJwtExp(stored);
+            const expSec = expRaw > 0 ? expRaw : expFromToken;
+            const expired = !expSec || ((Date.now() / 1000) > (expSec - 60));
             if (stored && stored.split('.').length === 3 && !expired) token = stored;
         } catch (e) {
             token = '';
         }
 
         if (!token) {
-            // пробуем обновить токен через Edge Function telegram-auth (если мы в Telegram Mini App)
             try {
                 const refreshed = await ensureSupabaseAuth();
                 if (refreshed && String(refreshed).split('.').length === 3) token = String(refreshed);
@@ -7226,17 +7233,30 @@
             throw new Error('Нет авторизации для админ‑функций. Откройте приложение через Telegram Mini App и попробуйте снова.');
         }
 
-        const { data, error } = await _sb.functions.invoke(functionName, {
-            body: payload,
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+            method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                Authorization: `Bearer ${token}`
-            }
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(payload || {})
         });
-        if (error) {
-            const errMsg = String(error?.message || error || `Edge Function ${functionName} error`);
-            throw new Error(errMsg);
+
+        let data = null;
+        let text = '';
+        try {
+            const ct = String(resp.headers.get('content-type') || '').toLowerCase();
+            if (ct.includes('application/json')) data = await resp.json();
+            else text = await resp.text();
+        } catch (e) {}
+
+        if (!resp.ok) {
+            const detail = (data && typeof data === 'object' && data.error)
+                ? String(data.error)
+                : (text || `HTTP ${resp.status}`);
+            throw new Error(`Edge Function ${functionName}: ${detail}`);
         }
+
         if (data && typeof data === 'object' && 'error' in data && data.error) {
             const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
             throw new Error(errMsg || `Edge Function ${functionName} error`);
