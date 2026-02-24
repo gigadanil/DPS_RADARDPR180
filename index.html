@@ -7322,14 +7322,10 @@
 
     async function refreshBetaCodes() {
         try {
-            const { data, error } = await _sb
-                .from('beta_invites')
-                .select('*')
-                .order('created_at', { ascending: false });
+            if (!isAdmin) throw new Error('Только для администратора');
 
-            if (error) {
-                throw error;
-            }
+            const response = await invokeAdminFunction('beta-invite', { action: 'list' });
+            const data = Array.isArray(response?.data) ? response.data : [];
 
             const tbody = document.getElementById('betaCodesTableBody');
             if (!data || data.length === 0) {
@@ -7396,14 +7392,12 @@
         if (!confirm('Деактивировать этот код?')) return;
 
         try {
-            const { error } = await _sb
-                .from('beta_invites')
-                .update({ is_active: false })
-                .eq('id', inviteId);
+            if (!isAdmin) throw new Error('Только для администратора');
 
-            if (error) {
-                throw error;
-            }
+            await invokeAdminFunction('beta-invite', {
+                action: 'deactivate',
+                inviteId
+            });
 
             await refreshBetaCodes();
         } catch (err) {
