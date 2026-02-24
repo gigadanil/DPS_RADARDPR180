@@ -32,6 +32,7 @@
             --safe-area-inset-bottom: env(safe-area-inset-bottom);
             --safe-area-inset-left: env(safe-area-inset-left);
             --safe-area-inset-right: env(safe-area-inset-right);
+            --ui-safe-top: calc(env(safe-area-inset-top) + 35px);
         }
         body, html {
             width: 100%;
@@ -975,6 +976,78 @@
         .admin-rank { font-size: 11px; color: #d4af37; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
         .admin-online { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #34c759; font-weight: 700; }
         .admin-online-dot { width: 6px; height: 6px; border-radius: 50%; background: #34c759; box-shadow: 0 0 6px rgba(52, 199, 89, 0.9); }
+
+        /* Спецбат: визуально отличный маркер (неоновое мигание) */
+        .specbat-marker {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: rgba(12, 12, 16, 0.92);
+            border: 2px solid rgba(0, 212, 255, 0.75);
+            box-shadow:
+                0 0 0 1px rgba(57, 255, 20, 0.12),
+                0 0 18px rgba(0, 212, 255, 0.45);
+            font-size: 18px;
+            animation: specbatGlow 1.05s ease-in-out infinite;
+        }
+        .specbat-marker::before {
+            content: '';
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 212, 255, 0.22) 0%, rgba(0, 212, 255, 0.0) 65%);
+            opacity: 0.9;
+            animation: specbatAura 1.05s ease-in-out infinite;
+        }
+        .specbat-marker::after {
+            content: '';
+            position: absolute;
+            inset: -6px;
+            border-radius: 50%;
+            border: 2px solid rgba(57, 255, 20, 0.55);
+            box-shadow: 0 0 18px rgba(57, 255, 20, 0.30);
+            animation: specbatRing 0.85s ease-in-out infinite;
+        }
+        .specbat-badge {
+            position: absolute;
+            top: -8px;
+            right: -9px;
+            font-size: 10px;
+            font-weight: 900;
+            padding: 2px 5px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.72);
+            color: rgba(255,255,255,0.95);
+            border: 1px solid rgba(0, 212, 255, 0.35);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+            letter-spacing: 0.08em;
+        }
+        @keyframes specbatGlow {
+            0%, 100% {
+                filter: saturate(1.05) brightness(1.00);
+                transform: scale(1);
+                border-color: rgba(0, 212, 255, 0.70);
+                box-shadow: 0 0 0 1px rgba(57, 255, 20, 0.10), 0 0 16px rgba(0, 212, 255, 0.35);
+            }
+            50% {
+                filter: saturate(1.25) brightness(1.08);
+                transform: scale(1.06);
+                border-color: rgba(57, 255, 20, 0.75);
+                box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.12), 0 0 22px rgba(57, 255, 20, 0.35);
+            }
+        }
+        @keyframes specbatAura {
+            0%, 100% { opacity: 0.65; transform: scale(0.95); }
+            50% { opacity: 1; transform: scale(1.08); }
+        }
+        @keyframes specbatRing {
+            0%, 100% { opacity: 0.20; transform: scale(0.88); border-color: rgba(57, 255, 20, 0.50); }
+            50% { opacity: 0.90; transform: scale(1.12); border-color: rgba(0, 212, 255, 0.70); }
+        }
         @keyframes adminPulse {
             0% { transform: scale(0.85); opacity: 0.8; }
             70% { transform: scale(1.2); opacity: 0; }
@@ -1008,6 +1081,144 @@
         
         #tgAuthOverlay[style*="display: flex"] {
             display: flex !important;
+        }
+
+        /* ============= SAFE AREA TOP OFFSET (iPhone 14 Pro / Redmi) ============= */
+        /* Требование: сдвинуть основной UI и модалки ниже системных кнопок ("Закрыть", "...") */
+        .top-controls { top: calc(15px + var(--ui-safe-top)) !important; }
+        #onlineCountBadge.online-count { top: calc(12px + var(--ui-safe-top)) !important; }
+        .right-bar { top: calc(12px + var(--ui-safe-top)) !important; }
+        .admin-btn,
+        .profile-btn,
+        .feedback-btn,
+        .loc-btn,
+        .follow-toggle { top: calc(15px + var(--ui-safe-top)) !important; }
+        .broadcast-banner { top: calc(12px + var(--ui-safe-top)) !important; }
+        .proximity-banner { top: calc(52px + var(--ui-safe-top)) !important; }
+
+        /* Модальные окна и оверлеи: добавляем padding-top, чтобы контент не залезал под верхние системные зоны */
+        .modal { padding-top: var(--ui-safe-top); box-sizing: border-box; }
+        #tgAuthOverlay,
+        #betaInviteOverlay,
+        .ban-notice { padding-top: var(--ui-safe-top) !important; box-sizing: border-box; }
+
+        /* ============= FIX: WHITE-ON-WHITE (FORCE DARK + CONTRAST) ============= */
+        /* Карточки/оверлеи, которые иногда остаются светлыми из старых inline-стилей */
+        .settings-block,
+        .profile-card,
+        .admin-panel-item,
+        .ban-duration-content,
+        .notif-row,
+        .chat-message.other,
+        .heatmap-toggle,
+        #tgAuthOverlay > div,
+        #betaInviteOverlay > div,
+        #betaInviteOverlay input,
+        #tgAuthOverlay input,
+        [style*="background:#fff"],
+        [style*="background: #fff"],
+        [style*="background:#f5f5f5"],
+        [style*="background: #f5f5f5"],
+        [style*="background:#f9f9f9"],
+        [style*="background: #f9f9f9"],
+        [style*="background:#f0f7ff"],
+        [style*="background: #f0f7ff"],
+        [style*="background-color:#fff"],
+        [style*="background-color: #fff"],
+        [style*="background-color:white"],
+        [style*="background-color: white"],
+        [style*="background-color:rgb(255,255,255"],
+        [style*="background-color: rgb(255, 255, 255"],
+        [style*="background: white"],
+        [style*="background: rgb(255, 255, 255"],
+        [style*="background:rgb(255,255,255"] {
+            background-color: var(--card-strong) !important;
+            color: var(--text-primary) !important;
+            border-color: rgba(0, 212, 255, 0.20) !important;
+        }
+
+        .settings-block,
+        .profile-card,
+        .admin-panel-item,
+        .ban-duration-content,
+        #tgAuthOverlay,
+        #betaInviteOverlay {
+            color: var(--text-primary);
+        }
+
+        /* Текст внутри проблемных светлых блоков (в т.ч. с inline color:#333/#666/#888) */
+        #tgAuthOverlay h1,
+        #tgAuthOverlay h2,
+        #tgAuthOverlay h3,
+        #tgAuthOverlay p,
+        #tgAuthOverlay span,
+        #tgAuthOverlay div,
+        #betaInviteOverlay h1,
+        #betaInviteOverlay h2,
+        #betaInviteOverlay h3,
+        #betaInviteOverlay p,
+        #betaInviteOverlay span,
+        #betaInviteOverlay div,
+        .settings-block h1,
+        .settings-block h2,
+        .settings-block h3,
+        .settings-block p,
+        .settings-block span,
+        .profile-card h1,
+        .profile-card h2,
+        .profile-card h3,
+        .profile-card p,
+        .profile-card span,
+        .admin-panel-item h1,
+        .admin-panel-item h2,
+        .admin-panel-item h3,
+        .admin-panel-item p,
+        .admin-panel-item span,
+        .ban-duration-content h1,
+        .ban-duration-content h2,
+        .ban-duration-content h3,
+        .ban-duration-content p,
+        .ban-duration-content span,
+        .notif-row p,
+        .notif-row span {
+            color: var(--text-primary) !important;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.50) !important;
+        }
+
+        /* Инпуты (модель авто, номер и т.п.) */
+        input[type="text"],
+        input[type="number"],
+        input[type="tel"],
+        input[type="email"],
+        textarea {
+            background: rgba(26, 26, 30, 0.92) !important;
+            color: var(--blue) !important;
+            caret-color: var(--blue);
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            padding: 12px !important;
+        }
+
+        /* “Подписи/подсказки” (серый на сером/чёрном) */
+        .sub-text,
+        .hint-text,
+        .label-small,
+        .text-label,
+        .value-display {
+            color: rgba(255, 255, 255, 0.70) !important;
+        }
+
+        /* Сплэш: гарантируем видимость текста даже при отключённых анимациях */
+        #splashScreen { color: var(--text-primary); }
+        .splash-greeting,
+        .splash-username { opacity: 1; }
+        @media (prefers-reduced-motion: reduce) {
+            .splash-logo,
+            .splash-greeting,
+            .splash-username {
+                animation: none !important;
+                opacity: 1 !important;
+                transform: none !important;
+            }
         }
     </style>
 </head>
@@ -4772,6 +4983,12 @@
                 }
             }
 
+            // Спецбат: отдельный сигнал (звук+вибро) при первом входе в зону уведомления
+            if (type === 'specbat') {
+                try { playSpecbatSound(); } catch (e) {}
+                try { navigator.vibrate([90, 60, 90, 60, 140]); } catch (e) {}
+            }
+
             aiSpeak(`Внимание, впереди ${label}, примерно через ${distancePretty} метров${suffix}`);
             distanceNotifications.set(markerId, 'near1k');
             console.log(`📍 Голос: маркер ${markerId} (${distance.toFixed(0)}м)`);
@@ -5315,6 +5532,34 @@
             oscillator.stop(audioContext.currentTime + 0.3);
         } catch (e) {
             console.warn('Ошибка при воспроизведении звука:', e?.message);
+        }
+    }
+
+    // Спецбат: отдельный короткий сигнал (двойной бип). Best-effort (в iOS может быть ограничен политикой autoplay)
+    function playSpecbatSound() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const gainNode = audioContext.createGain();
+            gainNode.connect(audioContext.destination);
+            gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+
+            const now = audioContext.currentTime;
+            const makeBeep = (t, freq, dur) => {
+                const osc = audioContext.createOscillator();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(freq, t);
+                osc.connect(gainNode);
+                gainNode.gain.setValueAtTime(0.0001, t);
+                gainNode.gain.exponentialRampToValueAtTime(0.22, t + 0.015);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+                osc.start(t);
+                osc.stop(t + dur);
+            };
+
+            makeBeep(now + 0.00, 1160, 0.085);
+            makeBeep(now + 0.12, 880, 0.11);
+        } catch (e) {
+            // тихо игнорируем
         }
     }
 
@@ -10867,6 +11112,7 @@
             const authorInfo = authorsInfoMap[authorId] || { name: 'Аноним', likes_sum: 0, is_trusted: false };
             const isAdminMarker = isAdminUserId(authorId);
             const showAdminStyle = isAdminMarker && !adminInvisible;
+            const isSpecbatMarker = String(m.type) === 'specbat';
             // Переводим likes_sum в 0..5 звёзд
             function likesToStarsLocal(likes) {
                 const n = Number(likes) || 0;
@@ -10936,9 +11182,11 @@
             const isTrustedAuthor = authorInfo.is_trusted;
             const iconInner = showAdminStyle
                 ? `<div class="admin-marker admin-marker--map"><span class="admin-siren admin-siren-left"></span><span class="admin-siren admin-siren-right"></span>${MAP_ICONS[m.type]}<span class="admin-marker-badge">👑</span></div>`
-                : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`;
+                : (isSpecbatMarker
+                    ? `<div class="specbat-marker" title="Спецбат">${MAP_ICONS[m.type]}<span class="specbat-badge">SB</span></div>`
+                    : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`);
             // Создаем маркер с иконкой и балуном
-            const iconSize = showAdminStyle ? 34 : 30;
+            const iconSize = showAdminStyle ? 34 : (isSpecbatMarker ? 34 : 30);
             const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: iconInner }, 
             { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
             // Добавляем маркер в коллекцию
