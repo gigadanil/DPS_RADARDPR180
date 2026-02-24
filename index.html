@@ -2346,11 +2346,26 @@
     }
 
     async function ensureSupabaseAuth() {
+        function getJwtExp(token) {
+            try {
+                const parts = String(token || '').split('.');
+                if (parts.length !== 3) return 0;
+                const payloadPart = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
+                const json = JSON.parse(atob(normalized));
+                const exp = Number(json?.exp || 0);
+                return Number.isFinite(exp) ? exp : 0;
+            } catch (e) {
+                return 0;
+            }
+        }
+
         const initData = window.Telegram?.WebApp?.initData;
         if (!initData) {
             try {
                 const cachedToken = localStorage.getItem('sb_jwt') || '';
-                const cachedExp = Number(localStorage.getItem('sb_jwt_exp') || 0);
+                const cachedExpRaw = Number(localStorage.getItem('sb_jwt_exp') || 0);
+                const cachedExp = cachedExpRaw > 0 ? cachedExpRaw : getJwtExp(cachedToken);
                 const nowSec = Math.floor(Date.now() / 1000);
                 if (cachedToken && cachedToken.split('.').length === 3 && (!cachedExp || cachedExp > nowSec + 60)) {
                     setSupabaseAuth(cachedToken);
