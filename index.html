@@ -2279,6 +2279,7 @@
 
     function clearSupabaseAuth() {
         closeRealtimeChannels();
+        currentSupabaseToken = '';
         _sb = createSupabaseClient();
         try { window._sb = _sb; } catch(e) {}
         try {
@@ -2294,6 +2295,7 @@
 
     // Клиент Supabase для работы с БД
     let _sb = createSupabaseClient();
+    let currentSupabaseToken = '';
     // Удобно для диагностики из DevTools: в некоторых WebView глобальный `let` не виден как переменная.
     try { window._sb = _sb; } catch(e) {}
 
@@ -2302,6 +2304,8 @@
             clearSupabaseAuth();
             return;
         }
+        if (currentSupabaseToken === token) return;
+        currentSupabaseToken = token;
         closeRealtimeChannels();
         _sb = createSupabaseClient(token);
         try { window._sb = _sb; } catch(e) {}
@@ -4046,13 +4050,26 @@
     async function syncNearbyImportantMarkersToNotifications({ silent = true } = {}) {
         try {
             const sinceIso = new Date(Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS).toISOString();
-            const { data: markers, error } = await _sb
+            let markers = [];
+            let error = null;
+
+            ({ data: markers, error } = await _sb
                 .from('markers')
                 .select('id,type,ts,comment,coords,author_id')
                 .in('type', ['sos', 'dtp'])
                 .gte('ts', sinceIso)
                 .order('ts', { ascending: false })
-                .limit(80);
+                .limit(80));
+
+            // Fallback: на некоторых схемах/типах ts фильтр может дать 400
+            if (error) {
+                ({ data: markers, error } = await _sb
+                    .from('markers')
+                    .select('id,type,ts,comment,coords,author_id')
+                    .in('type', ['sos', 'dtp'])
+                    .order('ts', { ascending: false })
+                    .limit(80));
+            }
 
             if (error || !Array.isArray(markers)) return;
 
@@ -7233,14 +7250,33 @@
             throw new Error('Нет авторизации для админ‑функций. Откройте приложение через Telegram Mini App и попробуйте снова.');
         }
 
-        const resp = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(payload || {})
-        });
+        const callEdge = async (bearer) => {
+            return fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${bearer}`
+                },
+                body: JSON.stringify(payload || {})
+            });
+        };
+
+        let resp = await callEdge(token);
+        if (resp.status === 401) {
+            try {
+                localStorage.removeItem('sb_jwt');
+                localStorage.removeItem('sb_jwt_exp');
+            } catch (e) {}
+            try {
+                const refreshed = await ensureSupabaseAuth();
+                if (refreshed && String(refreshed).split('.').length === 3) {
+                    token = String(refreshed);
+                    resp = await callEdge(token);
+                }
+            } catch (e) {
+                // игнор, обработаем ниже через !resp.ok
+            }
+        }
 
         let data = null;
         let text = '';
