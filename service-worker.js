@@ -1,5 +1,5 @@
 /*
-  Monolith 180 — Service Worker
+  EASY RIDE 180 — Service Worker
   Цель: базовое кэширование статики для работы при плохом сигнале на трассе.
   Политика:
   - HTML (navigation): network-first, fallback на cache.
@@ -134,7 +134,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type !== 'SHOW_NOTIFICATION') return;
-  const title = data.title || 'Monolith 180';
+  const title = data.title || 'EASY RIDE 180';
   const options = data.options || {};
   event.waitUntil(self.registration.showNotification(title, options));
 });
