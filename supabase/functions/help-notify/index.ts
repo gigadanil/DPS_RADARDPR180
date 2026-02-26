@@ -13,7 +13,7 @@ const TELEGRAM_MAIN_BOT_USERNAME = (Deno.env.get("TELEGRAM_MAIN_BOT_USERNAME") |
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "content-type, authorization, x-help-key",
+    "Access-Control-Allow-Headers": "content-type, authorization, x-help-key, apikey",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Content-Type": "application/json"
   };

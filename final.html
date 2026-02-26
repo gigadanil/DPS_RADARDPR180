@@ -4254,6 +4254,7 @@
                 const authToken = String(jwt || '').trim();
                 const headers = {
                     'Content-Type': 'application/json',
+                    apikey: SUPABASE_KEY,
                     'x-help-key': HELP_NOTIFY_SHARED_KEY
                 };
                 if (authToken) {
@@ -7134,15 +7135,16 @@
 
         // Подготовка отображаемых данных
         const displayName = currentDriver.name || ((window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name) || '');
+        const safeCurrentAvatarUrl = sanitizeMediaUrl(currentDriver.avatar_url);
         
         // Отображаем аватар (только фото если есть)
         const avatarEl = document.getElementById('profile-avatar-display');
-        if (currentDriver.avatar_url) {
-            avatarEl.style.backgroundImage = `url('${currentDriver.avatar_url}')`;
+        if (safeCurrentAvatarUrl) {
+            avatarEl.style.backgroundImage = `url('${safeCurrentAvatarUrl}')`;
             avatarEl.style.backgroundSize = 'cover';
             avatarEl.style.backgroundPosition = 'center';
             avatarEl.textContent = '';
-            document.getElementById('profile-avatar-url').value = currentDriver.avatar_url;
+            document.getElementById('profile-avatar-url').value = safeCurrentAvatarUrl;
             document.getElementById('profile-avatar-value').value = '';
         } else {
             // По умолчанию показываем emoji
@@ -7343,8 +7345,9 @@
 
             // Отображаем аватар
             const avatarEl = document.getElementById('profile-avatar-display');
-            if (driver.avatar_url) {
-                avatarEl.style.backgroundImage = `url('${driver.avatar_url}')`;
+            const safeDriverAvatarUrl = sanitizeMediaUrl(driver.avatar_url);
+            if (safeDriverAvatarUrl) {
+                avatarEl.style.backgroundImage = `url('${safeDriverAvatarUrl}')`;
                 avatarEl.style.backgroundSize = 'cover';
                 avatarEl.style.backgroundPosition = 'center';
                 avatarEl.textContent = '';
