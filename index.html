@@ -2227,6 +2227,10 @@
             <button class="action-card-close" onclick="toggleActionCard()">✕</button>
             <span class="addr-label" id="addr-text">Определение адреса...</span>
             <div class="markers-counter" id="markersCounter">Загрузка...</div>
+            <div id="markerRenderModeControl" style="display:flex; gap:6px; margin-bottom:8px;">
+                <button id="markerRenderAllBtn" class="main-btn" onclick="setMarkerRenderMode('all')" style="flex:1; padding:7px 10px; font-size:12px; border-radius:8px; background:#9c9c9c;">🌍 Все</button>
+                <button id="markerRenderNearbyBtn" class="main-btn" onclick="setMarkerRenderMode('nearby')" style="flex:1; padding:7px 10px; font-size:12px; border-radius:8px; background:#34c759;">📍 Рядом</button>
+            </div>
             <div class="weather-widget" id="weatherWidget">🌦 Погода: загрузка...</div>
             <div class="type-selector">
                 <div class="type-tabs">
@@ -2782,6 +2786,18 @@
     let lastUserPositionTime = null; // ms
     let userSpeedKmh = 0; // скорость в км/ч
     let userHeadingDeg = 0; // курс (0..360)
+    let dynamicCourseEnabled = true;
+    let dynamicCourseCompassDeg = null;
+    let dynamicCourseGpsDeg = null;
+    let dynamicCourseFusedDeg = null;
+    let dynamicCourseLastCameraDeg = null;
+    let dynamicCourseLastCompassTs = 0;
+    let dynamicCourseCameraTimerId = null;
+    let dynamicCourseCompassInit = false;
+    const DYNAMIC_COURSE_PITCH_DEG = 60;
+    const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
+    const DYNAMIC_COURSE_AHEAD_MAX_M = 2300;
+    const DYNAMIC_COURSE_UPDATE_MS = 450;
     // Текущие серверные ачивки (ключ -> count)
     let currentAchievementCounts = {};
     // Коллекция для маркеров (чтобы не удалять служебные geoObjects при обновлении)
@@ -2892,6 +2908,8 @@
     let proximityRequiresFollow = false;
     // Дистанция предупреждения (в метрах)
     let warningDistanceMeters = 500;
+    const MARKER_RENDER_MODE_KEY = 'markerRenderMode';
+    let markerRenderMode = 'nearby'; // 'nearby' | 'all'
     // Флаг видимости нижнего виджета
     let actionCardVisible = false;
     // Флаг для отключения автосцентрирования GPS после размещения метки
@@ -2902,6 +2920,8 @@
     const CACHE_DURATION = 300000; // Кэширование на 5 минут
     // Таймер для дебаунса loadMarkers
     let loadMarkersTimeout = null;
+    let loadMarkersInFlight = false;
+    let loadMarkersPending = false;
 
     function isAdminUserId(userId) {
         return String(userId) === String(ADMIN_ID);
@@ -4272,8 +4292,8 @@
         };
     }
     
-    // Оптимизированный дебаунс для loadMarkers (750ms вместо 500ms)
-    const loadMarkersDebounced = debounce(() => loadMarkers(), 750);
+    // Оптимизированный дебаунс для loadMarkers
+    const loadMarkersDebounced = debounce(() => loadMarkers(), 300);
     
     // ============= ФУНКЦИИ ДЛЯ УВЕДОМЛЕНИЙ О РАССТОЯНИИ И ОЗВУЧКИ =============
     
@@ -5382,6 +5402,36 @@
         setProximityMode(proximityRequiresFollow);
     }
 
+    function updateMarkerRenderModeUI() {
+        const allBtn = document.getElementById('markerRenderAllBtn');
+        const nearbyBtn = document.getElementById('markerRenderNearbyBtn');
+        const isAll = markerRenderMode === 'all';
+        if (allBtn) {
+            allBtn.style.background = isAll ? '#34c759' : '#9c9c9c';
+            allBtn.style.color = 'white';
+        }
+        if (nearbyBtn) {
+            nearbyBtn.style.background = isAll ? '#9c9c9c' : '#34c759';
+            nearbyBtn.style.color = 'white';
+        }
+    }
+
+    function setMarkerRenderMode(mode) {
+        const next = (mode === 'all') ? 'all' : 'nearby';
+        markerRenderMode = next;
+        updateMarkerRenderModeUI();
+        try { localStorage.setItem(MARKER_RENDER_MODE_KEY, markerRenderMode); } catch (e) {}
+        if (typeof loadMarkersDebounced === 'function') loadMarkersDebounced();
+    }
+
+    function loadMarkerRenderMode() {
+        try {
+            const saved = String(localStorage.getItem(MARKER_RENDER_MODE_KEY) || '').trim();
+            if (saved === 'all' || saved === 'nearby') markerRenderMode = saved;
+        } catch (e) {}
+        updateMarkerRenderModeUI();
+    }
+
         function isReliableGeoPosition(lat, lon, accuracyMeters) {
                 const a = Number(accuracyMeters);
                 if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
@@ -5467,6 +5517,9 @@
                         } else if (prev && Array.isArray(prev) && prev.length >= 2) {
                             userHeadingDeg = (calculateBearingDeg(prev[0], prev[1], latitude, longitude) + 360) % 360;
                         }
+                        if (Number.isFinite(Number(userHeadingDeg))) {
+                            dynamicCourseGpsDeg = normalizeDeg(userHeadingDeg);
+                        }
                     } catch(e) {}
 
                     lastUserPositionCoords = [latitude, longitude];
@@ -5502,7 +5555,9 @@
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
+                        try { updateDynamicCourseCamera(); } catch (e) {
+                            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
+                        }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
@@ -5525,7 +5580,10 @@
                                 const { latitude, longitude } = pos.coords;
                                 try {
                                     const h = pos?.coords?.heading;
-                                    if (Number.isFinite(Number(h))) userHeadingDeg = (Number(h) + 360) % 360;
+                                    if (Number.isFinite(Number(h))) {
+                                        userHeadingDeg = (Number(h) + 360) % 360;
+                                        dynamicCourseGpsDeg = normalizeDeg(userHeadingDeg);
+                                    }
                                 } catch(e) {}
                                 userLocation = [latitude, longitude];
                                 lastUserPositionCoords = [latitude, longitude];
@@ -5555,6 +5613,166 @@
         const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLam);
         const theta = Math.atan2(y, x);
         return (toDeg(theta) + 360) % 360;
+    }
+
+    function normalizeDeg(v) {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return 0;
+        return ((n % 360) + 360) % 360;
+    }
+
+    function shortestAngleDeltaDeg(fromDeg, toDeg) {
+        let d = normalizeDeg(toDeg) - normalizeDeg(fromDeg);
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return d;
+    }
+
+    function smoothAngleDeg(currentDeg, targetDeg, alpha = 0.18) {
+        if (!Number.isFinite(Number(currentDeg))) return normalizeDeg(targetDeg);
+        const delta = shortestAngleDeltaDeg(currentDeg, targetDeg);
+        return normalizeDeg(Number(currentDeg) + delta * Math.max(0.02, Math.min(1, Number(alpha) || 0.18)));
+    }
+
+    function blendCircularDeg(aDeg, aWeight, bDeg, bWeight) {
+        const aw = Math.max(0, Number(aWeight) || 0);
+        const bw = Math.max(0, Number(bWeight) || 0);
+        if (aw <= 0 && bw <= 0) return null;
+        const a = normalizeDeg(aDeg) * Math.PI / 180;
+        const b = normalizeDeg(bDeg) * Math.PI / 180;
+        const x = Math.cos(a) * aw + Math.cos(b) * bw;
+        const y = Math.sin(a) * aw + Math.sin(b) * bw;
+        if (Math.abs(x) < 1e-6 && Math.abs(y) < 1e-6) return null;
+        return normalizeDeg(Math.atan2(y, x) * 180 / Math.PI);
+    }
+
+    function destinationPointByBearing(lat, lon, bearingDeg, distanceMeters) {
+        const R = 6371000;
+        const br = normalizeDeg(bearingDeg) * Math.PI / 180;
+        const d = Math.max(0, Number(distanceMeters) || 0);
+        const phi1 = Number(lat) * Math.PI / 180;
+        const lam1 = Number(lon) * Math.PI / 180;
+        const sinPhi1 = Math.sin(phi1);
+        const cosPhi1 = Math.cos(phi1);
+        const sinD = Math.sin(d / R);
+        const cosD = Math.cos(d / R);
+        const sinPhi2 = sinPhi1 * cosD + cosPhi1 * sinD * Math.cos(br);
+        const phi2 = Math.asin(Math.max(-1, Math.min(1, sinPhi2)));
+        const y = Math.sin(br) * sinD * cosPhi1;
+        const x = cosD - sinPhi1 * Math.sin(phi2);
+        const lam2 = lam1 + Math.atan2(y, x);
+        return [phi2 * 180 / Math.PI, ((lam2 * 180 / Math.PI + 540) % 360) - 180];
+    }
+
+    function extractCompassHeadingDeg(e) {
+        if (!e) return null;
+        if (Number.isFinite(Number(e.webkitCompassHeading))) {
+            return normalizeDeg(Number(e.webkitCompassHeading));
+        }
+        if (Number.isFinite(Number(e.alpha))) {
+            return normalizeDeg(360 - Number(e.alpha));
+        }
+        return null;
+    }
+
+    function onDynamicCourseOrientation(e) {
+        const compass = extractCompassHeadingDeg(e);
+        if (compass === null) return;
+        const now = Date.now();
+        dynamicCourseLastCompassTs = now;
+
+        const speed = Number(userSpeedKmh) || 0;
+        const alpha = speed > 80 ? 0.10 : 0.20;
+        dynamicCourseCompassDeg = (dynamicCourseCompassDeg === null)
+            ? compass
+            : smoothAngleDeg(dynamicCourseCompassDeg, compass, alpha);
+    }
+
+    async function requestDynamicCourseOrientationPermission() {
+        try {
+            const D = window.DeviceOrientationEvent;
+            if (!D || typeof D.requestPermission !== 'function') return true;
+            const state = await D.requestPermission();
+            return state === 'granted';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function getDynamicCourseHeadingDeg() {
+        const speed = Number(userSpeedKmh) || 0;
+        const gpsDeg = Number.isFinite(Number(dynamicCourseGpsDeg)) ? normalizeDeg(dynamicCourseGpsDeg) : null;
+        const compassFresh = (Date.now() - Number(dynamicCourseLastCompassTs || 0)) < 6000;
+        const compassDeg = (compassFresh && Number.isFinite(Number(dynamicCourseCompassDeg))) ? normalizeDeg(dynamicCourseCompassDeg) : null;
+
+        if (gpsDeg === null && compassDeg === null) return null;
+        if (gpsDeg !== null && compassDeg === null) return gpsDeg;
+        if (gpsDeg === null && compassDeg !== null) return compassDeg;
+
+        let gpsWeight = Math.max(0.1, Math.min(0.95, (speed - 10) / 90));
+        if (speed >= 140) gpsWeight = 0.97;
+        const compassWeight = Math.max(0.05, 1 - gpsWeight);
+        return blendCircularDeg(compassDeg, compassWeight, gpsDeg, gpsWeight);
+    }
+
+    function updateDynamicCourseCamera() {
+        if (!dynamicCourseEnabled) return;
+        if (!myMap || !autoFollow || !userLocation) return;
+
+        const heading = getDynamicCourseHeadingDeg();
+        if (!Number.isFinite(Number(heading))) return;
+
+        const speed = Number(userSpeedKmh) || 0;
+        const aheadMeters = Math.max(
+            DYNAMIC_COURSE_AHEAD_MIN_M,
+            Math.min(DYNAMIC_COURSE_AHEAD_MAX_M, 650 + speed * 10)
+        );
+        const cameraTarget = destinationPointByBearing(userLocation[0], userLocation[1], heading, aheadMeters);
+
+        const smoothedHeading = (dynamicCourseFusedDeg === null)
+            ? normalizeDeg(heading)
+            : smoothAngleDeg(dynamicCourseFusedDeg, heading, 0.22);
+        dynamicCourseFusedDeg = smoothedHeading;
+        userHeadingDeg = smoothedHeading;
+
+        try {
+            const mapAny = myMap;
+            if (mapAny?.options?.set) {
+                // В API 2.x это best-effort: где поддерживается, карта повернётся/наклонится.
+                mapAny.options.set('rotation', smoothedHeading);
+                mapAny.options.set('azimuth', smoothedHeading);
+                mapAny.options.set('tilt', DYNAMIC_COURSE_PITCH_DEG);
+            }
+        } catch (e) {}
+
+        const canMove = !Number.isFinite(dynamicCourseLastCameraDeg)
+            || Math.abs(shortestAngleDeltaDeg(dynamicCourseLastCameraDeg, smoothedHeading)) >= 1.2
+            || speed >= 12;
+        if (!canMove) return;
+
+        dynamicCourseLastCameraDeg = smoothedHeading;
+        try {
+            myMap.setCenter(cameraTarget, myMap.getZoom() || 17, { duration: 240, timingFunction: 'ease-out' });
+        } catch (e) {
+            try { myMap.setCenter(cameraTarget, myMap.getZoom() || 17); } catch (e2) {}
+        }
+    }
+
+    function startDynamicCourseLoop() {
+        if (dynamicCourseCameraTimerId) return;
+        dynamicCourseCameraTimerId = setInterval(() => {
+            try { updateDynamicCourseCamera(); } catch (e) {}
+        }, DYNAMIC_COURSE_UPDATE_MS);
+    }
+
+    function initDynamicCourseSensors() {
+        if (dynamicCourseCompassInit) return;
+        dynamicCourseCompassInit = true;
+        try {
+            window.addEventListener('deviceorientationabsolute', onDynamicCourseOrientation, true);
+            window.addEventListener('deviceorientation', onDynamicCourseOrientation, true);
+        } catch (e) {}
+        startDynamicCourseLoop();
     }
     
     // Функция обновления маркера текущего местоположения на карте
@@ -5657,8 +5875,11 @@
         }
         autoFollow = true;
         updateFollowButton();
+        requestDynamicCourseOrientationPermission().catch(()=>{});
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
-        try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
+        try { updateDynamicCourseCamera(); } catch (e) {
+            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
+        }
     }
 
     // Переключатель автослежения GPS
@@ -5667,7 +5888,10 @@
         updateFollowButton();
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         if (autoFollow && userLocation && myMap) {
-            try { myMap.setCenter(userLocation, 17); } catch(e) { console.warn(e); }
+            requestDynamicCourseOrientationPermission().catch(()=>{});
+            try { updateDynamicCourseCamera(); } catch(e) {
+                try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
+            }
         }
     }
 
@@ -5995,6 +6219,7 @@
         loadVoiceStyle();
         try { initMonolithVoiceToggle(); } catch(e) {}
         loadProximityMode();
+        loadMarkerRenderMode();
         loadWarningDistance();
         loadSpeedometerPreference();
         restoreTypeCategoryPreference();
@@ -7964,7 +8189,7 @@
         markersRealtimeTimer = setTimeout(() => {
             markersRealtimeTimer = null;
             if (typeof loadMarkers === 'function') loadMarkers().catch?.(()=>{});
-        }, 300);
+        }, 120);
     }
 
     function scheduleMessagesRealtimeReload() {
@@ -11051,6 +11276,7 @@
                 });
                 if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
                 if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
+                loadMarkersDebounced();
             });
             // Если пользователь начал вручную передвигать карту — отключаем автоследование
             myMap.events.add('actionstart', () => {
@@ -11076,12 +11302,13 @@
             
             // Инициализируем GPS отслеживание
             initGPS();
+            initDynamicCourseSensors();
             // Обновим состояние кнопки автослежения
             try { updateFollowButton(); } catch(e) { /* ignore */ }
             // Загружаем маркеры с сервера
             loadMarkers();
-            // Обновляем маркеры каждые 20 секунд (вместо 10) для экономии батареи
-            setInterval(loadMarkersDebounced, 20000);
+            // Fallback-поллинг на случай потери realtime
+            setInterval(loadMarkersDebounced, 10000);
 
             // Если actionCard скрыт по умолчанию, показываем кнопку открытия
             const openBtn = document.getElementById('openActionBtn');
@@ -11123,7 +11350,7 @@
                 initGPS();
                 try { updateFollowButton(); } catch(e) { /* ignore */ }
                 loadMarkers();
-                setInterval(loadMarkersDebounced, 20000);
+                setInterval(loadMarkersDebounced, 10000);
                 
                 const openBtn = document.getElementById('openActionBtn');
                 if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
@@ -11234,12 +11461,19 @@
 
     // Функция загрузки всех активных маркеров с карты
     async function loadMarkers() {
+        if (loadMarkersInFlight) {
+            loadMarkersPending = true;
+            return;
+        }
+        loadMarkersInFlight = true;
+        loadMarkersPending = false;
+
         // Загружаем маркеры, которые еще не истекли (exp > текущее время)
         // Загружаем все метки и фильтруем их по exp на клиенте,
         // чтобы корректно работать с разными типами поля exp (BIGINT или TIMESTAMPTZ)
         try {
             const { data: markers } = await Promise.race([
-                _sb.from('markers').select('*'),
+                _sb.from('markers').select('id,coords,type,comment,photo_url,votes_up,votes_down,author_id,leave_confirmations,exp,ts'),
                 new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Markers load timeout')), 10000)
                 )
@@ -11262,8 +11496,43 @@
             typeCounts[m.type] = (typeCounts[m.type] || 0) + 1;
         });
         
-        // Обновляем счётчик в UI
+        // Элемент счётчика в UI
         const counterEl = document.getElementById('markersCounter');
+        
+        // Используем GPS координаты пользователя, иначе центр карты
+        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : myMap.getCenter();
+
+        // Для производительности рендерим только метки в видимой области (+запас)
+        // или рядом с пользователем (чтобы голос/подсказки не терялись при смещении карты).
+        const mapBounds = (myMap && typeof myMap.getBounds === 'function') ? myMap.getBounds() : null;
+        const hasBounds = Array.isArray(mapBounds) && mapBounds.length >= 2 && Array.isArray(mapBounds[0]) && Array.isArray(mapBounds[1]);
+        const VIEWPORT_MARGIN_DEG = 0.035;
+        const NEARBY_RENDER_METERS = 3000;
+        const renderMarkers = (markerRenderMode === 'all')
+            ? activeMarkers
+            : activeMarkers.filter(m => {
+                const coords = extractMarkerCoordsForNotif(m);
+                if (!coords) return false;
+
+                let inBounds = true;
+                if (hasBounds) {
+                    const sw = mapBounds[0];
+                    const ne = mapBounds[1];
+                    inBounds = coords.lat >= (Number(sw[0]) - VIEWPORT_MARGIN_DEG)
+                        && coords.lat <= (Number(ne[0]) + VIEWPORT_MARGIN_DEG)
+                        && coords.lon >= (Number(sw[1]) - VIEWPORT_MARGIN_DEG)
+                        && coords.lon <= (Number(ne[1]) + VIEWPORT_MARGIN_DEG);
+                }
+
+                let nearUser = false;
+                if (Array.isArray(userCoords) && userCoords.length >= 2) {
+                    nearUser = calculateDistance(Number(userCoords[0]), Number(userCoords[1]), Number(coords.lat), Number(coords.lon)) <= NEARBY_RENDER_METERS;
+                }
+
+                return inBounds || nearUser;
+            });
+
+        // Обновляем счётчик в UI (включая видимость в viewport-режиме)
         if (counterEl) {
             const typeNames = {
                 dps: 'ДПС',
@@ -11288,61 +11557,58 @@
             }
             if (!hasCounters) {
                 counterHTML = '✅ Активных событий нет';
+            } else {
+                const modeLabel = markerRenderMode === 'all' ? 'Все' : 'Рядом';
+                counterHTML += `<div style="margin-top:4px; font-size:11px; opacity:.85;">Режим: ${modeLabel} • Показано на карте: ${renderMarkers.length} из ${activeMarkers.length}</div>`;
             }
             counterEl.innerHTML = counterHTML;
         }
-        
+
         // Удаляем только маркеры, которые мы рендерим (не трогаем userLocationMarker и служебные объекты)
         if (markersCollection) markersCollection.removeAll();
-        // Используем GPS координаты пользователя, иначе центр карты
-        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : myMap.getCenter();
 
         // Подготовим данные об авторах (имя, likes_sum, is_trusted)
-        const authorIds = Array.from(new Set(markers.map(m => String(m.author_id))));
+        const authorIds = Array.from(new Set(renderMarkers.map(m => String(m.author_id))));
         const authorsInfoMap = {}; // user_id -> { name, likes_sum, is_trusted }
         try {
             // Запрашиваем имя и рейтинг из drivers (если таблица/колонки есть)
-            const { data: driversInfo } = await _sb.from('drivers').select('user_id,name,likes_sum,is_trusted').in('user_id', authorIds);
-            if (driversInfo) {
-                driversInfo.forEach(d => {
-                    const id = String(d.user_id);
-                    authorsInfoMap[id] = {
-                        name: d.name || 'Аноним',
-                        likes_sum: (typeof d.likes_sum !== 'undefined' && d.likes_sum !== null) ? Number(d.likes_sum) : 0,
-                        is_trusted: !!d.is_trusted
-                    };
-                });
+            if (authorIds.length > 0) {
+                const { data: driversInfo } = await _sb.from('drivers').select('user_id,name,likes_sum,is_trusted').in('user_id', authorIds);
+                if (driversInfo) {
+                    driversInfo.forEach(d => {
+                        const id = String(d.user_id);
+                        authorsInfoMap[id] = {
+                            name: d.name || 'Аноним',
+                            likes_sum: (typeof d.likes_sum !== 'undefined' && d.likes_sum !== null) ? Number(d.likes_sum) : 0,
+                            is_trusted: !!d.is_trusted
+                        };
+                    });
+                }
             }
         } catch (e) {
             console.warn('Не удалось получить данные drivers для авторов (возможно, таблица/колонки отсутствуют):', e?.message || e);
         }
 
-        // Для авторов без данных подсчитаем суммарные лайки по уже загруженным меткам
+        // Для авторов без данных подсчитаем суммарные лайки локально по уже загруженным активным меткам
         const missingAuthors = authorIds.filter(id => !authorsInfoMap[id]);
         if (missingAuthors.length > 0) {
-            try {
-                const { data: allMarkers } = await _sb.from('markers').select('author_id,votes_up').in('author_id', missingAuthors);
-                const sumMap = {};
-                if (allMarkers) {
-                    allMarkers.forEach(r => {
-                        const id = String(r.author_id);
-                        sumMap[id] = (sumMap[id] || 0) + (r.votes_up || 0);
-                    });
-                }
-                missingAuthors.forEach(id => {
-                    const likes = sumMap[id] || 0;
-                    authorsInfoMap[id] = { name: 'Аноним', likes_sum: likes, is_trusted: likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20) };
-                });
-            } catch (e) {
-                console.warn('Не удалось подсчитать суммарные лайки для авторов:', e?.message || e);
-            }
+            const sumMap = {};
+            activeMarkers.forEach(r => {
+                const id = String(r.author_id);
+                if (!missingAuthors.includes(id)) return;
+                sumMap[id] = (sumMap[id] || 0) + (r.votes_up || 0);
+            });
+            missingAuthors.forEach(id => {
+                const likes = sumMap[id] || 0;
+                authorsInfoMap[id] = { name: 'Аноним', likes_sum: likes, is_trusted: likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20) };
+            });
         }
 
         // SOS: кто "в пути" (Edge Function, чтобы не упираться в RLS таблицы)
         const sosEnrouteByMarker = {}; // marker_id -> user_id[]
         const sosResponderNames = {}; // user_id -> name
         try {
-            const sosIds = activeMarkers
+            const sosIds = renderMarkers
                 .filter(x => String(x?.type) === 'sos')
                 .map(x => Number(x?.id))
                 .filter(n => Number.isFinite(n) && n > 0);
@@ -11388,7 +11654,7 @@
         } catch (e) {}
 
         // Для каждого маркера создаем объект на карте
-        activeMarkers.forEach(m => {
+        renderMarkers.forEach(m => {
             // Получаем ID автора в начале цикла
             const authorId = String(m.author_id);
             
@@ -11511,6 +11777,12 @@
         }
         } catch (error) {
             console.error('Ошибка при загрузке маркеров (timeout или ошибка БД):', error?.message);
+        } finally {
+            loadMarkersInFlight = false;
+            if (loadMarkersPending) {
+                loadMarkersPending = false;
+                setTimeout(() => { loadMarkers().catch?.(()=>{}); }, 60);
+            }
         }
     }
 </script>
