@@ -4434,15 +4434,20 @@
         if (!window.ymaps || !ymaps.geocode) return '';
         if (monolithStreetInflight.has(markerId)) return '';
 
-        const req = ymaps.geocode([lat, lon]).then(res => {
-            const obj = res?.geoObjects?.get?.(0);
-            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
-            const street = extractStreetFromAddressLine(line);
-            if (street) monolithStreetCache.set(markerId, street);
-            return street;
-        }).catch(() => '').finally(() => {
-            monolithStreetInflight.delete(markerId);
-        });
+        const req = ymaps.geocode([lat, lon]).then(
+            (res) => {
+                const obj = res?.geoObjects?.get?.(0);
+                const line = obj ? String(obj.getAddressLine() || '').trim() : '';
+                const street = extractStreetFromAddressLine(line);
+                if (street) monolithStreetCache.set(markerId, street);
+                monolithStreetInflight.delete(markerId);
+                return street;
+            },
+            () => {
+                monolithStreetInflight.delete(markerId);
+                return '';
+            }
+        );
 
         monolithStreetInflight.set(markerId, req);
         return '';
@@ -11868,7 +11873,26 @@
                 comment: rawComment, // Комментарий пользователя
                 author_id: uid // ID автора маркера
             };
-            const { data: insertedMarkers, error } = await _sb.from('markers').insert([markerToCreate]).select('id,type,comment,coords');
+            let insertedMarkers = null;
+            let error = null;
+
+            ({ data: insertedMarkers, error } = await _sb
+                .from('markers')
+                .insert([markerToCreate])
+                .select('id,type,comment,coords'));
+
+            if (error) {
+                const fallbackMarkerToCreate = {
+                    coords: coords,
+                    type: selectedType,
+                    comment: rawComment,
+                    author_id: uid
+                };
+                ({ data: insertedMarkers, error } = await _sb
+                    .from('markers')
+                    .insert([fallbackMarkerToCreate])
+                    .select('id,type,comment,coords'));
+            }
 
             if (!error) {
                 try { localStorage.setItem(rateKey, String(Date.now())); } catch(e) {}
@@ -11890,6 +11914,8 @@
                     notifyHelpBotAboutMarker(insertedMarkers[0]);
                 }
                 loadMarkers();
+            } else {
+                throw error;
             }
         } catch (e) {
             console.warn('Ошибка при добавлении метки:', e?.message || e);
