@@ -12015,13 +12015,28 @@
         // Загружаем все метки и фильтруем их по exp на клиенте,
         // чтобы корректно работать с разными типами поля exp (BIGINT или TIMESTAMPTZ)
         try {
-            const { data: markers } = await Promise.race([
-                _sb.from('markers').select('id,coords,type,comment,photo_url,votes_up,votes_down,author_id,leave_confirmations,exp,ts'),
+            const queryMarkers = () => _sb.from('markers').select('id,coords,type,comment,photo_url,votes_up,votes_down,author_id,leave_confirmations,exp,ts');
+            const queryWithTimeout = (factory) => Promise.race([
+                factory(),
                 new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Markers load timeout')), 10000)
                 )
             ]);
-            if (!markers || !myMap) {
+
+            let markers = null;
+            let markersError = null;
+            ({ data: markers, error: markersError } = await queryWithTimeout(queryMarkers));
+
+            if (markersError) {
+                const errText = String(markersError?.message || markersError?.code || '').toLowerCase();
+                if (errText.includes('unauthorized') || errText.includes('jwt') || errText.includes('token') || String(markersError?.code || '') === '401') {
+                    try { clearSupabaseAuth(); } catch (e) {}
+                    ({ data: markers, error: markersError } = await queryWithTimeout(queryMarkers));
+                }
+            }
+
+            if (markersError || !markers || !myMap) {
+                if (markersError) console.warn('Ошибка загрузки маркеров:', markersError?.message || markersError);
                 console.warn('Маркеры не загружены или карта не инициализирована');
                 return;
             }
@@ -12683,7 +12698,8 @@
 
         async function checkBanStatus() {
             try {
-                const userIdString = String(uid);
+                const userIdString = String(uid ?? '').trim();
+                if (!/^\d+$/.test(userIdString)) return null;
                 const { data, error } = await _sb
                     .from('bans')
                     .select('*')
@@ -12691,6 +12707,11 @@
                     .maybeSingle();
 
                 if (error && error.code !== 'PGRST116') {
+                    const errText = String(error?.message || error?.code || '').toLowerCase();
+                    if (errText.includes('unauthorized') || errText.includes('jwt') || errText.includes('token')) {
+                        try { clearSupabaseAuth(); } catch (e) {}
+                        return null;
+                    }
                     console.error('Ошибка проверки бана:', error);
                     return null;
                 }
