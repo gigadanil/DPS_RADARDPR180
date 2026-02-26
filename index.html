@@ -2557,6 +2557,16 @@
         } catch (e) {}
     }
 
+    function isFeatureAllowedByPolicy(featureName) {
+        try {
+            const policy = document.permissionsPolicy || document.featurePolicy;
+            if (!policy || typeof policy.allowsFeature !== 'function') return true;
+            return !!policy.allowsFeature(String(featureName || ''));
+        } catch (e) {
+            return true;
+        }
+    }
+
     function applyResponsiveUiScale() {
         try {
             const h = Math.max(0, Number(window.innerHeight) || 0);
@@ -4124,7 +4134,7 @@
 
     async function syncNearbyImportantMarkersToNotifications({ silent = true } = {}) {
         try {
-            const sinceIso = new Date(Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS).toISOString();
+            const sinceMs = Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS;
             let markers = [];
             let error = null;
 
@@ -4132,21 +4142,15 @@
                 .from('markers')
                 .select('id,type,ts,comment,coords,author_id')
                 .in('type', ['sos', 'dtp'])
-                .gte('ts', sinceIso)
                 .order('ts', { ascending: false })
                 .limit(80));
 
-            // Fallback: на некоторых схемах/типах ts фильтр может дать 400
-            if (error) {
-                ({ data: markers, error } = await _sb
-                    .from('markers')
-                    .select('id,type,ts,comment,coords,author_id')
-                    .in('type', ['sos', 'dtp'])
-                    .order('ts', { ascending: false })
-                    .limit(80));
-            }
-
             if (error || !Array.isArray(markers)) return;
+
+            markers = markers.filter(marker => {
+                const tsMs = parseMarkerTimestampToMs(marker?.ts);
+                return Number.isFinite(tsMs) ? tsMs >= sinceMs : true;
+            });
 
             markers.forEach(marker => {
                 if (String(marker?.author_id || '') === String(uid || '')) return;
@@ -4197,9 +4201,20 @@
                 if (cooldownUntil > nowMs) return;
             } catch (e) {}
 
+            const hasInitData = !!window.Telegram?.WebApp?.initData;
             let token = localStorage.getItem('sb_jwt') || '';
             const refreshed = await ensureSupabaseAuth();
-            token = refreshed || token || localStorage.getItem('sb_jwt') || '';
+            if (refreshed) {
+                token = refreshed;
+            } else if (hasInitData) {
+                try {
+                    localStorage.removeItem('sb_jwt');
+                    localStorage.removeItem('sb_jwt_exp');
+                } catch (e) {}
+                token = '';
+            } else {
+                token = token || localStorage.getItem('sb_jwt') || '';
+            }
             if (!token) {
                 console.warn('Пропуск отправки в help-notify: JWT токен отсутствует');
                 return;
@@ -4717,6 +4732,13 @@
 
     async function monolithRequestWakeLock() {
         if (!('wakeLock' in navigator)) return;
+        if (!isFeatureAllowedByPolicy('screen-wake-lock')) {
+            if (!monolithRequestWakeLock.__policyWarned) {
+                monolithRequestWakeLock.__policyWarned = true;
+                console.info('Wake Lock недоступен в текущем контейнере Telegram/WebView — работаем без него.');
+            }
+            return;
+        }
         if (!monolithIsVoiceSessionActive()) return;
         if (!isMonolithVoiceEnabled()) return;
         if (document.hidden) return; // screen wake lock обычно требует видимую вкладку
@@ -6278,6 +6300,15 @@
     function initDynamicCourseSensors() {
         if (dynamicCourseCompassInit) return;
         dynamicCourseCompassInit = true;
+        const orientationAllowed = isFeatureAllowedByPolicy('accelerometer') && isFeatureAllowedByPolicy('gyroscope');
+        if (!orientationAllowed) {
+            if (!initDynamicCourseSensors.__policyWarned) {
+                initDynamicCourseSensors.__policyWarned = true;
+                console.info('Компасные сенсоры недоступны по policy — курс остаётся по GPS.');
+            }
+            startDynamicCourseLoop();
+            return;
+        }
         try {
             window.addEventListener('deviceorientationabsolute', onDynamicCourseOrientation, true);
             window.addEventListener('deviceorientation', onDynamicCourseOrientation, true);
@@ -9567,6 +9598,13 @@
     async function pttRequestWakeLock() {
         try {
             if (!('wakeLock' in navigator)) return;
+            if (!isFeatureAllowedByPolicy('screen-wake-lock')) {
+                if (!pttRequestWakeLock.__policyWarned) {
+                    pttRequestWakeLock.__policyWarned = true;
+                    console.info('PTT Wake Lock недоступен в текущем контейнере Telegram/WebView.');
+                }
+                return;
+            }
             if (document.hidden) return;
             if (pttWakeLock) return;
             pttWakeLock = await navigator.wakeLock.request('screen');
@@ -12015,7 +12053,7 @@
         const hasBounds = Array.isArray(mapBounds) && mapBounds.length >= 2 && Array.isArray(mapBounds[0]) && Array.isArray(mapBounds[1]);
         const VIEWPORT_MARGIN_DEG = 0.035;
         const NEARBY_RENDER_METERS = 3000;
-        const renderMarkers = (markerRenderMode === 'all')
+        let renderMarkers = (markerRenderMode === 'all')
             ? activeMarkers
             : activeMarkers.filter(m => {
                 const coords = extractMarkerCoordsForNotif(m);
@@ -12038,6 +12076,10 @@
 
                 return inBounds || nearUser;
             });
+
+        if (markerRenderMode !== 'all' && renderMarkers.length === 0 && activeMarkers.length > 0) {
+            renderMarkers = activeMarkers;
+        }
 
         // Обновляем счётчик в UI (включая видимость в viewport-режиме)
         if (counterEl) {
@@ -12163,6 +12205,7 @@
 
         // Для каждого маркера создаем объект на карте
         renderMarkers.forEach(m => {
+            try {
             // Получаем ID автора в начале цикла
             const authorId = String(m.author_id);
             
@@ -12253,10 +12296,15 @@
                     : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`);
             // Создаем маркер с иконкой и балуном
             const iconSize = showAdminStyle ? 34 : (isSpecbatMarker ? 34 : 30);
-            const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: iconInner }, 
+            const normalizedCoords = extractMarkerCoordsForNotif(m);
+            if (!normalizedCoords) return;
+            const markerCoordsForMap = [Number(normalizedCoords.lat), Number(normalizedCoords.lon)];
+            if (!Number.isFinite(markerCoordsForMap[0]) || !Number.isFinite(markerCoordsForMap[1])) return;
+
+            const p = new ymaps.Placemark(markerCoordsForMap, { balloonContent: bHtml, iconContent: iconInner }, 
             { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
             const markerDescriptor = {
-                coords: Array.isArray(m.coords) ? [Number(m.coords[0]), Number(m.coords[1])] : null,
+                coords: markerCoordsForMap,
                 icon: MAP_ICONS[m.type] || '📍',
                 hint: `${getMarkerLabel(m.type)}${m.comment ? ` • ${String(m.comment).slice(0, 48)}` : ''}`,
                 balloonHtml: bHtml
@@ -12280,6 +12328,9 @@
                         distanceNotifications.delete(m.id);
                     }
                 }
+            }
+            } catch (e) {
+                console.warn('Пропуск повреждённой метки:', m?.id, e?.message || e);
             }
         });
         if (dtpHeatmapEnabled) {
