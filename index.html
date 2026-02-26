@@ -4335,7 +4335,9 @@
     }
 
     function formatMonolithVoiceDistance(distanceMeters) {
-        const m = Math.max(0, Math.round(Number(distanceMeters) || 0));
+        let m = Math.max(0, Number(distanceMeters) || 0);
+        if (m >= 100) m = Math.round(m / 10) * 10;
+        else m = Math.round(m);
         if (m === 1000) return '1 километр';
         if (m === 2000) return '2 километра';
         return `${m} метров`;
@@ -4360,10 +4362,10 @@
         return labels[t] || getMarkerLabel(t);
     }
 
-    function monolithBuildApproachVoiceText(type, street, triggerDistanceMeters) {
+    function monolithBuildApproachVoiceText(type, street, remainingDistanceMeters) {
         const target = monolithGetTargetVoiceLabel(type);
         const place = String(street || '').trim() || 'этой улице';
-        return `Внимание! ${target} на ${place}. Осталось ${formatMonolithVoiceDistance(triggerDistanceMeters)}`;
+        return `Внимание! ${target} на ${place}. Осталось ${formatMonolithVoiceDistance(remainingDistanceMeters)}`;
     }
 
     function monolithBuildSosPriorityText(street) {
@@ -4615,6 +4617,7 @@
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
 
+        monolithSoftResumeSpeech();
         monolithEnsureVoicesReady();
         monolithTtsQueue.push(t);
 
@@ -4627,7 +4630,7 @@
 
     async function monolithRequestWakeLock() {
         if (!('wakeLock' in navigator)) return;
-        if (!monolithNavigationActive) return;
+        if (!monolithIsVoiceSessionActive()) return;
         if (!isMonolithVoiceEnabled()) return;
         if (document.hidden) return; // screen wake lock обычно требует видимую вкладку
 
@@ -4656,22 +4659,34 @@
     function monolithSetNavigationActive(active) {
         monolithNavigationActive = !!active;
         monolithMaybeUpdateWakeLock();
-        if (!monolithNavigationActive) {
+        if (!monolithIsVoiceSessionActive()) {
             monolithStopKeepAliveAudio();
         }
     }
 
+    function monolithIsVoiceSessionActive() {
+        const gpsActive = (typeof gpsWatchId !== 'undefined' && gpsWatchId !== null && gpsWatchId !== undefined);
+        return !!(isMonolithVoiceEnabled() && (monolithNavigationActive || gpsActive || monolithTtsIsSpeaking || monolithTtsQueue.length > 0));
+    }
+
     function monolithMaybeUpdateWakeLock() {
-        if (!monolithNavigationActive || !isMonolithVoiceEnabled()) {
+        if (!monolithIsVoiceSessionActive()) {
             monolithReleaseWakeLock();
             return;
         }
         monolithRequestWakeLock();
     }
 
+    function monolithSoftResumeSpeech() {
+        try {
+            if (!window.speechSynthesis) return;
+            try { window.speechSynthesis.getVoices(); } catch (e) {}
+            try { window.speechSynthesis.resume(); } catch (e) {}
+        } catch (e) {}
+    }
+
     function monolithPrimeAudioOnce() {
         if (monolithAudioPrimed) return;
-        monolithAudioPrimed = true;
 
         // Android/WebView: часто нужно "разбудить" speechSynthesis после user gesture.
         try {
@@ -4690,6 +4705,7 @@
             });
         } catch (e) {}
 
+        monolithAudioPrimed = true;
         try { monolithStartAudioContextKeepAlive(); } catch (e) {}
     }
 
@@ -4707,7 +4723,7 @@
     }
 
     function monolithStartAudioContextKeepAlive() {
-        if (!isMonolithVoiceEnabled() || !monolithNavigationActive || !monolithAudioPrimed) return;
+        if (!monolithIsVoiceSessionActive() || !monolithAudioPrimed) return;
         const ctx = monolithEnsureAudioContext();
         if (!ctx) return;
 
@@ -4751,8 +4767,7 @@
     }
 
     function monolithMaybeStartKeepAliveAudio() {
-        if (!isMonolithVoiceEnabled()) return;
-        if (!monolithNavigationActive) return;
+        if (!monolithIsVoiceSessionActive()) return;
 
         // многие браузеры запрещают autoplay без user gesture
         if (!monolithAudioPrimed) return;
@@ -4812,8 +4827,9 @@
     }
 
     // Prime audio on first user interaction (needed for background keep-alive hacks)
-    window.addEventListener('touchstart', monolithPrimeAudioOnce, { passive: true, once: true });
-    window.addEventListener('click', monolithPrimeAudioOnce, { passive: true, once: true });
+    window.addEventListener('touchstart', monolithPrimeAudioOnce, { passive: true });
+    window.addEventListener('click', monolithPrimeAudioOnce, { passive: true });
+    window.addEventListener('pointerdown', monolithPrimeAudioOnce, { passive: true });
 
     document.addEventListener('visibilitychange', () => {
         // Требование: при сворачивании звук продолжал работать.
@@ -5229,7 +5245,7 @@
                 try { navigator.vibrate([90, 60, 90, 60, 140]); } catch (e) {}
             }
 
-            aiSpeak(monolithBuildApproachVoiceText(markerType, street, threshold));
+            aiSpeak(monolithBuildApproachVoiceText(markerType, street, distance));
             currentNotification.mainAnnounced = true;
             currentNotification.mainAt = Date.now();
             distanceNotifications.set(markerId, currentNotification);
@@ -5702,6 +5718,8 @@
             try { monolithStopKeepAliveAudio(); } catch (e) {}
             try { monolithReleaseWakeLock(); } catch (e) {}
         } else {
+            try { monolithPrimeAudioOnce(); } catch (e) {}
+            try { monolithSoftResumeSpeech(); } catch (e) {}
             try { monolithMaybeUpdateWakeLock(); } catch (e) {}
         }
         updateVoiceBtnUiState();
