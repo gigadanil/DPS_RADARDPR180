@@ -4202,6 +4202,7 @@
     async function notifyHelpBotAboutMarker(marker) {
         try {
             if (!marker || !marker.type) return;
+            const HELP_NOTIFY_SHARED_KEY = 'f050f0aa-91dc-46c1-b761-2e1030af5b49';
             const helpTypes = new Set(['sos', 'dps', 'specbat', 'dtp', 'danger', 'traffic_jam', 'works']);
             if (!helpTypes.has(String(marker.type))) return;
 
@@ -4212,24 +4213,25 @@
             } catch (e) {}
 
             const token = String(localStorage.getItem('sb_jwt') || '').trim();
-            if (!token || token.split('.').length !== 3) {
-                return;
-            }
-            try {
-                const payloadPart = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-                const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
-                const payloadJwt = JSON.parse(atob(normalized));
-                const exp = Number(payloadJwt?.exp || 0);
-                const nowSec = Math.floor(Date.now() / 1000);
-                if (exp && exp <= (nowSec + 30)) {
-                    try {
-                        localStorage.removeItem('sb_jwt');
-                        localStorage.removeItem('sb_jwt_exp');
-                    } catch (e) {}
-                    return;
+            let authToken = '';
+            if (token && token.split('.').length === 3) {
+                try {
+                    const payloadPart = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+                    const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
+                    const payloadJwt = JSON.parse(atob(normalized));
+                    const exp = Number(payloadJwt?.exp || 0);
+                    const nowSec = Math.floor(Date.now() / 1000);
+                    if (exp && exp > (nowSec + 30)) {
+                        authToken = token;
+                    } else {
+                        try {
+                            localStorage.removeItem('sb_jwt');
+                            localStorage.removeItem('sb_jwt_exp');
+                        } catch (e) {}
+                    }
+                } catch (e) {
+                    authToken = '';
                 }
-            } catch (e) {
-                return;
             }
 
             const addrText = (document.getElementById('addr-text')?.textContent || '').trim();
@@ -4252,8 +4254,11 @@
                 const authToken = String(jwt || '').trim();
                 const headers = {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${authToken}`
+                    'x-help-key': HELP_NOTIFY_SHARED_KEY
                 };
+                if (authToken) {
+                    headers.Authorization = `Bearer ${authToken}`;
+                }
                 return fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
                     method: 'POST',
                     headers,
@@ -4261,14 +4266,14 @@
                 });
             };
 
-            const resp = await sendHelpNotify(token);
+            const resp = await sendHelpNotify(authToken);
             if (resp.status === 401) {
                 try {
                     localStorage.removeItem('sb_jwt');
                     localStorage.removeItem('sb_jwt_exp');
                 } catch (e) {}
                 try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000)); } catch (e) {}
-                console.warn('help-notify: JWT недействителен, пропуск до следующей авторизации');
+                console.warn('help-notify: авторизация отклонена (JWT/ключ), временный cooldown');
                 return;
             }
 

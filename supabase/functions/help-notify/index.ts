@@ -5,6 +5,7 @@ const TELEGRAM_HELP_BOT_TOKEN = (Deno.env.get("TELEGRAM_HELP_BOT_TOKEN") || "").
 const SUPABASE_URL = (Deno.env.get("SUPABASE_URL") || "").trim();
 const SUPABASE_SERVICE_ROLE_KEY = (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SERVICE_ROLE_KEY") || "").trim();
 const JWT_SECRET = (Deno.env.get("JWT_SECRET") || "").trim();
+const HELP_NOTIFY_SHARED_KEY = (Deno.env.get("HELP_NOTIFY_SHARED_KEY") || "f050f0aa-91dc-46c1-b761-2e1030af5b49").trim();
 const MINIAPP_URL = (Deno.env.get("MINIAPP_URL") || "https://t.me/DPSRADARDPR180bot").trim();
 const TELEGRAM_MINIAPP_SHORT_NAME = (Deno.env.get("TELEGRAM_MINIAPP_SHORT_NAME") || "").trim();
 const TELEGRAM_MAIN_BOT_USERNAME = (Deno.env.get("TELEGRAM_MAIN_BOT_USERNAME") || "").replace(/^@/, "").trim();
@@ -12,7 +13,7 @@ const TELEGRAM_MAIN_BOT_USERNAME = (Deno.env.get("TELEGRAM_MAIN_BOT_USERNAME") |
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "content-type, authorization",
+    "Access-Control-Allow-Headers": "content-type, authorization, x-help-key",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Content-Type": "application/json"
   };
@@ -238,15 +239,33 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders() });
   if (req.method !== "POST") return jsonResponse({ error: "Method Not Allowed" }, 405);
 
-  if (!TELEGRAM_HELP_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !JWT_SECRET) {
+  if (!TELEGRAM_HELP_BOT_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    return jsonResponse({ error: "Missing env config" }, 500);
+  }
+
+  if (!JWT_SECRET && !HELP_NOTIFY_SHARED_KEY) {
     return jsonResponse({ error: "Missing env config" }, 500);
   }
 
   const auth = req.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  const payload = await verifyJwtHs256(token, JWT_SECRET);
-  const sub = String(payload?.sub || "").trim();
-  if (!payload || !sub) return jsonResponse({ error: "Unauthorized" }, 401);
+  let sub = "";
+
+  if (token && JWT_SECRET) {
+    const payload = await verifyJwtHs256(token, JWT_SECRET);
+    sub = String(payload?.sub || "").trim();
+  }
+
+  if (!sub && HELP_NOTIFY_SHARED_KEY) {
+    const helpKey = String(req.headers.get("x-help-key") || "").trim();
+    const left = new TextEncoder().encode(helpKey);
+    const right = new TextEncoder().encode(HELP_NOTIFY_SHARED_KEY);
+    if (timingSafeEqual(left, right)) {
+      sub = "shared-key";
+    }
+  }
+
+  if (!sub) return jsonResponse({ error: "Unauthorized" }, 401);
 
   let body: any = null;
   try {
