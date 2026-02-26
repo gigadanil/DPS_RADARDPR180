@@ -4201,24 +4201,7 @@
                 if (cooldownUntil > nowMs) return;
             } catch (e) {}
 
-            const hasInitData = !!window.Telegram?.WebApp?.initData;
-            let token = localStorage.getItem('sb_jwt') || '';
-            const refreshed = await ensureSupabaseAuth();
-            if (refreshed) {
-                token = refreshed;
-            } else if (hasInitData) {
-                try {
-                    localStorage.removeItem('sb_jwt');
-                    localStorage.removeItem('sb_jwt_exp');
-                } catch (e) {}
-                token = '';
-            } else {
-                token = token || localStorage.getItem('sb_jwt') || '';
-            }
-            if (!token) {
-                console.warn('Пропуск отправки в help-notify: JWT токен отсутствует');
-                return;
-            }
+            const token = String(localStorage.getItem('sb_jwt') || '').trim();
 
             const addrText = (document.getElementById('addr-text')?.textContent || '').trim();
             const driverName = String(currentDriver?.name || 'Водитель');
@@ -4236,31 +4219,31 @@
                 driverRank
             };
 
-            const sendHelpNotify = async (jwt) => fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
-                method: 'POST',
-                headers: {
+            const sendHelpNotify = async (jwt = '') => {
+                const headers = {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${jwt}`
-                },
-                body: JSON.stringify(payload)
-            });
+                    apikey: SUPABASE_KEY
+                };
+                if (jwt) headers.Authorization = `Bearer ${jwt}`;
+                return fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+            };
 
-            let resp = await sendHelpNotify(token);
-            if (resp.status === 401) {
-                try {
-                    clearSupabaseAuth();
-                    localStorage.removeItem('sb_jwt');
-                    localStorage.removeItem('sb_jwt_exp');
-                } catch (e) {}
-
-                const retryFresh = await ensureSupabaseAuth();
-                const retryToken = retryFresh || localStorage.getItem('sb_jwt') || '';
-                if (!retryToken) {
-                    try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000)); } catch (e) {}
-                    console.warn('help-notify: токен недействителен, требуется повторная авторизация');
-                    return;
+            let resp = null;
+            if (token && token.split('.').length === 3) {
+                resp = await sendHelpNotify(token);
+                if (resp.status === 401) {
+                    try {
+                        localStorage.removeItem('sb_jwt');
+                        localStorage.removeItem('sb_jwt_exp');
+                    } catch (e) {}
+                    resp = await sendHelpNotify('');
                 }
-                resp = await sendHelpNotify(retryToken);
+            } else {
+                resp = await sendHelpNotify('');
             }
 
             if (!resp.ok) {
