@@ -17,3 +17,13 @@ entrypoint = "./functions/mchs-auto/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/maintenance-toggle/index.ts"
+
+[functions.beta-invite]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/beta-invite/index.ts"
+
+[functions.telegram-login]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/telegram-login/index.ts"

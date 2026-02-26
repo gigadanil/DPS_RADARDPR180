@@ -7,20 +7,73 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#212121">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Montserrat:wght@500;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="safedrive-responsive.css?v=20260223">
-    <title>EASY RIDE — RELIABLE</title>
+    <title>EASY RIDE 180</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://api-maps.yandex.ru/v3/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <script src="https://api-maps.yandex.ru/2.1/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <style>
-        :root { --blue: #007aff; --bg: #f2f2f7; --gray: #8e8e93;
+        :root {
+            --bg: #0d0d0d;
+            --blue: #00d4ff; /* Electric Blue */
+            --neon: #39ff14; /* Neon Green */
+            --gray: rgba(255,255,255,0.65);
+            --text-primary: rgba(255, 255, 255, 0.92);
+            --card: rgba(26, 26, 26, 0.72);
+            --card-strong: rgba(26, 26, 26, 0.88);
+            --stroke: rgba(255,255,255,0.10);
+            --critical-outline: 0 1px 0 rgba(0,0,0,0.95), 0 -1px 0 rgba(0,0,0,0.95), 1px 0 0 rgba(0,0,0,0.95), -1px 0 0 rgba(0,0,0,0.95);
             --safe-area-inset-top: env(safe-area-inset-top);
             --safe-area-inset-bottom: env(safe-area-inset-bottom);
             --safe-area-inset-left: env(safe-area-inset-left);
-            --safe-area-inset-right: env(safe-area-inset-right); }
-        body, html { width: 100%; height: 100%; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); overflow: hidden; }
+            --safe-area-inset-right: env(safe-area-inset-right);
+            /* iPhone 14 Pro / Redmi: сдвиг UI ниже системных элементов */
+            --ui-safe-top: calc(env(safe-area-inset-top) + 20px);
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: 'Rajdhani','Montserrat',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+            background: #0d0d0d;
+            color: var(--text-primary);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: geometricPrecision;
+            letter-spacing: 0.03em;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 800;
+            color: var(--blue);
+            text-shadow: 0 0 14px rgba(0, 212, 255, 0.28), 0 1px 0 rgba(0,0,0,0.55);
+        }
+
+        /* Подписи кнопок */
+        .main-btn,
+        .chat-send-btn,
+        .ptt-hold-btn,
+        .type-tab-btn,
+        .type-btn span {
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+
+        /* Критически важные данные: скорость/дистанция */
+        .speedometer-value,
+        #speedValue,
+        .proximity-banner-distance,
+        #warningDistanceLabel {
+            text-shadow: var(--critical-outline);
+        }
         
         /* Отключение выделения и улучшение тап-реакций */
         * {
@@ -39,20 +92,26 @@
             position: fixed;
             top: 0;
             left: 0;
+            right: 0;
+            bottom: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, #007aff 0%, #0051d5 100%);
+            background: radial-gradient(1200px 800px at 20% 15%, rgba(0,212,255,0.22) 0%, rgba(13,13,13,0.0) 55%),
+                        radial-gradient(900px 600px at 85% 75%, rgba(57,255,20,0.14) 0%, rgba(13,13,13,0.0) 60%),
+                        #0d0d0d;
             z-index: 10000;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.5s ease, visibility 0.5s ease;
+            transition: opacity 0.5s ease, visibility 0.5s ease, transform 0.5s ease;
             padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+            overflow: hidden;
         }
         
         #splashScreen.hidden {
             opacity: 0;
+            transform: translateY(-12px);
             visibility: hidden;
             pointer-events: none;
         }
@@ -147,13 +206,17 @@
         .ban-notice.active { display: flex; }
         
         .ban-notice-content { 
-            background: white; 
+            background: rgba(18, 18, 22, 0.86);
             border-radius: 24px; 
             padding: 30px; 
-            max-width: 400px; 
+            max-width: 420px; 
             width: 90%; 
             text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.55);
+            border: 1px solid rgba(255,255,255,0.10);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: rgba(255,255,255,0.95);
         }
         
         .ban-notice-icon { 
@@ -170,7 +233,7 @@
         
         .ban-notice-message { 
             font-size: 16px; 
-            color: #333; 
+            color: rgba(255,255,255,0.85);
             line-height: 1.5; 
             margin-bottom: 20px; 
         }
@@ -311,7 +374,7 @@
         .weather-widget { font-size: 11px; color: rgba(255,255,255,0.85); margin-bottom: 10px; text-align: center; padding: 8px; background: rgba(255,255,255,0.06); border-radius: 12px; border: 1px solid rgba(255,255,255,0.10); }
         .weather-widget .weather-warn { font-weight: 800; }
         .main-btn { width: 100%; background: var(--blue); color: white; border: none; border-radius: 16px; padding: 14px; font-size: 15px; font-weight: 800; cursor: pointer; }
-        .action-card .main-btn { background: #34c759; color: #0b0b0b; font-weight: 900; transition: all 0.3s ease; }
+        .action-card .main-btn { background: var(--neon); color: #0b0b0b; font-weight: 900; transition: all 0.3s ease; }
         .action-card .main-btn:active { transform: scale(0.98); }
         .b-cont { font-size: 14px; line-height: 1.4; min-width: 170px; }
         .b-poll { display: flex; gap: 8px; margin-top: 10px; }
@@ -335,9 +398,22 @@
         
         .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2500; overflow-y: auto; }
         .modal.active { display: block; }
-        .modal-content { background: white; border-radius: 20px; margin: 20px; padding: 20px; max-width: 500px; margin-left: auto; margin-right: auto; }
+        .modal-content {
+            background: rgba(18, 18, 22, 0.86);
+            color: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            margin: 20px;
+            padding: 20px;
+            max-width: 520px;
+            margin-left: auto;
+            margin-right: auto;
+            border: 1px solid rgba(255,255,255,0.10);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+        }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .modal-close { background: none; border: none; font-size: 28px; cursor: pointer; color: var(--gray); }
+        .modal-close { background: none; border: none; font-size: 28px; cursor: pointer; color: rgba(255,255,255,0.70); }
         
         /* Админ-панель */
         .admin-btn { position: absolute; top: calc(15px + var(--safe-area-inset-top)); left: calc(15px + var(--safe-area-inset-left)); z-index: 1500; width: 45px; height: 45px; border-radius: 50%; background: #ff9500; border: 2px solid white; cursor: pointer; font-size: 22px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
@@ -404,18 +480,41 @@
             transition: opacity 0.3s ease;
         }
         #onlineCountBadge.online-count.visible { display: inline-flex; }
+        #mapEngineBadge.engine-badge {
+            position: fixed;
+            top: calc(56px + var(--safe-area-inset-top));
+            left: calc(12px + var(--safe-area-inset-left));
+            z-index: 2000;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.48);
+            color: #fff;
+            font-weight: 800;
+            font-size: 11px;
+            letter-spacing: 0.2px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        #mapEngineBadge.engine-badge.is-v3 { border-color: rgba(0,212,255,0.45); }
+        #mapEngineBadge.engine-badge.is-v2 { border-color: rgba(255,149,0,0.45); }
         .online-dot {
             width: 10px;
             height: 10px;
             border-radius: 50%;
-            background: #34c759;
-            box-shadow: 0 0 0 0 rgba(52,199,89,0.45);
+            background: var(--neon);
+            box-shadow: 0 0 0 0 rgba(57,255,20,0.40);
             animation: onlinePulse 1.4s ease-in-out infinite;
         }
         @keyframes onlinePulse {
-            0% { box-shadow: 0 0 0 0 rgba(52,199,89,0.45); }
-            70% { box-shadow: 0 0 0 10px rgba(52,199,89,0.0); }
-            100% { box-shadow: 0 0 0 0 rgba(52,199,89,0.0); }
+            0% { box-shadow: 0 0 0 0 rgba(57,255,20,0.40); }
+            70% { box-shadow: 0 0 0 10px rgba(57,255,20,0.0); }
+            100% { box-shadow: 0 0 0 0 rgba(57,255,20,0.0); }
         }
 
         .user-marker-wrap { position: relative; width: 100%; height: 100%; pointer-events: none; }
@@ -427,15 +526,15 @@
             height: 44px;
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(52,199,89,0.22);
-            box-shadow: 0 0 0 0 rgba(52,199,89,0.35);
+            background: rgba(57,255,20,0.18);
+            box-shadow: 0 0 0 0 rgba(57,255,20,0.30);
             filter: blur(0.2px);
             animation: userPulse 1.35s ease-out infinite;
         }
         @keyframes userPulse {
-            0% { transform: translate(-50%, -50%) scale(0.75); opacity: 0.75; box-shadow: 0 0 0 0 rgba(52,199,89,0.35); }
-            70% { opacity: 0.12; box-shadow: 0 0 0 18px rgba(52,199,89,0.0); }
-            100% { transform: translate(-50%, -50%) scale(1.35); opacity: 0; box-shadow: 0 0 0 22px rgba(52,199,89,0.0); }
+            0% { transform: translate(-50%, -50%) scale(0.75); opacity: 0.78; box-shadow: 0 0 0 0 rgba(57,255,20,0.30); }
+            70% { opacity: 0.10; box-shadow: 0 0 0 18px rgba(57,255,20,0.0); }
+            100% { transform: translate(-50%, -50%) scale(1.35); opacity: 0; box-shadow: 0 0 0 24px rgba(57,255,20,0.0); }
         }
 
         .right-bar {
@@ -477,7 +576,7 @@
         }
         .right-bar .action-btn:active { transform: scale(0.95); }
 
-        .right-bar .action-btn.active { border-color: rgba(52,199,89,0.65); box-shadow: 0 0 0 3px rgba(52,199,89,0.18), 0 10px 30px rgba(0,0,0,0.28); }
+        .right-bar .action-btn.active { border-color: rgba(0,212,255,0.70); box-shadow: 0 0 0 3px rgba(0,212,255,0.16), 0 10px 30px rgba(0,0,0,0.28); }
 
         .right-bar .action-btn.off { opacity: 0.65; }
 
@@ -486,8 +585,8 @@
             left: calc(25px + var(--safe-area-inset-left));
             bottom: calc(25px + var(--safe-area-inset-bottom));
             z-index: 2000;
-            width: 54px;
-            height: 54px;
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
             border: 1px solid rgba(255,255,255,0.14);
             background: rgba(0,0,0,0.55);
@@ -500,7 +599,7 @@
             box-shadow: 0 12px 34px rgba(0,0,0,0.35);
         }
         .locate-btn:active { transform: scale(0.95); }
-        .locate-btn .locate-icon { color: var(--blue); font-size: 22px; line-height: 1; }
+        .locate-btn .locate-icon { color: var(--blue); font-size: 20px; line-height: 1; }
         .locate-btn.active .locate-icon { color: #34c759; }
 
         .ptt-btn.ptt-fab {
@@ -845,23 +944,50 @@
         .heatmap-hour { font-size: 9px; color: #888; text-align: center; }
         .heatmap-summary { font-size: 11px; color: #666; margin-top: 6px; text-align: right; }
         
-        /* Достижения */
-        .achievement { display: inline-block; text-align: center; padding: 8px; margin: 4px; background: #f9f9f9; border-radius: 10px; border: 1px solid #e0e0e0; font-size: 11px; min-width: 70px; }
-        .achievement-icon { font-size: 24px; margin-bottom: 4px; }
-        .achievement-title { font-weight: 700; color: var(--blue); }
-        .achievement-grid { display: flex; flex-wrap: wrap; gap: 6px; }
-        .achievement-progress { font-size: 10px; color: var(--gray); margin-top: 2px; }
-        .achievement.done { border-color: #34c759; background: #f2fff6; }
-        .achievement.locked { opacity: 0.6; }
+        /* Достижения (Cyberpunk / Dark Premium) */
+        #profile-achievements-block { border-top: 1px solid rgba(255,255,255,0.10) !important; }
+        .achievement-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+        .achievement {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 10px 10px;
+            margin: 0;
+            border-radius: 14px;
+            font-size: 11px;
+            min-width: 86px;
+            min-height: 86px;
+            background:
+                linear-gradient(var(--card), var(--card)) padding-box,
+                linear-gradient(135deg, rgba(0,212,255,0.65), rgba(57,255,20,0.45)) border-box;
+            border: 1px solid transparent;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 12px 34px rgba(0,0,0,0.45);
+            transition: transform .25s ease, opacity .25s ease, filter .25s ease;
+        }
+        .achievement:active { transform: scale(0.98); }
+        .achievement-icon { margin-bottom: 6px; line-height: 1; color: rgba(210,220,232,0.92); filter: drop-shadow(0 6px 16px rgba(0,0,0,0.35)); }
+        .achievement-icon svg { width: 26px; height: 26px; display: block; }
+        .achievement-title { font-weight: 800; color: rgba(255,255,255,0.92); }
+        .achievement-progress { font-size: 10px; color: rgba(255,255,255,0.65); margin-top: 3px; }
+        .achievement.done {
+            filter: saturate(1.15) brightness(1.03);
+            box-shadow: 0 0 0 2px rgba(0,212,255,0.10), 0 12px 34px rgba(0,0,0,0.45);
+        }
+        .achievement.done .achievement-icon { color: rgba(0,212,255,0.95); }
+        .achievement.locked { opacity: 0.55; }
 
         /* Спидометр */
-        .speedometer { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; background: rgba(255,255,255,0.95); border-radius: 16px; padding: 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); display: none; align-items: center; gap: 10px; min-width: 120px; }
+        .speedometer { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; background: rgba(0,0,0,0.55); border-radius: 16px; padding: 10px 12px; box-shadow: 0 10px 26px rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.10); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: none; align-items: center; gap: 10px; min-width: 120px; }
         .speedometer.visible { display: flex; }
-        .speedometer-value { font-size: 22px; font-weight: 800; color: #000; line-height: 1; }
-        .speedometer-unit { font-size: 11px; color: var(--gray); margin-left: 4px; font-weight: 700; }
-        .speedometer-label { font-size: 10px; color: var(--gray); font-weight: 600; }
+        .speedometer-value { font-size: 22px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+        .speedometer-unit { font-size: 11px; color: rgba(255,255,255,0.70); margin-left: 4px; font-weight: 700; }
+        .speedometer-label { font-size: 10px; color: rgba(255,255,255,0.65); font-weight: 600; }
         .speedometer-toggle { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; border: none; background: #ff3b30; color: white; font-size: 14px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
-        .speedometer-open-btn { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; width: 40px; height: 40px; border-radius: 50%; background: white; border: 2px solid var(--blue); display: none; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 6px 18px rgba(0,0,0,0.12); cursor: pointer; }
+        .speedometer-open-btn { position: absolute; left: 12px; bottom: calc(140px + var(--safe-area-inset-bottom)); z-index: 1600; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,0.55); color: var(--text-primary); border: 1px solid rgba(255,255,255,0.12); display: none; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 10px 26px rgba(0,0,0,0.35); cursor: pointer; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
         .speedometer-open-btn.visible { display: flex; }
 
         /* Админский маркер и имя */
@@ -879,6 +1005,78 @@
         .admin-rank { font-size: 11px; color: #d4af37; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
         .admin-online { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #34c759; font-weight: 700; }
         .admin-online-dot { width: 6px; height: 6px; border-radius: 50%; background: #34c759; box-shadow: 0 0 6px rgba(52, 199, 89, 0.9); }
+
+        /* Спецбат: визуально отличный маркер (неоновое мигание) */
+        .specbat-marker {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: rgba(12, 12, 16, 0.92);
+            border: 2px solid rgba(0, 212, 255, 0.75);
+            box-shadow:
+                0 0 0 1px rgba(57, 255, 20, 0.12),
+                0 0 18px rgba(0, 212, 255, 0.45);
+            font-size: 18px;
+            animation: specbatGlow 1.05s ease-in-out infinite;
+        }
+        .specbat-marker::before {
+            content: '';
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(0, 212, 255, 0.22) 0%, rgba(0, 212, 255, 0.0) 65%);
+            opacity: 0.9;
+            animation: specbatAura 1.05s ease-in-out infinite;
+        }
+        .specbat-marker::after {
+            content: '';
+            position: absolute;
+            inset: -6px;
+            border-radius: 50%;
+            border: 2px solid rgba(57, 255, 20, 0.55);
+            box-shadow: 0 0 18px rgba(57, 255, 20, 0.30);
+            animation: specbatRing 0.85s ease-in-out infinite;
+        }
+        .specbat-badge {
+            position: absolute;
+            top: -8px;
+            right: -9px;
+            font-size: 10px;
+            font-weight: 900;
+            padding: 2px 5px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.72);
+            color: rgba(255,255,255,0.95);
+            border: 1px solid rgba(0, 212, 255, 0.35);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+            letter-spacing: 0.08em;
+        }
+        @keyframes specbatGlow {
+            0%, 100% {
+                filter: saturate(1.05) brightness(1.00);
+                transform: scale(1);
+                border-color: rgba(0, 212, 255, 0.70);
+                box-shadow: 0 0 0 1px rgba(57, 255, 20, 0.10), 0 0 16px rgba(0, 212, 255, 0.35);
+            }
+            50% {
+                filter: saturate(1.25) brightness(1.08);
+                transform: scale(1.06);
+                border-color: rgba(57, 255, 20, 0.75);
+                box-shadow: 0 0 0 1px rgba(0, 212, 255, 0.12), 0 0 22px rgba(57, 255, 20, 0.35);
+            }
+        }
+        @keyframes specbatAura {
+            0%, 100% { opacity: 0.65; transform: scale(0.95); }
+            50% { opacity: 1; transform: scale(1.08); }
+        }
+        @keyframes specbatRing {
+            0%, 100% { opacity: 0.20; transform: scale(0.88); border-color: rgba(57, 255, 20, 0.50); }
+            50% { opacity: 0.90; transform: scale(1.12); border-color: rgba(0, 212, 255, 0.70); }
+        }
         @keyframes adminPulse {
             0% { transform: scale(0.85); opacity: 0.8; }
             70% { transform: scale(1.2); opacity: 0; }
@@ -913,6 +1111,165 @@
         #tgAuthOverlay[style*="display: flex"] {
             display: flex !important;
         }
+
+        /* ============= SAFE AREA TOP OFFSET (iPhone 14 Pro / Redmi) ============= */
+        /* Требование: сдвинуть основной UI и модалки ниже системных кнопок ("Закрыть", "...") */
+        .top-controls { top: var(--ui-safe-top) !important; }
+        #onlineCountBadge.online-count { top: var(--ui-safe-top) !important; }
+        #mapEngineBadge.engine-badge { top: calc(var(--ui-safe-top) + 44px) !important; }
+        .right-bar { top: var(--ui-safe-top) !important; }
+        .admin-btn,
+        .profile-btn,
+        .feedback-btn,
+        .loc-btn,
+        .follow-toggle { top: var(--ui-safe-top) !important; }
+        .broadcast-banner { top: var(--ui-safe-top) !important; }
+        .proximity-banner { top: calc(var(--ui-safe-top) + 44px) !important; }
+        .notif-toast-wrap { top: calc(var(--ui-safe-top) + 58px) !important; }
+
+        /* Модальные окна и оверлеи: добавляем padding-top, чтобы контент не залезал под верхние системные зоны */
+        .modal { padding-top: var(--ui-safe-top); box-sizing: border-box; }
+        #tgAuthOverlay,
+        #betaInviteOverlay,
+        .ban-notice { padding-top: var(--ui-safe-top) !important; box-sizing: border-box; }
+
+        /* ============= FIX: WHITE-ON-WHITE (FORCE DARK + CONTRAST) ============= */
+        /* Карточки/оверлеи, которые иногда остаются светлыми из старых inline-стилей */
+        .settings-block,
+        .profile-card,
+        .admin-panel-item,
+        .ban-duration-content,
+        .notif-row,
+        .chat-message.other,
+        .heatmap-toggle,
+        #tgAuthOverlay > div,
+        #betaInviteOverlay > div,
+        #betaInviteOverlay input,
+        #tgAuthOverlay input,
+        [style*="background:#fff"],
+        [style*="background: #fff"],
+        [style*="background:#f5f5f5"],
+        [style*="background: #f5f5f5"],
+        [style*="background:#f9f9f9"],
+        [style*="background: #f9f9f9"],
+        [style*="background:#f0f7ff"],
+        [style*="background: #f0f7ff"],
+        [style*="background:#f0f0f5"],
+        [style*="background: #f0f0f5"],
+        [style*="background:#ececf1"],
+        [style*="background: #ececf1"],
+        [style*="background-color:#fff"],
+        [style*="background-color: #fff"],
+        [style*="background-color:white"],
+        [style*="background-color: white"],
+        [style*="background-color:rgb(255,255,255"],
+        [style*="background-color: rgb(255, 255, 255"],
+        [style*="background: white"],
+        [style*="background: rgb(255, 255, 255"],
+        [style*="background:rgb(255,255,255"] {
+            background-color: var(--card-strong) !important;
+            color: var(--text-primary) !important;
+            border-color: rgba(0, 212, 255, 0.20) !important;
+        }
+
+        .settings-block,
+        .profile-card,
+        .admin-panel-item,
+        .ban-duration-content,
+        #tgAuthOverlay,
+        #betaInviteOverlay {
+            color: var(--text-primary);
+        }
+
+        /* Общие светлые элементы UI → в тёмный premium */
+        .icon-circle,
+        .b-poll-btn,
+        .admin-stat-card,
+        .admin-table th {
+            background: rgba(26, 26, 26, 0.92) !important;
+            color: var(--text-primary) !important;
+            border-color: rgba(0, 212, 255, 0.20) !important;
+        }
+        .admin-table th,
+        .admin-table td {
+            border-bottom-color: rgba(255,255,255,0.12) !important;
+        }
+        .admin-table tr:hover { background: rgba(0, 212, 255, 0.08) !important; }
+
+        /* Текст внутри проблемных светлых блоков (в т.ч. с inline color:#333/#666/#888) */
+        #tgAuthOverlay h1,
+        #tgAuthOverlay h2,
+        #tgAuthOverlay h3,
+        #tgAuthOverlay p,
+        #tgAuthOverlay span,
+        #tgAuthOverlay div,
+        #betaInviteOverlay h1,
+        #betaInviteOverlay h2,
+        #betaInviteOverlay h3,
+        #betaInviteOverlay p,
+        #betaInviteOverlay span,
+        #betaInviteOverlay div,
+        .settings-block h1,
+        .settings-block h2,
+        .settings-block h3,
+        .settings-block p,
+        .settings-block span,
+        .profile-card h1,
+        .profile-card h2,
+        .profile-card h3,
+        .profile-card p,
+        .profile-card span,
+        .admin-panel-item h1,
+        .admin-panel-item h2,
+        .admin-panel-item h3,
+        .admin-panel-item p,
+        .admin-panel-item span,
+        .ban-duration-content h1,
+        .ban-duration-content h2,
+        .ban-duration-content h3,
+        .ban-duration-content p,
+        .ban-duration-content span,
+        .notif-row p,
+        .notif-row span {
+            color: var(--text-primary) !important;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.50) !important;
+        }
+
+        /* Инпуты (модель авто, номер и т.п.) */
+        input[type="text"],
+        input[type="number"],
+        input[type="tel"],
+        input[type="email"],
+        textarea {
+            background: rgba(26, 26, 30, 0.92) !important;
+            color: var(--blue) !important;
+            caret-color: var(--blue);
+            border: 1px solid rgba(255, 255, 255, 0.18) !important;
+            padding: 12px !important;
+        }
+
+        /* “Подписи/подсказки” (серый на сером/чёрном) */
+        .sub-text,
+        .hint-text,
+        .label-small,
+        .text-label,
+        .value-display {
+            color: rgba(255, 255, 255, 0.70) !important;
+        }
+
+        /* Сплэш: гарантируем видимость текста даже при отключённых анимациях */
+        #splashScreen { color: var(--text-primary); }
+        .splash-greeting,
+        .splash-username { opacity: 1; }
+        @media (prefers-reduced-motion: reduce) {
+            .splash-logo,
+            .splash-greeting,
+            .splash-username {
+                animation: none !important;
+                opacity: 1 !important;
+                transform: none !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -943,28 +1300,31 @@
 
     <!-- Overlay: Требуется Telegram для регистрации/действий -->
     <div id="tgAuthOverlay" class="auth-overlay" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
-        <div style="background:#fff; padding:40px 25px; border-radius:16px; max-width:420px; width:95%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.3); animation: slideUp 0.4s ease;">
+        <div style="background:rgba(26,26,26,0.88); border:1px solid rgba(0,212,255,0.2); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); padding:40px 25px; border-radius:16px; max-width:460px; width:95%; text-align:center; box-shadow:0 10px 40px rgba(0,0,0,0.45); animation: slideUp 0.4s ease; color:rgba(255,255,255,0.92);">
             <div style="font-size:48px; margin-bottom:20px; animation: pulse 2s ease-in-out infinite;">🔐</div>
-            <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; color:#333;">Доступ ограничен</h2>
-            <p style="color:#666; font-size:16px; line-height:1.6; margin:0 0 25px 0;">
-                <strong>Регистрация и отправка</strong> (метки/чат/профиль)
-                доступны только через<br><strong>Telegram Mini App</strong>.
+            <h2 style="margin:0 0 15px 0; font-size:24px; font-weight:800; color:#00d4ff; text-shadow:0 0 12px rgba(0,212,255,0.28);">Вход в EASY RIDE 180</h2>
+            <p style="color:rgba(255,255,255,0.92); font-size:15px; line-height:1.65; margin:0 0 14px 0;">
+                Для сайта/PWA сначала выполните вход через Telegram.<br>
+                В <strong>Telegram Mini App</strong> вход происходит автоматически.
             </p>
-            <p style="color:#888; font-size:14px; line-height:1.5; margin:0 0 30px 0;">
-                Карту можно смотреть в браузере, но для действий откройте в Telegram.
+            <p style="color:rgba(255,255,255,0.72); font-size:13px; line-height:1.5; margin:0 0 20px 0;">
+                Если вы в браузере/приложении — нажмите «Войти через Telegram» ниже.
             </p>
             <div style="display:flex; flex-direction:column; gap:12px; justify-content:center;">
                 <div id="tgLoginWidget" style="display:flex; justify-content:center;"></div>
                 <button onclick="openTelegramBot()" style="padding:14px 20px; border-radius:12px; border:none; background:linear-gradient(135deg, #007aff 0%, #0051d5 100%); color:#fff; font-weight:700; font-size:16px; cursor:pointer; transition:all 0.3s; box-shadow:0 4px 12px rgba(0,122,255,0.3);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(0,122,255,0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,122,255,0.3)'">
                     📱 Открыть в Telegram
                 </button>
-                <button onclick="location.reload()" style="padding:12px 20px; border-radius:12px; border:2px solid #ddd; background:#fff; color:#666; font-weight:600; font-size:15px; cursor:pointer; transition:all 0.3s;" onmouseover="this.style.borderColor='#bbb'; this.style.background='#f5f5f5'" onmouseout="this.style.borderColor='#ddd'; this.style.background='#fff'">
+                <button onclick="location.reload()" style="padding:12px 20px; border-radius:12px; border:1px solid rgba(0,212,255,0.25); background:rgba(26,26,26,0.92); color:rgba(255,255,255,0.86); font-weight:700; font-size:15px; cursor:pointer; transition:all 0.3s;" onmouseover="this.style.borderColor='rgba(0,212,255,0.5)'" onmouseout="this.style.borderColor='rgba(0,212,255,0.25)'">
                     🔄 Перезагрузить страницу
                 </button>
             </div>
-            <div style="margin-top:25px; padding:15px; background:#f0f7ff; border-radius:10px; border-left:4px solid #007aff;">
-                <p style="margin:0; font-size:12px; color:#0051d5; line-height:1.5;">
-                    💡 <strong>Совет:</strong> Найдите бота <strong>@DPSRADARDPR180bot</strong> в Telegram или перейдите по ссылке выше.
+            <div style="margin-top:18px; padding:12px; background:rgba(26,26,26,0.92); border-radius:10px; border:1px solid rgba(0,212,255,0.2); text-align:left;">
+                <p style="margin:0 0 8px 0; font-size:12px; color:#00d4ff; line-height:1.5; font-weight:800;">📲 Установка PWA:</p>
+                <p style="margin:0; font-size:12px; color:rgba(255,255,255,0.80); line-height:1.5;">
+                    iPhone: Safari → Поделиться → «На экран Домой».<br>
+                    Android: меню браузера → «Установить приложение».<br>
+                    После установки войдите через Telegram Widget выше.
                 </p>
             </div>
         </div>
@@ -1019,6 +1379,7 @@
         <span class="online-dot" aria-hidden="true"></span>
         <span id="onlineCountText">В сети: —</span>
     </div>
+    <div id="mapEngineBadge" class="engine-badge" aria-label="Движок карты">🗺️ ymaps3</div>
     <div id="map"></div>
     <div id="mapDimmingOverlay"></div>
 
@@ -1027,6 +1388,7 @@
         <button class="action-btn" id="ccProfileBtn" onclick="openProfileModal()" title="Профиль" aria-label="Профиль">👤</button>
         <button class="action-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
         <button class="action-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
+        <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс">🧭</button>
         <button class="action-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
         <button class="action-btn" id="ccChatBtn" onclick="openChatModal()" title="Чат" aria-label="Чат">💬</button>
         <button class="action-btn" id="ccActivityBtn" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС/Спецбат" aria-label="Активность ДПС/Спецбат">👮🛡️</button>
@@ -1888,10 +2250,14 @@
     </div>
     
     <div class="bottom-ui action-panel">
-        <div class="action-card" id="actionCard">
+        <div class="action-card hidden" id="actionCard">
             <button class="action-card-close" onclick="toggleActionCard()">✕</button>
             <span class="addr-label" id="addr-text">Определение адреса...</span>
             <div class="markers-counter" id="markersCounter">Загрузка...</div>
+            <div id="markerRenderModeControl" style="display:flex; gap:6px; margin-bottom:8px;">
+                <button id="markerRenderAllBtn" class="main-btn" onclick="setMarkerRenderMode('all')" style="flex:1; padding:7px 10px; font-size:12px; border-radius:8px; background:#9c9c9c;">🌍 Все</button>
+                <button id="markerRenderNearbyBtn" class="main-btn" onclick="setMarkerRenderMode('nearby')" style="flex:1; padding:7px 10px; font-size:12px; border-radius:8px; background:#34c759;">📍 Рядом</button>
+            </div>
             <div class="weather-widget" id="weatherWidget">🌦 Погода: загрузка...</div>
             <div class="type-selector">
                 <div class="type-tabs">
@@ -1944,6 +2310,7 @@
 
     function clearSupabaseAuth() {
         closeRealtimeChannels();
+        currentSupabaseToken = '';
         _sb = createSupabaseClient();
         try { window._sb = _sb; } catch(e) {}
         try {
@@ -1959,6 +2326,7 @@
 
     // Клиент Supabase для работы с БД
     let _sb = createSupabaseClient();
+    let currentSupabaseToken = '';
     // Удобно для диагностики из DevTools: в некоторых WebView глобальный `let` не виден как переменная.
     try { window._sb = _sb; } catch(e) {}
 
@@ -1967,6 +2335,8 @@
             clearSupabaseAuth();
             return;
         }
+        if (currentSupabaseToken === token) return;
+        currentSupabaseToken = token;
         closeRealtimeChannels();
         _sb = createSupabaseClient(token);
         try { window._sb = _sb; } catch(e) {}
@@ -2007,11 +2377,26 @@
     }
 
     async function ensureSupabaseAuth() {
+        function getJwtExp(token) {
+            try {
+                const parts = String(token || '').split('.');
+                if (parts.length !== 3) return 0;
+                const payloadPart = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
+                const json = JSON.parse(atob(normalized));
+                const exp = Number(json?.exp || 0);
+                return Number.isFinite(exp) ? exp : 0;
+            } catch (e) {
+                return 0;
+            }
+        }
+
         const initData = window.Telegram?.WebApp?.initData;
         if (!initData) {
             try {
                 const cachedToken = localStorage.getItem('sb_jwt') || '';
-                const cachedExp = Number(localStorage.getItem('sb_jwt_exp') || 0);
+                const cachedExpRaw = Number(localStorage.getItem('sb_jwt_exp') || 0);
+                const cachedExp = cachedExpRaw > 0 ? cachedExpRaw : getJwtExp(cachedToken);
                 const nowSec = Math.floor(Date.now() / 1000);
                 if (cachedToken && cachedToken.split('.').length === 3 && (!cachedExp || cachedExp > nowSec + 60)) {
                     setSupabaseAuth(cachedToken);
@@ -2172,6 +2557,16 @@
         } catch (e) {}
     }
 
+    function isFeatureAllowedByPolicy(featureName) {
+        try {
+            const policy = document.permissionsPolicy || document.featurePolicy;
+            if (!policy || typeof policy.allowsFeature !== 'function') return true;
+            return !!policy.allowsFeature(String(featureName || ''));
+        } catch (e) {
+            return true;
+        }
+    }
+
     function applyResponsiveUiScale() {
         try {
             const h = Math.max(0, Number(window.innerHeight) || 0);
@@ -2330,9 +2725,49 @@
                 const { data: driver } = await _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle();
                 if (driver) currentDriver = driver;
             } catch(e) {}
+
+            // Продолжаем инициализацию приложения (initApp мог выйти раньше из-за отсутствия токена)
+            try {
+                initAppInProgress = false;
+                initApp();
+            } catch (e) {}
         } catch (e) {
             console.warn('handleTelegramSiteAuth error:', e?.message || e);
         }
+    }
+
+    /**
+     * Auth Variant B (Monolith 180):
+     * - Telegram Mini App: используем initData → Edge Function telegram-auth.
+     * - Web/PWA: используем сохранённый sb_jwt; если нет — показываем оверлей с Telegram Login Widget.
+     */
+    async function checkAppEnvironment() {
+        const overlay = document.getElementById('tgAuthOverlay');
+        const splash = document.getElementById('splashScreen');
+
+        const initData = window.Telegram?.WebApp?.initData;
+        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        const isTelegram = !!(initData && tgUser);
+
+        if (isTelegram) {
+            // Mini App: авторизация должна обновляться через initData
+            const token = await ensureSupabaseAuth();
+            if (overlay) overlay.style.display = 'none';
+            return { mode: 'telegram', isTelegram: true, token };
+        }
+
+        // Web/PWA: пробуем восстановить токен из localStorage
+        const token = await ensureSupabaseAuth();
+        if (token) {
+            if (overlay) overlay.style.display = 'none';
+            return { mode: 'web', isTelegram: false, token };
+        }
+
+        // Нет токена → показываем модалку входа и монтируем Telegram Login Widget
+        try { ensureTelegramLoginWidgetRendered(); } catch (e) {}
+        if (overlay) overlay.style.display = 'flex';
+        if (splash) splash.classList.add('hidden');
+        return { mode: 'web-need-auth', isTelegram: false, token: null };
     }
 
     // Открыть бот в Telegram (пытаемся сначала tg://, затем https://)
@@ -2373,6 +2808,9 @@
     try { window.__siteTelegramUser = siteTelegramUser; } catch(e) {}
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
     let myMap, selectedType = 'dps';
+    let preferredMapEngine = 'ymaps3';
+    let activeMapEngine = 'ymaps2';
+    let mapAdapter = null;
     // Текущее GPS местоположение пользователя
     let userLocation = null;
     let lastReliableUserLocation = null;
@@ -2388,6 +2826,18 @@
     let lastUserPositionTime = null; // ms
     let userSpeedKmh = 0; // скорость в км/ч
     let userHeadingDeg = 0; // курс (0..360)
+    let dynamicCourseEnabled = true;
+    let dynamicCourseCompassDeg = null;
+    let dynamicCourseGpsDeg = null;
+    let dynamicCourseFusedDeg = null;
+    let dynamicCourseLastCameraDeg = null;
+    let dynamicCourseLastCompassTs = 0;
+    let dynamicCourseCameraTimerId = null;
+    let dynamicCourseCompassInit = false;
+    const DYNAMIC_COURSE_TILT = 0.8;
+    const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
+    const DYNAMIC_COURSE_AHEAD_MAX_M = 2300;
+    const DYNAMIC_COURSE_UPDATE_MS = 450;
     // Текущие серверные ачивки (ключ -> count)
     let currentAchievementCounts = {};
     // Коллекция для маркеров (чтобы не удалять служебные geoObjects при обновлении)
@@ -2403,6 +2853,11 @@
     // Порог подтверждений для статуса "Проверенный водитель"
     const TRUST_LIKES_THRESHOLD = 20; // можно менять по необходимости
     const TYPE_CATEGORY_STORAGE_KEY = 'selected_type_category';
+    const DYNAMIC_COURSE_ENABLED_KEY = 'dynamicCourseEnabled';
+    const MAP_ENGINE_STORAGE_KEY = 'mapEnginePreference';
+    const MAP_ENGINE_LEGACY_FORCE_KEY = 'mapEngineLegacyForce';
+    const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
+    const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
@@ -2433,6 +2888,11 @@
     let distanceNotifications = new Map(); // { markerId: 'far'|'near' }
     // Тренд расстояния до маркера (marker_id -> { lastDistance, lastTrend, lastUpdate })
     let markerDistanceState = new Map();
+    const MONOLITH_WARNING_OPTIONS = [300, 500, 1000, 2000];
+    const MONOLITH_SOS_PRIORITY_RADIUS_METERS = 5000;
+    const MONOLITH_POST_PASS_ASK_METERS = 200;
+    const monolithStreetCache = new Map();
+    const monolithStreetInflight = new Map();
     // Состояние динамического баннера приближения
     let proximityBannerState = {
         markerId: null,
@@ -2492,9 +2952,11 @@
     // Оповещения по расстоянию только при автослежении
     let proximityRequiresFollow = false;
     // Дистанция предупреждения (в метрах)
-    let warningDistanceMeters = 800;
+    let warningDistanceMeters = 500;
+    const MARKER_RENDER_MODE_KEY = 'markerRenderMode';
+    let markerRenderMode = 'nearby'; // 'nearby' | 'all'
     // Флаг видимости нижнего виджета
-    let actionCardVisible = true;
+    let actionCardVisible = false;
     // Флаг для отключения автосцентрирования GPS после размещения метки
     let disableAutoFollowOnce = false;
     // Кэш данных авторов для оптимизации запросов к БД
@@ -2503,6 +2965,8 @@
     const CACHE_DURATION = 300000; // Кэширование на 5 минут
     // Таймер для дебаунса loadMarkers
     let loadMarkersTimeout = null;
+    let loadMarkersInFlight = false;
+    let loadMarkersPending = false;
 
     function isAdminUserId(userId) {
         return String(userId) === String(ADMIN_ID);
@@ -2533,6 +2997,10 @@
             if (openBtn) openBtn.classList.add('visible');
         }
         try { setRightActionsHidden(!!actionCardVisible); } catch(e) {}
+        try {
+            const panel = document.querySelector('.action-panel');
+            if (panel) panel.classList.toggle('open', !!actionCardVisible);
+        } catch (e) {}
         updateTargetAnchorPosition();
     }
 
@@ -3666,16 +4134,23 @@
 
     async function syncNearbyImportantMarkersToNotifications({ silent = true } = {}) {
         try {
-            const sinceIso = new Date(Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS).toISOString();
-            const { data: markers, error } = await _sb
+            const sinceMs = Date.now() - NOTIF_FEED_MARKER_LOOKBACK_MS;
+            let markers = [];
+            let error = null;
+
+            ({ data: markers, error } = await _sb
                 .from('markers')
-                .select('id,type,ts,comment,coords,leave_confirmations,author_id')
+                .select('id,type,ts,comment,coords,author_id')
                 .in('type', ['sos', 'dtp'])
-                .gte('ts', sinceIso)
                 .order('ts', { ascending: false })
-                .limit(80);
+                .limit(80));
 
             if (error || !Array.isArray(markers)) return;
+
+            markers = markers.filter(marker => {
+                const tsMs = parseMarkerTimestampToMs(marker?.ts);
+                return Number.isFinite(tsMs) ? tsMs >= sinceMs : true;
+            });
 
             markers.forEach(marker => {
                 if (String(marker?.author_id || '') === String(uid || '')) return;
@@ -3692,8 +4167,7 @@
                     return;
                 }
 
-                const confirms = Number(marker?.leave_confirmations || 0);
-                if (marker.type === 'dtp' && confirms >= CRITICAL_DTP_CONFIRMATIONS) {
+                if (marker.type === 'dtp') {
                     upsertAppNotification(buildFeedMarkerNotification(marker, 'critical_dtp', distanceMeters), { silent });
                 }
             });
@@ -3721,15 +4195,13 @@
             const helpTypes = new Set(['sos', 'dps', 'specbat', 'dtp', 'danger', 'traffic_jam', 'works']);
             if (!helpTypes.has(String(marker.type))) return;
 
-            let token = localStorage.getItem('sb_jwt') || '';
-            if (!token) {
-                const refreshed = await ensureSupabaseAuth();
-                token = refreshed || localStorage.getItem('sb_jwt') || '';
-            }
-            if (!token) {
-                console.warn('Пропуск отправки в help-notify: JWT токен отсутствует');
-                return;
-            }
+            const nowMs = Date.now();
+            try {
+                const cooldownUntil = Number(localStorage.getItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY) || 0);
+                if (cooldownUntil > nowMs) return;
+            } catch (e) {}
+
+            const token = String(localStorage.getItem('sb_jwt') || '').trim();
 
             const addrText = (document.getElementById('addr-text')?.textContent || '').trim();
             const driverName = String(currentDriver?.name || 'Водитель');
@@ -3747,21 +4219,44 @@
                 driverRank
             };
 
-            const resp = await fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
-                method: 'POST',
-                headers: {
+            const sendHelpNotify = async (jwt = '') => {
+                const headers = {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify(payload)
-            });
+                    apikey: SUPABASE_KEY
+                };
+                if (jwt) headers.Authorization = `Bearer ${jwt}`;
+                return fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+            };
+
+            let resp = null;
+            if (token && token.split('.').length === 3) {
+                resp = await sendHelpNotify(token);
+                if (resp.status === 401) {
+                    try {
+                        localStorage.removeItem('sb_jwt');
+                        localStorage.removeItem('sb_jwt_exp');
+                    } catch (e) {}
+                    resp = await sendHelpNotify('');
+                }
+            } else {
+                resp = await sendHelpNotify('');
+            }
 
             if (!resp.ok) {
                 let bodyText = '';
                 try { bodyText = await resp.text(); } catch(e) { bodyText = ''; }
                 console.warn('help-notify вернул ошибку:', resp.status, bodyText || '(пустой ответ)');
+                if (resp.status === 401) {
+                    try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000)); } catch (e) {}
+                }
                 return;
             }
+
+            try { localStorage.removeItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY); } catch (e) {}
 
             try {
                 const payload = await resp.json();
@@ -3857,8 +4352,8 @@
         };
     }
     
-    // Оптимизированный дебаунс для loadMarkers (750ms вместо 500ms)
-    const loadMarkersDebounced = debounce(() => loadMarkers(), 750);
+    // Оптимизированный дебаунс для loadMarkers
+    const loadMarkersDebounced = debounce(() => loadMarkers(), 300);
     
     // ============= ФУНКЦИИ ДЛЯ УВЕДОМЛЕНИЙ О РАССТОЯНИИ И ОЗВУЧКИ =============
     
@@ -3881,12 +4376,27 @@
         return R * c;
     }
 
+    function normalizeWarningDistanceMeters(value) {
+        const v = Number(value);
+        if (!Number.isFinite(v)) return 500;
+        let best = MONOLITH_WARNING_OPTIONS[0];
+        let bestDiff = Math.abs(v - best);
+        for (const opt of MONOLITH_WARNING_OPTIONS) {
+            const diff = Math.abs(v - opt);
+            if (diff < bestDiff) {
+                best = opt;
+                bestDiff = diff;
+            }
+        }
+        return best;
+    }
+
+    function getUserDistSettingMeters() {
+        return normalizeWarningDistanceMeters(warningDistanceMeters);
+    }
+
     function getDynamicWarningMaxMeters() {
-        const base = Math.max(300, Number(warningDistanceMeters) || 800);
-        const speed = Number(userSpeedKmh) || 0;
-        if (speed > 80) return Math.max(base, 1200);
-        if (speed < 40) return Math.min(base, 600);
-        return base;
+        return getUserDistSettingMeters();
     }
 
     function getWarningMinMeters(maxMeters) {
@@ -3902,6 +4412,72 @@
         if (distance >= 1000) return `${Math.round(distance / 10) * 10} м`;
         if (distance >= 100) return `${Math.round(distance / 10) * 10} м`;
         return `${Math.round(distance)} м`;
+    }
+
+    function formatMonolithVoiceDistance(distanceMeters) {
+        let m = Math.max(0, Number(distanceMeters) || 0);
+        if (m >= 100) m = Math.round(m / 10) * 10;
+        else m = Math.round(m);
+        if (m === 1000) return '1 километр';
+        if (m === 2000) return '2 километра';
+        return `${m} метров`;
+    }
+
+    function extractStreetFromAddressLine(line) {
+        const raw = String(line || '').trim();
+        if (!raw) return '';
+        const firstPart = raw.split(',').map(s => String(s || '').trim()).find(Boolean) || raw;
+        const cleaned = firstPart.replace(/^(Россия|Донецк|ДНР)\s*[,.]\s*/i, '').trim();
+        return cleaned || firstPart;
+    }
+
+    function monolithGetTargetVoiceLabel(type) {
+        const t = String(type || '');
+        const labels = {
+            specbat: 'Спецбат',
+            dps: 'ДПС',
+            sos: 'SOS',
+            traffic_jam: 'Пробка'
+        };
+        return labels[t] || getMarkerLabel(t);
+    }
+
+    function monolithBuildApproachVoiceText(type, street, remainingDistanceMeters) {
+        const target = monolithGetTargetVoiceLabel(type);
+        const place = String(street || '').trim() || 'этой улице';
+        return `Внимание! ${target} на ${place}. Осталось ${formatMonolithVoiceDistance(remainingDistanceMeters)}`;
+    }
+
+    function monolithBuildSosPriorityText(street) {
+        const place = String(street || '').trim() || 'этой улице';
+        return `Внимание! Нужна помощь брату на ${place}. Кто рядом — подтянитесь`;
+    }
+
+    function monolithResolveStreetForMarker(markerId, lat, lon) {
+        if (!markerId) return '';
+        const cached = monolithStreetCache.get(markerId);
+        if (cached) return cached;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+        if (!window.ymaps || !ymaps.geocode) return '';
+        if (monolithStreetInflight.has(markerId)) return '';
+
+        const req = ymaps.geocode([lat, lon]).then(
+            (res) => {
+                const obj = res?.geoObjects?.get?.(0);
+                const line = obj ? String(obj.getAddressLine() || '').trim() : '';
+                const street = extractStreetFromAddressLine(line);
+                if (street) monolithStreetCache.set(markerId, street);
+                monolithStreetInflight.delete(markerId);
+                return street;
+            },
+            () => {
+                monolithStreetInflight.delete(markerId);
+                return '';
+            }
+        );
+
+        monolithStreetInflight.set(markerId, req);
+        return '';
     }
 
     function getMarkerLabel(type) {
@@ -4004,6 +4580,9 @@
     let monolithSelectedRuVoice = null;
 
     let monolithKeepAliveAudio = null;
+    let monolithAudioCtx = null;
+    let monolithKeepAliveOsc = null;
+    let monolithKeepAliveGain = null;
     let monolithKeepAliveTimerId = null;
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
@@ -4123,6 +4702,7 @@
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
 
+        monolithSoftResumeSpeech();
         monolithEnsureVoicesReady();
         monolithTtsQueue.push(t);
 
@@ -4135,7 +4715,14 @@
 
     async function monolithRequestWakeLock() {
         if (!('wakeLock' in navigator)) return;
-        if (!monolithNavigationActive) return;
+        if (!isFeatureAllowedByPolicy('screen-wake-lock')) {
+            if (!monolithRequestWakeLock.__policyWarned) {
+                monolithRequestWakeLock.__policyWarned = true;
+                console.info('Wake Lock недоступен в текущем контейнере Telegram/WebView — работаем без него.');
+            }
+            return;
+        }
+        if (!monolithIsVoiceSessionActive()) return;
         if (!isMonolithVoiceEnabled()) return;
         if (document.hidden) return; // screen wake lock обычно требует видимую вкладку
 
@@ -4164,22 +4751,34 @@
     function monolithSetNavigationActive(active) {
         monolithNavigationActive = !!active;
         monolithMaybeUpdateWakeLock();
-        if (!monolithNavigationActive) {
+        if (!monolithIsVoiceSessionActive()) {
             monolithStopKeepAliveAudio();
         }
     }
 
+    function monolithIsVoiceSessionActive() {
+        const gpsActive = (typeof gpsWatchId !== 'undefined' && gpsWatchId !== null && gpsWatchId !== undefined);
+        return !!(isMonolithVoiceEnabled() && (monolithNavigationActive || gpsActive || monolithTtsIsSpeaking || monolithTtsQueue.length > 0));
+    }
+
     function monolithMaybeUpdateWakeLock() {
-        if (!monolithNavigationActive || !isMonolithVoiceEnabled()) {
+        if (!monolithIsVoiceSessionActive()) {
             monolithReleaseWakeLock();
             return;
         }
         monolithRequestWakeLock();
     }
 
+    function monolithSoftResumeSpeech() {
+        try {
+            if (!window.speechSynthesis) return;
+            try { window.speechSynthesis.getVoices(); } catch (e) {}
+            try { window.speechSynthesis.resume(); } catch (e) {}
+        } catch (e) {}
+    }
+
     function monolithPrimeAudioOnce() {
         if (monolithAudioPrimed) return;
-        monolithAudioPrimed = true;
 
         // Android/WebView: часто нужно "разбудить" speechSynthesis после user gesture.
         try {
@@ -4197,14 +4796,75 @@
                 // ignore
             });
         } catch (e) {}
+
+        monolithAudioPrimed = true;
+        try { monolithStartAudioContextKeepAlive(); } catch (e) {}
+    }
+
+    function monolithEnsureAudioContext() {
+        if (monolithAudioCtx) return monolithAudioCtx;
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        try {
+            monolithAudioCtx = new Ctx();
+            return monolithAudioCtx;
+        } catch (e) {
+            monolithAudioCtx = null;
+            return null;
+        }
+    }
+
+    function monolithStartAudioContextKeepAlive() {
+        if (!monolithIsVoiceSessionActive() || !monolithAudioPrimed) return;
+        const ctx = monolithEnsureAudioContext();
+        if (!ctx) return;
+
+        try {
+            if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+                ctx.resume().catch(() => {});
+            }
+        } catch (e) {}
+
+        if (monolithKeepAliveOsc) return;
+
+        try {
+            const gain = ctx.createGain();
+            gain.gain.value = 0.00001;
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.value = 24;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            monolithKeepAliveGain = gain;
+            monolithKeepAliveOsc = osc;
+        } catch (e) {
+            monolithKeepAliveOsc = null;
+            monolithKeepAliveGain = null;
+        }
+    }
+
+    function monolithStopAudioContextKeepAlive() {
+        try {
+            if (monolithKeepAliveOsc) {
+                monolithKeepAliveOsc.stop();
+                monolithKeepAliveOsc.disconnect();
+            }
+        } catch (e) {}
+        monolithKeepAliveOsc = null;
+        try {
+            if (monolithKeepAliveGain) monolithKeepAliveGain.disconnect();
+        } catch (e) {}
+        monolithKeepAliveGain = null;
     }
 
     function monolithMaybeStartKeepAliveAudio() {
-        if (!isMonolithVoiceEnabled()) return;
-        if (!monolithNavigationActive) return;
+        if (!monolithIsVoiceSessionActive()) return;
 
         // многие браузеры запрещают autoplay без user gesture
         if (!monolithAudioPrimed) return;
+
+        monolithStartAudioContextKeepAlive();
 
         if (!monolithKeepAliveAudio) {
             monolithKeepAliveAudio = new Audio(MONOLITH_SILENT_WAV);
@@ -4255,11 +4915,13 @@
                 monolithKeepAliveAudio.currentTime = 0;
             }
         } catch (e) {}
+        monolithStopAudioContextKeepAlive();
     }
 
     // Prime audio on first user interaction (needed for background keep-alive hacks)
-    window.addEventListener('touchstart', monolithPrimeAudioOnce, { passive: true, once: true });
-    window.addEventListener('click', monolithPrimeAudioOnce, { passive: true, once: true });
+    window.addEventListener('touchstart', monolithPrimeAudioOnce, { passive: true });
+    window.addEventListener('click', monolithPrimeAudioOnce, { passive: true });
+    window.addEventListener('pointerdown', monolithPrimeAudioOnce, { passive: true });
 
     document.addEventListener('visibilitychange', () => {
         // Требование: при сворачивании звук продолжал работать.
@@ -4582,12 +5244,17 @@
             if (mLat === null || mLon === null) return;
 
             const distance = calculateDistance(userCoords[0], userCoords[1], mLat, mLon);
+            const markerType = String(marker?.type || '');
+            const userDistSetting = getUserDistSettingMeters();
+
+            if (distance <= Math.max(userDistSetting + 600, MONOLITH_SOS_PRIORITY_RADIUS_METERS + 300)) {
+                monolithResolveStreetForMarker(marker.id, mLat, mLon);
+            }
+            const knownStreet = monolithResolveStreetForMarker(marker.id, mLat, mLon);
         
         const markerId = marker.id;
-        const currentNotification = distanceNotifications.get(markerId);
+        const currentNotification = distanceNotifications.get(markerId) || {};
         const warningMax = getDynamicWarningMaxMeters();
-        const warningMin = getWarningMinMeters(warningMax);
-        const nearThreshold = getNearThresholdMeters(warningMax);
 
         const prevState = markerDistanceState.get(markerId);
         let trend = prevState?.lastTrend || 'approaching';
@@ -4608,18 +5275,15 @@
                 if (!gpsReliable || speed < 10) {
                     crowdConfirmState.set(markerId, st);
                 } else {
-
-                    // На практике 120м слишком строго (GPS шум / проезд по соседней улице).
-                    // Считаем "рядом" если подходили ближе 250м.
-                    if (distance < 250) st.wasNear = true;
+                    const passNearMeters = Math.max(80, Math.min(180, Math.round(userDistSetting * 0.35)));
+                    if (distance <= passNearMeters) st.wasNear = true;
 
                     const cooldownOk = !st.askedAt || (now - st.askedAt) > CROWD_CONFIRM_COOLDOWN_MS;
-                    // Чтобы не срабатывало на дрожании GPS — спрашиваем только когда уже начали реально удаляться.
-                    if (trend === 'away' && st.wasNear && cooldownOk && distance > 300) {
+                    if (trend === 'away' && st.wasNear && cooldownOk && distance >= MONOLITH_POST_PASS_ASK_METERS) {
                         st.askedAt = now;
                         st.wasNear = false;
                         crowdConfirmState.set(markerId, st);
-                        crowdConfirmShow(markerId, marker.type);
+                        crowdConfirmShow(markerId, marker.type, knownStreet);
                     } else {
                         crowdConfirmState.set(markerId, st);
                     }
@@ -4646,37 +5310,42 @@
             }
         }
 
-        // MONOLITH 180: простая логика — озвучиваем только при < 1000м
         if (!isMonolithVoiceEnabled()) return;
-        const threshold = 1000;
-        const hysteresis = 1100;
+        const threshold = userDistSetting;
+        const hysteresis = threshold + 140;
+        const prevDistance = Number(prevState?.lastDistance);
+        const crossedThreshold = Number.isFinite(prevDistance) && prevDistance > threshold && distance <= threshold;
+        const street = knownStreet || 'этой улице';
 
-        if (distance < threshold && currentNotification !== 'near1k') {
-            const label = getMarkerLabel(marker.type);
-            const ageMin = getMarkerAgeMinutes(marker);
-            const type = String(marker.type || '');
+        if (markerType === 'sos') {
+            if (distance <= MONOLITH_SOS_PRIORITY_RADIUS_METERS && !currentNotification.sosPriorityAnnounced) {
+                aiSpeak(monolithBuildSosPriorityText(street));
+                currentNotification.sosPriorityAnnounced = true;
+                currentNotification.sosPriorityAt = Date.now();
+                distanceNotifications.set(markerId, currentNotification);
+            } else if (distance > (MONOLITH_SOS_PRIORITY_RADIUS_METERS + 500) && currentNotification.sosPriorityAnnounced) {
+                currentNotification.sosPriorityAnnounced = false;
+                if (!currentNotification.mainAnnounced) distanceNotifications.delete(markerId);
+                else distanceNotifications.set(markerId, currentNotification);
+            }
+            return;
+        }
 
-            // Округляем дистанцию для озвучки
-            let distancePretty;
-            if (distance > 1000) distancePretty = Math.round(distance / 100) * 100;
-            else if (distance > 100) distancePretty = Math.round(distance / 10) * 10;
-            else distancePretty = Math.round(distance);
-
-            let suffix = '';
-            // "До сколько" предсказать нельзя; можем сказать только сколько минут назад добавили/подтвердили.
-            if (ageMin !== null && ageMin >= 0 && ageMin <= 24 * 60) {
-                if (['dps', 'patrol', 'specbat', 'motobat', 'cargo_control'].includes(type)) {
-                    suffix = `. Стоят уже ${formatMinutesRu(ageMin)}`;
-                } else {
-                    suffix = `. Метка ${formatMinutesRu(ageMin)} назад`;
-                }
+        if (crossedThreshold || (!currentNotification.mainAnnounced && distance <= threshold && trend !== 'away')) {
+            if (markerType === 'specbat') {
+                try { playSpecbatSound(); } catch (e) {}
+                try { navigator.vibrate([90, 60, 90, 60, 140]); } catch (e) {}
             }
 
-            aiSpeak(`Внимание, впереди ${label}, примерно через ${distancePretty} метров${suffix}`);
-            distanceNotifications.set(markerId, 'near1k');
+            aiSpeak(monolithBuildApproachVoiceText(markerType, street, distance));
+            currentNotification.mainAnnounced = true;
+            currentNotification.mainAt = Date.now();
+            distanceNotifications.set(markerId, currentNotification);
             console.log(`📍 Голос: маркер ${markerId} (${distance.toFixed(0)}м)`);
-        } else if (distance > hysteresis && currentNotification) {
-            distanceNotifications.delete(markerId);
+        } else if (distance > hysteresis && currentNotification.mainAnnounced) {
+            currentNotification.mainAnnounced = false;
+            if (!currentNotification.sosPriorityAnnounced) distanceNotifications.delete(markerId);
+            else distanceNotifications.set(markerId, currentNotification);
         }
     }
 
@@ -4736,7 +5405,7 @@
     function updateWarningDistanceUI() {
         const label = document.getElementById('warningDistanceLabel');
         const range = document.getElementById('warningDistanceRange');
-        const meters = Math.max(300, Number(warningDistanceMeters) || 800);
+        const meters = getUserDistSettingMeters();
         if (label) {
             label.textContent = meters >= 1000 ? `${(meters / 1000).toFixed(1)} км` : `${meters} м`;
         }
@@ -4747,7 +5416,7 @@
 
     function setWarningDistance(value) {
         if (!isViewingOwnProfile) return;
-        warningDistanceMeters = Math.max(300, Math.min(2000, Number(value) || 800));
+        warningDistanceMeters = normalizeWarningDistanceMeters(value);
         updateWarningDistanceUI();
         distanceNotifications.clear();
         try {
@@ -4760,7 +5429,7 @@
     function loadWarningDistance() {
         try {
             const saved = localStorage.getItem('warningDistanceMeters');
-            if (saved) warningDistanceMeters = Number(saved) || warningDistanceMeters;
+            if (saved) warningDistanceMeters = normalizeWarningDistanceMeters(saved);
         } catch (e) {
             console.warn('Не удалось загрузить дистанцию предупреждения:', e);
         }
@@ -4803,6 +5472,66 @@
             console.warn('Не удалось загрузить режим оповещений:', e);
         }
         setProximityMode(proximityRequiresFollow);
+    }
+
+    function updateMarkerRenderModeUI() {
+        const allBtn = document.getElementById('markerRenderAllBtn');
+        const nearbyBtn = document.getElementById('markerRenderNearbyBtn');
+        const isAll = markerRenderMode === 'all';
+        if (allBtn) {
+            allBtn.style.background = isAll ? '#34c759' : '#9c9c9c';
+            allBtn.style.color = 'white';
+        }
+        if (nearbyBtn) {
+            nearbyBtn.style.background = isAll ? '#9c9c9c' : '#34c759';
+            nearbyBtn.style.color = 'white';
+        }
+    }
+
+    function setMarkerRenderMode(mode) {
+        const next = (mode === 'all') ? 'all' : 'nearby';
+        markerRenderMode = next;
+        updateMarkerRenderModeUI();
+        try { localStorage.setItem(MARKER_RENDER_MODE_KEY, markerRenderMode); } catch (e) {}
+        if (typeof loadMarkersDebounced === 'function') loadMarkersDebounced();
+    }
+
+    function loadMarkerRenderMode() {
+        try {
+            const saved = String(localStorage.getItem(MARKER_RENDER_MODE_KEY) || '').trim();
+            if (saved === 'all' || saved === 'nearby') markerRenderMode = saved;
+        } catch (e) {}
+        updateMarkerRenderModeUI();
+    }
+
+    function loadDynamicCourseEnabled() {
+        try {
+            const raw = localStorage.getItem(DYNAMIC_COURSE_ENABLED_KEY);
+            if (raw === 'true' || raw === 'false') dynamicCourseEnabled = (raw === 'true');
+        } catch (e) {}
+    }
+
+    function saveDynamicCourseEnabled() {
+        try { localStorage.setItem(DYNAMIC_COURSE_ENABLED_KEY, dynamicCourseEnabled ? 'true' : 'false'); } catch (e) {}
+    }
+
+    function updateCourseBtnUiState() {
+        const btn = document.getElementById('ccCourseBtn');
+        if (!btn) return;
+        btn.classList.toggle('active', !!dynamicCourseEnabled);
+        btn.classList.toggle('off', !dynamicCourseEnabled);
+        btn.textContent = dynamicCourseEnabled ? '🧭' : '🧱';
+        btn.title = dynamicCourseEnabled ? 'Динамический курс: ВКЛ' : 'Динамический курс: ВЫКЛ';
+    }
+
+    function toggleDynamicCourseFromUI() {
+        dynamicCourseEnabled = !dynamicCourseEnabled;
+        saveDynamicCourseEnabled();
+        if (dynamicCourseEnabled) {
+            requestDynamicCourseOrientationPermission().catch(()=>{});
+            try { updateDynamicCourseCamera(); } catch (e) {}
+        }
+        updateCourseBtnUiState();
     }
 
         function isReliableGeoPosition(lat, lon, accuracyMeters) {
@@ -4890,6 +5619,9 @@
                         } else if (prev && Array.isArray(prev) && prev.length >= 2) {
                             userHeadingDeg = (calculateBearingDeg(prev[0], prev[1], latitude, longitude) + 360) % 360;
                         }
+                        if (Number.isFinite(Number(userHeadingDeg))) {
+                            dynamicCourseGpsDeg = normalizeDeg(userHeadingDeg);
+                        }
                     } catch(e) {}
 
                     lastUserPositionCoords = [latitude, longitude];
@@ -4925,7 +5657,9 @@
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
+                        try { updateDynamicCourseCamera(); } catch (e) {
+                            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
+                        }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
@@ -4948,7 +5682,10 @@
                                 const { latitude, longitude } = pos.coords;
                                 try {
                                     const h = pos?.coords?.heading;
-                                    if (Number.isFinite(Number(h))) userHeadingDeg = (Number(h) + 360) % 360;
+                                    if (Number.isFinite(Number(h))) {
+                                        userHeadingDeg = (Number(h) + 360) % 360;
+                                        dynamicCourseGpsDeg = normalizeDeg(userHeadingDeg);
+                                    }
                                 } catch(e) {}
                                 userLocation = [latitude, longitude];
                                 lastUserPositionCoords = [latitude, longitude];
@@ -4978,6 +5715,588 @@
         const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLam);
         const theta = Math.atan2(y, x);
         return (toDeg(theta) + 360) % 360;
+    }
+
+    function normalizeDeg(v) {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return 0;
+        return ((n % 360) + 360) % 360;
+    }
+
+    function shortestAngleDeltaDeg(fromDeg, toDeg) {
+        let d = normalizeDeg(toDeg) - normalizeDeg(fromDeg);
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        return d;
+    }
+
+    function smoothAngleDeg(currentDeg, targetDeg, alpha = 0.18) {
+        if (!Number.isFinite(Number(currentDeg))) return normalizeDeg(targetDeg);
+        const delta = shortestAngleDeltaDeg(currentDeg, targetDeg);
+        return normalizeDeg(Number(currentDeg) + delta * Math.max(0.02, Math.min(1, Number(alpha) || 0.18)));
+    }
+
+    function blendCircularDeg(aDeg, aWeight, bDeg, bWeight) {
+        const aw = Math.max(0, Number(aWeight) || 0);
+        const bw = Math.max(0, Number(bWeight) || 0);
+        if (aw <= 0 && bw <= 0) return null;
+        const a = normalizeDeg(aDeg) * Math.PI / 180;
+        const b = normalizeDeg(bDeg) * Math.PI / 180;
+        const x = Math.cos(a) * aw + Math.cos(b) * bw;
+        const y = Math.sin(a) * aw + Math.sin(b) * bw;
+        if (Math.abs(x) < 1e-6 && Math.abs(y) < 1e-6) return null;
+        return normalizeDeg(Math.atan2(y, x) * 180 / Math.PI);
+    }
+
+    function destinationPointByBearing(lat, lon, bearingDeg, distanceMeters) {
+        const R = 6371000;
+        const br = normalizeDeg(bearingDeg) * Math.PI / 180;
+        const d = Math.max(0, Number(distanceMeters) || 0);
+        const phi1 = Number(lat) * Math.PI / 180;
+        const lam1 = Number(lon) * Math.PI / 180;
+        const sinPhi1 = Math.sin(phi1);
+        const cosPhi1 = Math.cos(phi1);
+        const sinD = Math.sin(d / R);
+        const cosD = Math.cos(d / R);
+        const sinPhi2 = sinPhi1 * cosD + cosPhi1 * sinD * Math.cos(br);
+        const phi2 = Math.asin(Math.max(-1, Math.min(1, sinPhi2)));
+        const y = Math.sin(br) * sinD * cosPhi1;
+        const x = cosD - sinPhi1 * Math.sin(phi2);
+        const lam2 = lam1 + Math.atan2(y, x);
+        return [phi2 * 180 / Math.PI, ((lam2 * 180 / Math.PI + 540) % 360) - 180];
+    }
+
+    function extractCompassHeadingDeg(e) {
+        if (!e) return null;
+        if (Number.isFinite(Number(e.webkitCompassHeading))) {
+            return normalizeDeg(Number(e.webkitCompassHeading));
+        }
+        if (Number.isFinite(Number(e.alpha))) {
+            return normalizeDeg(360 - Number(e.alpha));
+        }
+        return null;
+    }
+
+    function onDynamicCourseOrientation(e) {
+        const compass = extractCompassHeadingDeg(e);
+        if (compass === null) return;
+        const now = Date.now();
+        dynamicCourseLastCompassTs = now;
+
+        const speed = Number(userSpeedKmh) || 0;
+        const alpha = speed > 80 ? 0.10 : 0.20;
+        dynamicCourseCompassDeg = (dynamicCourseCompassDeg === null)
+            ? compass
+            : smoothAngleDeg(dynamicCourseCompassDeg, compass, alpha);
+    }
+
+    async function requestDynamicCourseOrientationPermission() {
+        try {
+            const D = window.DeviceOrientationEvent;
+            if (!D || typeof D.requestPermission !== 'function') return true;
+            const state = await D.requestPermission();
+            return state === 'granted';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function getDynamicCourseHeadingDeg() {
+        const speed = Number(userSpeedKmh) || 0;
+        const gpsDeg = Number.isFinite(Number(dynamicCourseGpsDeg)) ? normalizeDeg(dynamicCourseGpsDeg) : null;
+        const compassFresh = (Date.now() - Number(dynamicCourseLastCompassTs || 0)) < 6000;
+        const compassDeg = (compassFresh && Number.isFinite(Number(dynamicCourseCompassDeg))) ? normalizeDeg(dynamicCourseCompassDeg) : null;
+
+        if (gpsDeg === null && compassDeg === null) return null;
+        if (gpsDeg !== null && compassDeg === null) return gpsDeg;
+        if (gpsDeg === null && compassDeg !== null) return compassDeg;
+
+        let gpsWeight = Math.max(0.1, Math.min(0.95, (speed - 10) / 90));
+        if (speed >= 140) gpsWeight = 0.97;
+        const compassWeight = Math.max(0.05, 1 - gpsWeight);
+        return blendCircularDeg(compassDeg, compassWeight, gpsDeg, gpsWeight);
+    }
+
+    function getDynamicFollowZoomBySpeed(speedKmh) {
+        const s = Number(speedKmh) || 0;
+        if (s > 80) return 14;
+        if (s < 20) return 17;
+        return 16;
+    }
+
+    function attachYandexCameraCompat(map) {
+        if (!map || typeof map !== 'object') return;
+
+        if (typeof map.setBehaviors !== 'function') {
+            map.setBehaviors = function(behaviors) {
+                try {
+                    if (map.behaviors && typeof map.behaviors.enable === 'function') {
+                        map.behaviors.enable(Array.isArray(behaviors) ? behaviors : []);
+                    }
+                } catch (e) {}
+            };
+        }
+
+        if (typeof map.setCamera !== 'function') {
+            map.setCamera = function(camera = {}) {
+                const center = Array.isArray(camera.center) && camera.center.length >= 2
+                    ? [Number(camera.center[0]), Number(camera.center[1])]
+                    : null;
+                const zoom = Number.isFinite(Number(camera.zoom)) ? Number(camera.zoom) : (map.getZoom ? map.getZoom() : 16);
+                const duration = Number.isFinite(Number(camera.duration)) ? Number(camera.duration) : 500;
+
+                try {
+                    if (map.options && typeof map.options.set === 'function') {
+                        if (Number.isFinite(Number(camera.azimuth))) map.options.set('azimuth', normalizeDeg(camera.azimuth));
+                        if (Number.isFinite(Number(camera.tilt))) map.options.set('tilt', Number(camera.tilt));
+                    }
+                } catch (e) {}
+
+                if (center && map.setCenter) {
+                    try {
+                        map.setCenter(center, zoom, { duration, timingFunction: 'ease-out' });
+                        return;
+                    } catch (e) {
+                        try { map.setCenter(center, zoom); return; } catch (e2) {}
+                    }
+                }
+            };
+        }
+    }
+
+    function loadMapEnginePreference() {
+        try {
+            const qs = new URLSearchParams(window.location.search || '');
+            const forceLegacyByQuery = qs.get('map2') === '1' || qs.get('engine') === 'ymaps2';
+            const forceLegacyByStorage = localStorage.getItem(MAP_ENGINE_LEGACY_FORCE_KEY) === 'true';
+            if (forceLegacyByQuery || forceLegacyByStorage) {
+                preferredMapEngine = 'ymaps2';
+                return;
+            }
+
+            const raw = String(localStorage.getItem(MAP_ENGINE_STORAGE_KEY) || '').trim().toLowerCase();
+            preferredMapEngine = (raw === 'ymaps2') ? 'ymaps2' : 'ymaps3';
+        } catch (e) {
+            preferredMapEngine = 'ymaps3';
+        }
+        updateMapEngineBadge();
+    }
+
+    function updateMapEngineBadge() {
+        try {
+            const badge = document.getElementById('mapEngineBadge');
+            if (!badge) return;
+
+            const engine = String(activeMapEngine || preferredMapEngine || '').toLowerCase();
+            const isV3 = engine.includes('ymaps3');
+            badge.classList.toggle('is-v3', isV3);
+            badge.classList.toggle('is-v2', !isV3);
+            badge.textContent = isV3 ? '🗺️ ymaps3' : '🗺️ ymaps2 legacy';
+        } catch (e) {}
+    }
+
+    function saveMapEnginePreference() {
+        try { localStorage.setItem(MAP_ENGINE_STORAGE_KEY, preferredMapEngine); } catch (e) {}
+    }
+
+    function setMapEnginePreference(engine) {
+        preferredMapEngine = (String(engine || '').toLowerCase() === 'ymaps3') ? 'ymaps3' : 'ymaps2';
+        if (preferredMapEngine === 'ymaps2') activeMapEngine = 'ymaps2';
+        try {
+            localStorage.setItem(MAP_ENGINE_LEGACY_FORCE_KEY, preferredMapEngine === 'ymaps2' ? 'true' : 'false');
+        } catch (e) {}
+        saveMapEnginePreference();
+        updateMapEngineBadge();
+        try {
+            showInAppNotification({
+                title: '🗺 Движок карты',
+                body: preferredMapEngine === 'ymaps3' ? 'Режим ymaps3 сохранён. Перезапустите страницу.' : 'Режим ymaps2 (legacy) сохранён. Перезапустите страницу.',
+                priority: 'low'
+            });
+        } catch (e) {}
+        return preferredMapEngine;
+    }
+
+    window.setMapEnginePreference = setMapEnginePreference;
+
+    async function initPrimaryMapInstance() {
+        loadMapEnginePreference();
+        activeMapEngine = 'ymaps2';
+
+        if (preferredMapEngine === 'ymaps3') {
+            try {
+                if (window.ymaps3 && ymaps3.ready) {
+                    await ymaps3.ready;
+                    activeMapEngine = 'ymaps3-compat';
+                }
+            } catch (e) {
+                activeMapEngine = 'ymaps2';
+            }
+        }
+
+        myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+        attachYandexCameraCompat(myMap);
+        applyDynamicCourseBehaviors();
+
+        if (activeMapEngine === 'ymaps3-compat') {
+            try {
+                const YMapCtor = ymaps3?.YMap;
+                const SchemeCtor = ymaps3?.YMapDefaultSchemeLayer;
+                const FeaturesCtor = ymaps3?.YMapDefaultFeaturesLayer;
+                if (YMapCtor && SchemeCtor && FeaturesCtor) {
+                    const root = new YMapCtor(document.getElementById('map'), {
+                        location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, tilt: 0.8 }
+                    });
+                    const scheme = new SchemeCtor({});
+                    const features = new FeaturesCtor({});
+                    root.addChild(scheme);
+                    root.addChild(features);
+                    myMap.__ym3Root = root;
+                    myMap.__ym3MarkerLayer = features;
+                }
+            } catch (e) {
+                console.warn('ymaps3 marker layer init skipped:', e?.message || e);
+            }
+        }
+
+        markersCollection = new ymaps.GeoObjectCollection();
+        myMap.geoObjects.add(markersCollection);
+        mapAdapter = createMapAdapter(activeMapEngine, myMap, markersCollection);
+        updateMapEngineBadge();
+
+        if (activeMapEngine === 'ymaps3-compat') {
+            console.info('🧭 ymaps3 active: running staged adapter mode with legacy-safe fallback.');
+        }
+    }
+
+    function createMapAdapter(engine, map, markerCollection) {
+        const mode = String(engine || 'ymaps2');
+        const ym3Markers = [];
+        const ym3ActionEndHandlers = [];
+        const ym3ActionStartHandlers = [];
+        const ym3ClickHandlers = [];
+        let ym3ListenerEntity = null;
+        let ym3MapInAction = false;
+
+        function approximateBoundsFromCenterZoom(center, zoom) {
+            const lat = Number(center?.[0]);
+            const lon = Number(center?.[1]);
+            const z = Number(zoom);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(z)) return null;
+
+            const lonSpan = Math.max(0.01, 360 / Math.pow(2, z + 1));
+            const latSpan = Math.max(0.01, 180 / Math.pow(2, z + 1));
+            return [
+                [lat - latSpan, lon - lonSpan],
+                [lat + latSpan, lon + lonSpan]
+            ];
+        }
+
+        function ensureYmaps3Popup() {
+            let popup = document.getElementById('ym3MarkerPopup');
+            if (popup) return popup;
+            popup = document.createElement('div');
+            popup.id = 'ym3MarkerPopup';
+            popup.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(90px + env(safe-area-inset-bottom));z-index:4100;display:none;background:rgba(20,20,24,0.96);color:#fff;border-radius:14px;border:1px solid rgba(255,255,255,0.18);box-shadow:0 12px 26px rgba(0,0,0,0.35);max-height:46vh;overflow:auto;';
+            popup.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.12);"><strong style="font-size:13px;">Метка</strong><button id="ym3MarkerPopupClose" style="background:none;border:none;color:#fff;font-size:22px;line-height:1;cursor:pointer;">×</button></div><div id="ym3MarkerPopupBody" style="padding:10px 12px;"></div>';
+            document.body.appendChild(popup);
+            const closeBtn = document.getElementById('ym3MarkerPopupClose');
+            if (closeBtn) closeBtn.addEventListener('click', () => { popup.style.display = 'none'; });
+            return popup;
+        }
+
+        function showYmaps3Popup(html) {
+            try {
+                const popup = ensureYmaps3Popup();
+                const body = document.getElementById('ym3MarkerPopupBody');
+                if (body) body.innerHTML = String(html || '');
+                popup.style.display = 'block';
+            } catch (e) {}
+        }
+
+        function ensureYmaps3Listener() {
+            if (mode !== 'ymaps3-compat') return;
+            if (!map?.__ym3Root || !window.ymaps3 || ym3ListenerEntity) return;
+            try {
+                const YMapListenerCtor = ymaps3?.YMapListener;
+                if (!YMapListenerCtor) return;
+                ym3ListenerEntity = new YMapListenerCtor({
+                    onClick: () => {
+                        ym3ClickHandlers.forEach(fn => { try { fn(); } catch (e) {} });
+                    },
+                    onUpdate: (obj) => {
+                        const loc = obj?.location || obj?.camera || {};
+                        const isAction = !!(obj?.mapInAction || obj?.isInteracting || obj?.inAction || false);
+                        if (isAction && !ym3MapInAction) {
+                            ym3MapInAction = true;
+                            ym3ActionStartHandlers.forEach(fn => { try { fn(); } catch (e) {} });
+                        }
+                        if (!isAction && ym3MapInAction) {
+                            ym3MapInAction = false;
+                            ym3ActionEndHandlers.forEach(fn => { try { fn(); } catch (e) {} });
+                        }
+                        if (loc && Array.isArray(loc.center) && map && typeof map.setCenter === 'function') {
+                            try {
+                                const lon = Number(loc.center[0]);
+                                const lat = Number(loc.center[1]);
+                                const zoom = Number(loc.zoom);
+                                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                                    map.__ym3LastCenter = [lat, lon];
+                                    if (Number.isFinite(zoom)) map.__ym3LastZoom = zoom;
+                                    map.__ym3LastBounds = approximateBoundsFromCenterZoom([lat, lon], map.__ym3LastZoom || 16);
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                });
+                map.__ym3Root.addChild(ym3ListenerEntity);
+            } catch (e) {}
+        }
+
+        function addYmaps3MarkerFromDescriptor(descriptor) {
+            try {
+                if (!descriptor || !window.ymaps3 || !map || !map.__ym3Root) return false;
+                const coords = Array.isArray(descriptor.coords) ? descriptor.coords : null;
+                if (!coords || coords.length < 2) return false;
+                const lat = Number(coords[0]);
+                const lon = Number(coords[1]);
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+
+                const markerEl = document.createElement('div');
+                markerEl.style.cssText = 'width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #0a84ff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.28);cursor:pointer;';
+                markerEl.textContent = String(descriptor.icon || '📍');
+                if (descriptor.hint) markerEl.title = String(descriptor.hint);
+                if (descriptor.balloonHtml) {
+                    markerEl.addEventListener('click', () => {
+                        try {
+                            showYmaps3Popup(String(descriptor.balloonHtml));
+                        } catch (e) {}
+                    });
+                }
+
+                const YMapMarkerCtor = ymaps3?.YMapMarker;
+                if (!YMapMarkerCtor) return false;
+                const marker = new YMapMarkerCtor({ coordinates: [lon, lat] }, markerEl);
+                const parent = map.__ym3MarkerLayer || map.__ym3Root;
+                parent.addChild(marker);
+                ym3Markers.push({ marker, parent });
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        const adapter = {
+            mode,
+            map,
+            markerCollection,
+            clearMarkers() {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        while (ym3Markers.length) {
+                            const entry = ym3Markers.pop();
+                            try { entry?.parent?.removeChild(entry?.marker); } catch (e) {}
+                        }
+                        return;
+                    }
+                    if (this.markerCollection && typeof this.markerCollection.removeAll === 'function') this.markerCollection.removeAll();
+                } catch (e) {}
+            },
+            addMarker(marker, descriptor = null) {
+                try {
+                    if (this.mode === 'ymaps3-compat' && addYmaps3MarkerFromDescriptor(descriptor)) return;
+                    if (this.markerCollection && typeof this.markerCollection.add === 'function') this.markerCollection.add(marker);
+                } catch (e) {}
+            },
+            getCenter() {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        if (Array.isArray(this.map?.__ym3LastCenter) && this.map.__ym3LastCenter.length >= 2) return this.map.__ym3LastCenter;
+                    }
+                    if (this.map && typeof this.map.getCenter === 'function') return this.map.getCenter();
+                } catch (e) {}
+                return null;
+            },
+            getZoom() {
+                try {
+                    if (this.mode === 'ymaps3-compat' && Number.isFinite(Number(this.map?.__ym3LastZoom))) return Number(this.map.__ym3LastZoom);
+                    if (this.map && typeof this.map.getZoom === 'function') return Number(this.map.getZoom());
+                } catch (e) {}
+                return null;
+            },
+            getBounds() {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        if (Array.isArray(this.map?.__ym3LastBounds) && this.map.__ym3LastBounds.length >= 2) return this.map.__ym3LastBounds;
+                        const c = this.getCenter();
+                        const z = this.getZoom();
+                        return approximateBoundsFromCenterZoom(c, Number.isFinite(Number(z)) ? z : 16);
+                    }
+                    if (this.map && typeof this.map.getBounds === 'function') return this.map.getBounds();
+                } catch (e) {}
+                return null;
+            },
+            onActionEnd(handler) {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        ym3ActionEndHandlers.push(handler);
+                        ensureYmaps3Listener();
+                        return;
+                    }
+                    if (this.map?.events?.add) this.map.events.add('actionend', handler);
+                } catch (e) {}
+            },
+            onActionStart(handler) {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        ym3ActionStartHandlers.push(handler);
+                        ensureYmaps3Listener();
+                        return;
+                    }
+                    if (this.map?.events?.add) this.map.events.add('actionstart', handler);
+                } catch (e) {}
+            },
+            onClick(handler) {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        ym3ClickHandlers.push(handler);
+                        ensureYmaps3Listener();
+                        return;
+                    }
+                    if (this.map?.events?.add) this.map.events.add('click', handler);
+                } catch (e) {}
+            }
+        };
+        return adapter;
+    }
+
+    function bindMapCoreEvents() {
+        const a = mapAdapter;
+        if (!a || !a.map) return;
+
+        a.onActionEnd(() => {
+            const targetCoords = getTargetPlacementCoords();
+            ymaps.geocode(targetCoords).then(res => {
+                const obj = res.geoObjects.get(0);
+                document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
+
+                const coords = targetCoords;
+                if (isInDonetskRegion(coords)) {
+                    document.getElementById('addr-text').style.color = '#34c759';
+                } else {
+                    document.getElementById('addr-text').style.color = '#ff3b30';
+                }
+            });
+            if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
+            if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
+            loadMarkersDebounced();
+        });
+
+        a.onActionStart(() => {
+            if (autoFollow) {
+                autoFollow = false;
+                try { updateFollowButton(); } catch(e) {}
+            }
+        });
+
+        a.onClick(() => {
+            try {
+                if (!actionCardVisible) toggleActionCard();
+            } catch (e) {}
+        });
+    }
+
+    function applyDynamicCourseBehaviors() {
+        if (!myMap) return;
+        attachYandexCameraCompat(myMap);
+        try {
+            if (typeof myMap.setBehaviors === 'function') {
+                myMap.setBehaviors(['drag', 'scrollZoom', 'tilt', 'rotate']);
+                return;
+            }
+        } catch (e) {}
+        try {
+            if (myMap.behaviors && typeof myMap.behaviors.enable === 'function') {
+                myMap.behaviors.enable(['drag', 'scrollZoom', 'tilt', 'rotate']);
+            }
+        } catch (e) {}
+    }
+
+    function updateDynamicCourseCamera() {
+        if (!dynamicCourseEnabled) return;
+        if (!myMap || !autoFollow || !userLocation) return;
+
+        const heading = getDynamicCourseHeadingDeg();
+        if (!Number.isFinite(Number(heading))) return;
+
+        const speed = Number(userSpeedKmh) || 0;
+        const targetZoom = getDynamicFollowZoomBySpeed(speed);
+        const aheadMeters = Math.max(
+            DYNAMIC_COURSE_AHEAD_MIN_M,
+            Math.min(DYNAMIC_COURSE_AHEAD_MAX_M, 650 + speed * 10)
+        );
+        const cameraTarget = destinationPointByBearing(userLocation[0], userLocation[1], heading, aheadMeters);
+
+        const smoothedHeading = (dynamicCourseFusedDeg === null)
+            ? normalizeDeg(heading)
+            : smoothAngleDeg(dynamicCourseFusedDeg, heading, 0.22);
+        dynamicCourseFusedDeg = smoothedHeading;
+        userHeadingDeg = smoothedHeading;
+
+        try {
+            const mapAny = myMap;
+            if (typeof mapAny?.setCamera === 'function') {
+                mapAny.setCamera({
+                    center: cameraTarget,
+                    azimuth: smoothedHeading,
+                    tilt: DYNAMIC_COURSE_TILT,
+                    zoom: targetZoom,
+                    duration: 500
+                });
+            } else if (mapAny?.options?.set) {
+                mapAny.options.set('rotation', smoothedHeading);
+                mapAny.options.set('azimuth', smoothedHeading);
+                mapAny.options.set('tilt', DYNAMIC_COURSE_TILT);
+            }
+        } catch (e) {}
+
+        const canMove = !Number.isFinite(dynamicCourseLastCameraDeg)
+            || Math.abs(shortestAngleDeltaDeg(dynamicCourseLastCameraDeg, smoothedHeading)) >= 1.2
+            || speed >= 12;
+        if (!canMove) return;
+
+        dynamicCourseLastCameraDeg = smoothedHeading;
+        try {
+            myMap.setCenter(cameraTarget, targetZoom, { duration: 500, timingFunction: 'ease-out' });
+        } catch (e) {
+            try { myMap.setCenter(cameraTarget, targetZoom); } catch (e2) {}
+        }
+    }
+
+    function startDynamicCourseLoop() {
+        if (dynamicCourseCameraTimerId) return;
+        dynamicCourseCameraTimerId = setInterval(() => {
+            try { updateDynamicCourseCamera(); } catch (e) {}
+        }, DYNAMIC_COURSE_UPDATE_MS);
+    }
+
+    function initDynamicCourseSensors() {
+        if (dynamicCourseCompassInit) return;
+        dynamicCourseCompassInit = true;
+        const orientationAllowed = isFeatureAllowedByPolicy('accelerometer') && isFeatureAllowedByPolicy('gyroscope');
+        if (!orientationAllowed) {
+            if (!initDynamicCourseSensors.__policyWarned) {
+                initDynamicCourseSensors.__policyWarned = true;
+                console.info('Компасные сенсоры недоступны по policy — курс остаётся по GPS.');
+            }
+            startDynamicCourseLoop();
+            return;
+        }
+        try {
+            window.addEventListener('deviceorientationabsolute', onDynamicCourseOrientation, true);
+            window.addEventListener('deviceorientation', onDynamicCourseOrientation, true);
+        } catch (e) {}
+        startDynamicCourseLoop();
     }
     
     // Функция обновления маркера текущего местоположения на карте
@@ -5080,8 +6399,11 @@
         }
         autoFollow = true;
         updateFollowButton();
+        requestDynamicCourseOrientationPermission().catch(()=>{});
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
-        try { myMap.setCenter(userLocation, 17); } catch (e) { console.warn(e); }
+        try { updateDynamicCourseCamera(); } catch (e) {
+            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
+        }
     }
 
     // Переключатель автослежения GPS
@@ -5090,7 +6412,10 @@
         updateFollowButton();
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         if (autoFollow && userLocation && myMap) {
-            try { myMap.setCenter(userLocation, 17); } catch(e) { console.warn(e); }
+            requestDynamicCourseOrientationPermission().catch(()=>{});
+            try { updateDynamicCourseCamera(); } catch(e) {
+                try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
+            }
         }
     }
 
@@ -5141,6 +6466,8 @@
             try { monolithStopKeepAliveAudio(); } catch (e) {}
             try { monolithReleaseWakeLock(); } catch (e) {}
         } else {
+            try { monolithPrimeAudioOnce(); } catch (e) {}
+            try { monolithSoftResumeSpeech(); } catch (e) {}
             try { monolithMaybeUpdateWakeLock(); } catch (e) {}
         }
         updateVoiceBtnUiState();
@@ -5218,6 +6545,34 @@
         }
     }
 
+    // Спецбат: отдельный короткий сигнал (двойной бип). Best-effort (в iOS может быть ограничен политикой autoplay)
+    function playSpecbatSound() {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const gainNode = audioContext.createGain();
+            gainNode.connect(audioContext.destination);
+            gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+
+            const now = audioContext.currentTime;
+            const makeBeep = (t, freq, dur) => {
+                const osc = audioContext.createOscillator();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(freq, t);
+                osc.connect(gainNode);
+                gainNode.gain.setValueAtTime(0.0001, t);
+                gainNode.gain.exponentialRampToValueAtTime(0.22, t + 0.015);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+                osc.start(t);
+                osc.stop(t + dur);
+            };
+
+            makeBeep(now + 0.00, 1160, 0.085);
+            makeBeep(now + 0.12, 880, 0.11);
+        } catch (e) {
+            // тихо игнорируем
+        }
+    }
+
     // Функция проверки, забанен ли пользователь
     async function isUserBanned(userId) {
         try {
@@ -5265,36 +6620,32 @@
         const betaOverlay = document.getElementById('betaInviteOverlay');
         if (betaOverlay) betaOverlay.style.display = 'none';
 
-        // Получаем данные Telegram (если есть) — без Telegram запускаем режим "гость"
-        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-        const isTelegram = !!(window.Telegram?.WebApp?.initData && tgUser);
-        // В режиме "гость" не показываем блокирующий оверлей — карта должна открываться.
+        // Auth Variant B: Telegram Mini App или Web/PWA login
+        const env = await checkAppEnvironment();
+        const isTelegram = !!env?.isTelegram;
+        const authedToken = env?.token;
         const overlay = document.getElementById('tgAuthOverlay');
-        if (overlay) overlay.style.display = 'none';
-        // На сайте (без Mini App) сразу готовим Login Widget, чтобы можно было авторизоваться.
-        if (!isTelegram) {
-            try { ensureTelegramLoginWidgetRendered(); } catch(e) {}
+        const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+        const displayUser = isTelegram ? tgUser : siteTelegramUser;
+
+        // Если токена нет — пользователь должен войти через Telegram (модалка уже показана)
+        if (!authedToken) {
+            if (overlay) overlay.style.display = 'flex';
+            initAppInProgress = false;
+            return;
         }
 
-        if (isTelegram) {
-            // Определяем админа раньше для проверки ТО
-            isAdmin = String(tgUser.id) === String(ADMIN_ID);
+        // Если токен есть — определяем админа по Telegram ID (и в Mini App, и в Web/PWA)
+        isAdmin = !!uid && String(uid) === String(ADMIN_ID);
 
-            // Переключаем Supabase на authenticated (JWT из Telegram)
-            await ensureSupabaseAuth();
+        // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
+        try {
+            if (localStorage.getItem('beta_access_granted') === 'true') {
+                await ensureUserAchievement(uid, 'beta_tester');
+            }
+        } catch(e) {}
 
-            // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
-            try {
-                if (localStorage.getItem('beta_access_granted') === 'true') {
-                    await ensureUserAchievement(uid, 'beta_tester');
-                }
-            } catch(e) {}
-        } else {
-            // Гость: без Telegram не регистрируем и не пишем в профили/чаты/метки.
-            isAdmin = false;
-        }
-
-        if (isTelegram) {
+        if (authedToken) {
             try {
                 // Проверяем, не забанен ли пользователь (с таймаутом)
                 const banInfo = await Promise.race([
@@ -5335,7 +6686,7 @@
         // Показываем онлайн-бейдж (если поддерживается)
         try { document.getElementById('onlineCountBadge')?.classList?.add('visible'); } catch(e) {}
 
-        if (isTelegram) {
+        if (authedToken) {
             // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
             try {
                 const { data: driver } = await Promise.race([
@@ -5346,7 +6697,9 @@
                 ]);
                 if (!driver) {
                     // Если нет, показываем форму для добавления данных об авто
-                    document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
+                    const first = String(displayUser?.first_name || '').trim();
+                    const last = String(displayUser?.last_name || '').trim();
+                    document.getElementById('reg-user-name').textContent = `${first} ${last}`.trim() || 'Водитель';
                     openRegistrationModal();
                 } else {
                     // Если да, загружаем его данные
@@ -5355,7 +6708,9 @@
             } catch (e) {
                 // Если запрос к таблице drivers падает из-за несинхронизированной схемы, всё равно покажем форму
                 console.warn('drivers table read failed:', e.message || e);
-                document.getElementById('reg-user-name').textContent = (tgUser.first_name || '') + ' ' + (tgUser.last_name || '');
+                const first = String(displayUser?.first_name || '').trim();
+                const last = String(displayUser?.last_name || '').trim();
+                document.getElementById('reg-user-name').textContent = `${first} ${last}`.trim() || 'Водитель';
                 openRegistrationModal();
             }
         }
@@ -5388,6 +6743,8 @@
         loadVoiceStyle();
         try { initMonolithVoiceToggle(); } catch(e) {}
         loadProximityMode();
+        loadMarkerRenderMode();
+        loadDynamicCourseEnabled();
         loadWarningDistance();
         loadSpeedometerPreference();
         restoreTypeCategoryPreference();
@@ -5418,6 +6775,7 @@
         // Ergo UI: синхронизируем состояния кнопок
         try { updateFollowButton(); } catch (e) {}
         try { updateVoiceBtnUiState(); } catch (e) {}
+        try { updateCourseBtnUiState(); } catch (e) {}
         try { updateLayersBtnUiState(); } catch (e) {}
         try { setRightActionsHidden(!!actionCardVisible); } catch (e) {}
 
@@ -5514,60 +6872,55 @@
         status.style.display = 'block';
 
         try {
-            // Проверяем код в БД
-            const { data, error } = await _sb.rpc('validate_beta_invite', { 
-                p_code: code 
+            // Проверяем код через Edge Function (без прямого RPC к beta_invites)
+            const validate = await fetch(`${SUPABASE_URL}/functions/v1/beta-invite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'validate', code })
             });
+            const validatePayload = await validate.json().catch(() => null);
 
-            if (error) {
-                throw new Error(error.message || 'Ошибка проверки кода');
+            if (!validate.ok) {
+                throw new Error(validatePayload?.error || `Ошибка проверки (${validate.status})`);
             }
 
-            if (data && data.length > 0) {
-                const result = data[0];
-                
-                if (!result.is_valid) {
-                    status.textContent = '❌ ' + (result.message || 'Код не валиден');
-                    status.style.color = '#dc3545';
-                    status.style.display = 'block';
-                    codeInput.style.borderColor = '#dc3545';
-                    return;
-                }
-
-                // Код валиден! Используем его
-                const { error: claimError } = await _sb.rpc('claim_beta_invite', { 
-                    p_code: code,
-                    p_user_id: String(uid)
-                });
-
-                if (claimError) {
-                    throw claimError;
-                }
-
-                // Успешно! Сохраняем в localStorage и перезагружаем
-                localStorage.setItem('beta_access_granted', 'true');
-                localStorage.setItem('beta_code_used', code);
-                localStorage.setItem('beta_access_date', new Date().toISOString());
-
-                // Ачивка за вход в ЗБТ
-                try { await ensureUserAchievement(uid, 'beta_tester'); } catch(e) {}
-
-                status.textContent = '✅ Доступ предоставлен! Загрузка...';
-                status.style.color = '#28a745';
-                status.style.display = 'block';
-
-                // Скрываем overlay и инициализируем приложение
-                setTimeout(() => {
-                    document.getElementById('betaInviteOverlay').style.display = 'none';
-                    initAppInProgress = false;  // Сбрасываем флаг перед инициализацией
-                    initApp();
-                }, 800);
-
-            } else {
-                status.textContent = '❌ Код не найден';
+            if (!validatePayload?.is_valid) {
+                status.textContent = '❌ ' + (validatePayload?.message || 'Код не валиден');
                 status.style.color = '#dc3545';
                 status.style.display = 'block';
+                codeInput.style.borderColor = '#dc3545';
+                return;
             }
+
+            // Код валиден! Применяем его
+            const claim = await fetch(`${SUPABASE_URL}/functions/v1/beta-invite`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'claim', code, userId: uid ? String(uid) : '' })
+            });
+            const claimPayload = await claim.json().catch(() => null);
+            if (!claim.ok || !claimPayload?.success) {
+                throw new Error(claimPayload?.error || `Ошибка активации (${claim.status})`);
+            }
+
+            // Успешно! Сохраняем в localStorage и перезагружаем
+            localStorage.setItem('beta_access_granted', 'true');
+            localStorage.setItem('beta_code_used', code);
+            localStorage.setItem('beta_access_date', new Date().toISOString());
+
+            // Ачивка за вход в ЗБТ
+            try { await ensureUserAchievement(uid, 'beta_tester'); } catch(e) {}
+
+            status.textContent = '✅ Доступ предоставлен! Загрузка...';
+            status.style.color = '#28a745';
+            status.style.display = 'block';
+
+            // Скрываем overlay и инициализируем приложение
+            setTimeout(() => {
+                document.getElementById('betaInviteOverlay').style.display = 'none';
+                initAppInProgress = false;  // Сбрасываем флаг перед инициализацией
+                initApp();
+            }, 800);
 
         } catch (err) {
             console.error('Ошибка при проверке кода:', err);
@@ -6787,17 +8140,88 @@
     // ============= ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ЗБТ КОДАМИ =============
 
     async function invokeAdminFunction(functionName, payload = {}) {
-        if (!_sb) {
-            throw new Error('Supabase client не инициализирован');
+        function getJwtExp(token) {
+            try {
+                const parts = String(token || '').split('.');
+                if (parts.length !== 3) return 0;
+                const payloadPart = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
+                const json = JSON.parse(atob(normalized));
+                const exp = Number(json?.exp || 0);
+                return Number.isFinite(exp) ? exp : 0;
+            } catch (e) {
+                return 0;
+            }
         }
-        const { data, error } = await _sb.functions.invoke(functionName, {
-            body: payload,
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (error) {
-            const errMsg = String(error?.message || error || `Edge Function ${functionName} error`);
-            throw new Error(errMsg);
+
+        let token = '';
+        try {
+            const stored = String(localStorage.getItem('sb_jwt') || '').trim();
+            const expRaw = Number(localStorage.getItem('sb_jwt_exp') || 0);
+            const expFromToken = getJwtExp(stored);
+            const expSec = expRaw > 0 ? expRaw : expFromToken;
+            const expired = !expSec || ((Date.now() / 1000) > (expSec - 60));
+            if (stored && stored.split('.').length === 3 && !expired) token = stored;
+        } catch (e) {
+            token = '';
         }
+
+        if (!token) {
+            try {
+                const refreshed = await ensureSupabaseAuth();
+                if (refreshed && String(refreshed).split('.').length === 3) token = String(refreshed);
+            } catch (e) {
+                token = '';
+            }
+        }
+
+        if (!token) {
+            throw new Error('Нет авторизации для админ‑функций. Откройте приложение через Telegram Mini App и попробуйте снова.');
+        }
+
+        const callEdge = async (bearer) => {
+            return fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${bearer}`
+                },
+                body: JSON.stringify(payload || {})
+            });
+        };
+
+        let resp = await callEdge(token);
+        if (resp.status === 401) {
+            try {
+                localStorage.removeItem('sb_jwt');
+                localStorage.removeItem('sb_jwt_exp');
+            } catch (e) {}
+            try {
+                const refreshed = await ensureSupabaseAuth();
+                if (refreshed && String(refreshed).split('.').length === 3) {
+                    token = String(refreshed);
+                    resp = await callEdge(token);
+                }
+            } catch (e) {
+                // игнор, обработаем ниже через !resp.ok
+            }
+        }
+
+        let data = null;
+        let text = '';
+        try {
+            const ct = String(resp.headers.get('content-type') || '').toLowerCase();
+            if (ct.includes('application/json')) data = await resp.json();
+            else text = await resp.text();
+        } catch (e) {}
+
+        if (!resp.ok) {
+            const detail = (data && typeof data === 'object' && data.error)
+                ? String(data.error)
+                : (text || `HTTP ${resp.status}`);
+            throw new Error(`Edge Function ${functionName}: ${detail}`);
+        }
+
         if (data && typeof data === 'object' && 'error' in data && data.error) {
             const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
             throw new Error(errMsg || `Edge Function ${functionName} error`);
@@ -6878,14 +8302,10 @@
 
     async function refreshBetaCodes() {
         try {
-            const { data, error } = await _sb
-                .from('beta_invites')
-                .select('*')
-                .order('created_at', { ascending: false });
+            if (!isAdmin) throw new Error('Только для администратора');
 
-            if (error) {
-                throw error;
-            }
+            const response = await invokeAdminFunction('beta-invite', { action: 'list' });
+            const data = Array.isArray(response?.data) ? response.data : [];
 
             const tbody = document.getElementById('betaCodesTableBody');
             if (!data || data.length === 0) {
@@ -6952,14 +8372,12 @@
         if (!confirm('Деактивировать этот код?')) return;
 
         try {
-            const { error } = await _sb
-                .from('beta_invites')
-                .update({ is_active: false })
-                .eq('id', inviteId);
+            if (!isAdmin) throw new Error('Только для администратора');
 
-            if (error) {
-                throw error;
-            }
+            await invokeAdminFunction('beta-invite', {
+                action: 'deactivate',
+                inviteId
+            });
 
             await refreshBetaCodes();
         } catch (err) {
@@ -7297,7 +8715,7 @@
         markersRealtimeTimer = setTimeout(() => {
             markersRealtimeTimer = null;
             if (typeof loadMarkers === 'function') loadMarkers().catch?.(()=>{});
-        }, 300);
+        }, 120);
     }
 
     function scheduleMessagesRealtimeReload() {
@@ -8163,6 +9581,13 @@
     async function pttRequestWakeLock() {
         try {
             if (!('wakeLock' in navigator)) return;
+            if (!isFeatureAllowedByPolicy('screen-wake-lock')) {
+                if (!pttRequestWakeLock.__policyWarned) {
+                    pttRequestWakeLock.__policyWarned = true;
+                    console.info('PTT Wake Lock недоступен в текущем контейнере Telegram/WebView.');
+                }
+                return;
+            }
             if (document.hidden) return;
             if (pttWakeLock) return;
             pttWakeLock = await navigator.wakeLock.request('screen');
@@ -9372,7 +10797,7 @@
         return ['dps', 'patrol', 'specbat', 'motobat', 'cargo_control', 'camera'].includes(String(type || ''));
     }
 
-    function crowdConfirmShow(markerId, markerType) {
+    function crowdConfirmShow(markerId, markerType, streetName = '') {
         try {
             const wrap = document.getElementById('crowdConfirm');
             if (wrap && wrap.classList.contains('active')) return; // не спамим поверх уже открытого
@@ -9382,10 +10807,11 @@
         const title = document.getElementById('crowdConfirmTitle');
         const sub = document.getElementById('crowdConfirmSub');
         const label = getMarkerLabel(markerType);
-        if (title) title.textContent = `Тут ещё стоят? (${label})`;
-        if (sub) sub.textContent = 'Один тап: подтвердить или убрать метку';
+        const place = String(streetName || '').trim() || 'этот участок';
+        if (title) title.textContent = `Проехал ${place}. ${label}: стоят или уехали?`;
+        if (sub) sub.textContent = 'Подтверди кнопкой';
         if (wrap) wrap.classList.add('active');
-        try { if (typeof aiSpeak === 'function') aiSpeak('Тут ещё стоят?'); } catch (e) {}
+        try { if (typeof aiSpeak === 'function') aiSpeak(`Проехал ${place}. Пост еще на месте или уехали? Подтверди кнопкой`); } catch (e) {}
     }
 
     function crowdConfirmHide() {
@@ -9879,24 +11305,77 @@
 
         const sosBonus = await getUserSosBonus(uid);
         totalLikes += sosBonus;
+
+        // Иконки достижений (Cyberpunk): плоские SVG в едином «металлическом» стиле
+        function achievementIconSvg(iconKey, completed = false) {
+            const stroke = completed ? 'rgba(0,212,255,0.95)' : 'rgba(220,232,245,0.88)';
+            const fill = completed ? 'rgba(0,212,255,0.10)' : 'rgba(160,170,190,0.12)';
+            const accent = completed ? 'rgba(57,255,20,0.85)' : 'rgba(57,255,20,0.55)';
+
+            const base = (paths) => `
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <g fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    ${paths}
+  </g>
+</svg>`.trim();
+
+            switch (String(iconKey || '')) {
+                case 'markers':
+                    return base(`<path d="M12 21s7-4.6 7-11a7 7 0 0 0-14 0c0 6.4 7 11 7 11Z" fill="${fill}" stroke="${stroke}"/>
+<path d="M12 10.5a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z"/>
+<path d="M7.5 18.2h9" stroke="${accent}"/>`);
+                case 'likes':
+                    return base(`<path d="M8.5 10.5V20H5.8a1.3 1.3 0 0 1-1.3-1.3v-7a1.3 1.3 0 0 1 1.3-1.2H8.5Z" fill="${fill}"/>
+<path d="M8.5 10.5l3.4-6.2c.6-1.1 2.2-.8 2.3.5l.2 4.7H19a2 2 0 0 1 2 2.3l-1 6.5A2 2 0 0 1 18 20H8.5"/>
+<path d="M12 12.3h6.6" stroke="${accent}"/>`);
+                case 'votes':
+                    return base(`<path d="M2.8 12s3.6-6.8 9.2-6.8S21.2 12 21.2 12 17.6 18.8 12 18.8 2.8 12 2.8 12Z" fill="${fill}"/>
+<path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z"/>
+<path d="M12 10.6v2.2" stroke="${accent}"/>`);
+                case 'beta':
+                    return base(`<path d="M12 2.8l7 3.7v5.9c0 5.2-3.6 8.3-7 9.8-3.4-1.5-7-4.6-7-9.8V6.5l7-3.7Z" fill="${fill}"/>
+<path d="M9 12l2.1 2.1L15.5 9.7" stroke="${accent}"/>`);
+                case 'bug':
+                    return base(`<path d="M9 9.2a3 3 0 0 1 6 0v1.3H9V9.2Z" fill="${fill}"/>
+<path d="M7.2 12h9.6"/>
+<path d="M8 14.8c.7 1.6 2.2 2.7 4 2.7s3.3-1.1 4-2.7"/>
+<path d="M7.5 7.8 6.2 6.5"/>
+<path d="M16.5 7.8l1.3-1.3"/>
+<path d="M12 10.5V20" stroke="${accent}"/>`);
+                case 'night':
+                    return base(`<path d="M15.5 3.4a7.5 7.5 0 1 0 5.1 13.1 6.2 6.2 0 0 1-5.1-13.1Z" fill="${fill}"/>
+<path d="M9.2 13.4h.01"/>
+<path d="M12.2 9.8h.01" stroke="${accent}"/>
+<path d="M14.6 14.9h.01"/>`);
+                case 'spark':
+                    return base(`<path d="M12 2.5l1.5 6 6 1.5-6 1.5-1.5 6-1.5-6-6-1.5 6-1.5 1.5-6Z" fill="${fill}" stroke="${stroke}"/>
+<path d="M19.5 13.5l.7 2.6 2.6.7-2.6.7-.7 2.6-.7-2.6-2.6-.7 2.6-.7.7-2.6Z" stroke="${accent}"/>`);
+                case 'flame':
+                    return base(`<path d="M12 2.8c2.6 3.2 2.8 5.6 1.6 7.4 2.2-.3 3.7 1.6 3.7 4.2 0 3.7-2.5 6.8-5.3 6.8s-5.3-3.1-5.3-6.8c0-2.4 1.1-4.7 3.5-6.7-.2 1.8.6 3 1.8 3.5C12.9 9.5 13.7 6.6 12 2.8Z" fill="${fill}" stroke="${stroke}"/>
+<path d="M12 13.2c1.2 1.2 1.5 2.2 1.2 3.2" stroke="${accent}"/>`);
+                default:
+                    return base(`<path d="M12 3.2l2.1 5.2 5.6.5-4.2 3.6 1.3 5.4L12 15.1 7.2 18l1.3-5.4-4.2-3.6 5.6-.5L12 3.2Z" fill="${fill}" stroke="${stroke}"/>
+<path d="M9 12l2 2 4-4" stroke="${accent}"/>`);
+            }
+        }
         
-        // Новые ачивки с эмодзи-паком SafeDrive 180 (по запросу пользователя)
+        // Достижения
         const achievements = [];
         
         // Первые метки и активность
-        if (markersCount >= 1) achievements.push({ icon: '🎨', title: 'Первая метка', desc: 'Вы начали помогать сообществу' });
-        if (markersCount >= 10) achievements.push({ icon: '🔟', title: 'Десяток', desc: '10 меток' });
-        if (markersCount >= 50) achievements.push({ icon: '🏅', title: 'Половина сотни', desc: '50 меток' });
-        if (markersCount >= 100) achievements.push({ icon: '💯', title: 'Столетие', desc: '100 меток' });
+        if (markersCount >= 1) achievements.push({ iconKey: 'markers', title: 'Первая метка', desc: 'Вы начали помогать сообществу' });
+        if (markersCount >= 10) achievements.push({ iconKey: 'markers', title: 'Десяток', desc: '10 меток' });
+        if (markersCount >= 50) achievements.push({ iconKey: 'markers', title: 'Половина сотни', desc: '50 меток' });
+        if (markersCount >= 100) achievements.push({ iconKey: 'markers', title: 'Столетие', desc: '100 меток' });
 
         // Карма и доверие
-        if (totalLikes >= 10) achievements.push({ icon: '👍', title: 'Полезно', desc: '10 очков кармы от сообщества' });
-        if (totalLikes >= 50) achievements.push({ icon: '👑', title: 'Лидер взаимопомощи', desc: 'Высокий вклад в подтверждённые события' });
-        if (totalLikes >= 100) achievements.push({ icon: '🍀', title: 'Легенда', desc: '100 очков кармы' });
+        if (totalLikes >= 10) achievements.push({ iconKey: 'likes', title: 'Полезно', desc: '10 очков кармы от сообщества' });
+        if (totalLikes >= 50) achievements.push({ iconKey: 'likes', title: 'Лидер взаимопомощи', desc: 'Высокий вклад в подтверждённые события' });
+        if (totalLikes >= 100) achievements.push({ iconKey: 'likes', title: 'Легенда', desc: '100 очков кармы' });
 
         // Точность и надежность
-        if (totalVotes >= 50) achievements.push({ icon: '👁️', title: 'Глаз орла', desc: 'Сверхточные метки, которые висят часами' });
-        if (totalVotes >= 200) achievements.push({ icon: '🕊️', title: 'Миротворец', desc: 'Большой вклад в спокойные поездки сообщества' });
+        if (totalVotes >= 50) achievements.push({ iconKey: 'votes', title: 'Глаз орла', desc: 'Сверхточные метки, которые висят часами' });
+        if (totalVotes >= 200) achievements.push({ iconKey: 'votes', title: 'Миротворец', desc: 'Большой вклад в спокойные поездки сообщества' });
 
         // Дополнительно: загружаем серверные ачивки из таблицы user_achievements
         const serverCounts = {};
@@ -9907,18 +11386,18 @@
                 serverAchs.forEach(r => { serverCounts[r.key] = (serverCounts[r.key] || 0) + 1; });
 
                 // Серверные ачивки с новыми эмодзи (SafeDrive 180)
-                if (serverCounts['beta_tester']) achievements.push({ icon: '🛡️', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ' });
+                if (serverCounts['beta_tester']) achievements.push({ iconKey: 'beta', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ' });
                 if (serverCounts['bug_report']) {
-                    achievements.push({ icon: '🔍', title: 'Охтник за багами', desc: `Помог чистить код и звуки: ${serverCounts['bug_report']}` });
+                    achievements.push({ iconKey: 'bug', title: 'Охтник за багами', desc: `Помог чистить код и звуки: ${serverCounts['bug_report']}` });
                     if (serverCounts['bug_report'] >= 5) {
-                        achievements.push({ icon: '📢', title: 'Сын Жириновского', desc: 'Обладатель эксклюзивной озвучки' });
+                        achievements.push({ iconKey: 'bug', title: 'Сын Жириновского', desc: 'Обладатель эксклюзивной озвучки' });
                         // Открываем дерзкий стиль локально
                         try { localStorage.setItem('cheekyUnlocked', 'true'); } catch(e){}
                     }
                 }
-                if (serverCounts['ghost_catcher']) achievements.push({ icon: '🌙', title: 'Ночной патруль', desc: `Активность в темное время суток` });
-                if (serverCounts['night_patrol']) achievements.push({ icon: '⚡', title: 'Суетолог', desc: 'Аномально высокая активность' });
-                if (serverCounts['phantom_racer']) achievements.push({ icon: '🔥', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления' });
+                if (serverCounts['ghost_catcher']) achievements.push({ iconKey: 'night', title: 'Ночной патруль', desc: `Активность в темное время суток` });
+                if (serverCounts['night_patrol']) achievements.push({ iconKey: 'spark', title: 'Суетолог', desc: 'Аномально высокая активность' });
+                if (serverCounts['phantom_racer']) achievements.push({ iconKey: 'flame', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления' });
             }
             // Сохраняем глобально для визуализации метки
             try { currentAchievementCounts = serverCounts; } catch(e){}
@@ -9933,31 +11412,42 @@
         if (markersCount >= 100) title = '🏆 Навигатор-профи';
         if (totalLikes >= 50) title = '👑 Лидер взаимопомощи';
 
-        // Убираем дубликаты по заголовку
+        // Убираем дубликаты по заголовку + подставляем SVG-иконки
         const uniq = [];
         const seen = new Set();
-        achievements.forEach(a => { if (!seen.has(a.title)) { uniq.push(a); seen.add(a.title); } });
+        achievements.forEach(a => {
+            if (seen.has(a.title)) return;
+            seen.add(a.title);
+            uniq.push({
+                icon: achievementIconSvg(a.iconKey, true),
+                title: a.title,
+                desc: a.desc
+            });
+        });
 
         // Полный список достижений с прогрессом
         const allAchievements = [
-            { key: 'markers_1', icon: '🎨', title: 'Первая метка', desc: 'Вы начали помогать сообществу', required: 1, progress: markersCount, metric: 'меток' },
-            { key: 'markers_10', icon: '🔟', title: 'Десяток', desc: '10 меток', required: 10, progress: markersCount, metric: 'меток' },
-            { key: 'markers_50', icon: '🏅', title: 'Половина сотни', desc: '50 меток', required: 50, progress: markersCount, metric: 'меток' },
-            { key: 'markers_100', icon: '💯', title: 'Столетие', desc: '100 меток', required: 100, progress: markersCount, metric: 'меток' },
-            { key: 'likes_10', icon: '👍', title: 'Полезно', desc: '10 очков кармы от сообщества', required: 10, progress: totalLikes, metric: 'кармы' },
-            { key: 'likes_50', icon: '👑', title: 'Лидер взаимопомощи', desc: 'Высокий вклад в подтверждённые события', required: 50, progress: totalLikes, metric: 'кармы' },
-            { key: 'likes_100', icon: '🍀', title: 'Легенда', desc: '100 очков кармы', required: 100, progress: totalLikes, metric: 'кармы' },
-            { key: 'votes_50', icon: '👁️', title: 'Глаз орла', desc: 'Сверхточные метки, которые висят часами', required: 50, progress: totalVotes, metric: 'голосов' },
-            { key: 'votes_200', icon: '🕊️', title: 'Миротворец', desc: 'Большой вклад в спокойные поездки сообщества', required: 200, progress: totalVotes, metric: 'голосов' },
-            { key: 'beta_tester', icon: '🛡️', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ', required: 1, progress: serverCounts['beta_tester'] || 0, metric: 'раз' },
-            { key: 'bug_report_1', icon: '🔍', title: 'Охтник за багами', desc: 'Помог чистить код и звуки', required: 1, progress: serverCounts['bug_report'] || 0, metric: 'отчетов' },
-            { key: 'bug_report_5', icon: '📢', title: 'Сын Жириновского', desc: 'Обладатель эксклюзивной озвучки', required: 5, progress: serverCounts['bug_report'] || 0, metric: 'отчетов' },
-            { key: 'ghost_catcher', icon: '🌙', title: 'Ночной патруль', desc: 'Активность в темное время суток', required: 1, progress: serverCounts['ghost_catcher'] || 0, metric: 'раз' },
-            { key: 'night_patrol', icon: '⚡', title: 'Суетолог', desc: 'Аномально высокая активность', required: 1, progress: serverCounts['night_patrol'] || 0, metric: 'раз' },
-            { key: 'phantom_racer', icon: '🔥', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления', required: 1, progress: serverCounts['phantom_racer'] || 0, metric: 'раз' }
+            { key: 'markers_1', iconKey: 'markers', title: 'Первая метка', desc: 'Вы начали помогать сообществу', required: 1, progress: markersCount, metric: 'меток' },
+            { key: 'markers_10', iconKey: 'markers', title: 'Десяток', desc: '10 меток', required: 10, progress: markersCount, metric: 'меток' },
+            { key: 'markers_50', iconKey: 'markers', title: 'Половина сотни', desc: '50 меток', required: 50, progress: markersCount, metric: 'меток' },
+            { key: 'markers_100', iconKey: 'markers', title: 'Столетие', desc: '100 меток', required: 100, progress: markersCount, metric: 'меток' },
+            { key: 'likes_10', iconKey: 'likes', title: 'Полезно', desc: '10 очков кармы от сообщества', required: 10, progress: totalLikes, metric: 'кармы' },
+            { key: 'likes_50', iconKey: 'likes', title: 'Лидер взаимопомощи', desc: 'Высокий вклад в подтверждённые события', required: 50, progress: totalLikes, metric: 'кармы' },
+            { key: 'likes_100', iconKey: 'likes', title: 'Легенда', desc: '100 очков кармы', required: 100, progress: totalLikes, metric: 'кармы' },
+            { key: 'votes_50', iconKey: 'votes', title: 'Глаз орла', desc: 'Сверхточные метки, которые висят часами', required: 50, progress: totalVotes, metric: 'голосов' },
+            { key: 'votes_200', iconKey: 'votes', title: 'Миротворец', desc: 'Большой вклад в спокойные поездки сообщества', required: 200, progress: totalVotes, metric: 'голосов' },
+            { key: 'beta_tester', iconKey: 'beta', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ', required: 1, progress: serverCounts['beta_tester'] || 0, metric: 'раз' },
+            { key: 'bug_report_1', iconKey: 'bug', title: 'Охтник за багами', desc: 'Помог чистить код и звуки', required: 1, progress: serverCounts['bug_report'] || 0, metric: 'отчетов' },
+            { key: 'bug_report_5', iconKey: 'bug', title: 'Сын Жириновского', desc: 'Обладатель эксклюзивной озвучки', required: 5, progress: serverCounts['bug_report'] || 0, metric: 'отчетов' },
+            { key: 'ghost_catcher', iconKey: 'night', title: 'Ночной патруль', desc: 'Активность в темное время суток', required: 1, progress: serverCounts['ghost_catcher'] || 0, metric: 'раз' },
+            { key: 'night_patrol', iconKey: 'spark', title: 'Суетолог', desc: 'Аномально высокая активность', required: 1, progress: serverCounts['night_patrol'] || 0, metric: 'раз' },
+            { key: 'phantom_racer', iconKey: 'flame', title: 'Призрачный гонщик', desc: 'Вовремя затормозил после уведомления', required: 1, progress: serverCounts['phantom_racer'] || 0, metric: 'раз' }
         ];
 
-        allAchievements.forEach(a => { a.completed = a.progress >= a.required; });
+        allAchievements.forEach(a => {
+            a.completed = a.progress >= a.required;
+            a.icon = achievementIconSvg(a.iconKey, a.completed);
+        });
         const completedCount = allAchievements.filter(a => a.completed).length;
         const totalCount = allAchievements.length;
 
@@ -10285,7 +11775,7 @@
 
             // Если не забанен - инициализируем карту
             // Создаем карту с центром и уровнем зума
-            myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+            await initPrimaryMapInstance();
             
             // Границы Донецкой области (скрыты)
             // const donetskBoundary = new ymaps.Rectangle([
@@ -10298,32 +11788,10 @@
             //     strokeOpacity: 0.7
             // });
             // myMap.geoObjects.add(donetskBoundary);
-            // Инициализируем коллекцию маркеров — её можно безопасно очищать без удаления прочих объектов
-            markersCollection = new ymaps.GeoObjectCollection();
-            myMap.geoObjects.add(markersCollection);
+            // Инициализируем коллекцию маркеров внутри initPrimaryMapInstance()
             
-            // При изменении центра карты обновляем адрес
-            myMap.events.add('actionend', () => {
-                const targetCoords = getTargetPlacementCoords();
-                ymaps.geocode(targetCoords).then(res => {
-                    const obj = res.geoObjects.get(0);
-                    document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
-                    
-                    // Проверяем, в какой области находимся
-                    const coords = targetCoords;
-                    if (isInDonetskRegion(coords)) {
-                        document.getElementById('addr-text').style.color = '#34c759';
-                    } else {
-                        document.getElementById('addr-text').style.color = '#ff3b30';
-                    }
-                });
-                if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
-                if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
-            });
-            // Если пользователь начал вручную передвигать карту — отключаем автоследование
-            myMap.events.add('actionstart', () => {
-                autoFollow = false;
-            });
+            // События карты (через адаптер движка)
+            bindMapCoreEvents();
             
             // Инициализируем приложение (проверяем регистрацию)
             appInitialized = true;
@@ -10334,16 +11802,20 @@
             
             // Инициализируем GPS отслеживание
             initGPS();
+            initDynamicCourseSensors();
             // Обновим состояние кнопки автослежения
             try { updateFollowButton(); } catch(e) { /* ignore */ }
             // Загружаем маркеры с сервера
             loadMarkers();
-            // Обновляем маркеры каждые 20 секунд (вместо 10) для экономии батареи
-            setInterval(loadMarkersDebounced, 20000);
+            // Fallback-поллинг на случай потери realtime
+            setInterval(loadMarkersDebounced, 10000);
 
             // Если actionCard скрыт по умолчанию, показываем кнопку открытия
             const openBtn = document.getElementById('openActionBtn');
             if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
+
+            // Синхронизируем правую колонку с текущим состоянием панели
+            try { setRightActionsHidden(!!actionCardVisible); } catch(e) {}
 
             // Следим за изменением высоты нижнего виджета, чтобы прицел не перекрывался
             try {
@@ -10370,15 +11842,13 @@
             
             // Пытаемся инициализировать карту, даже при ошибке проверки бана
             try {
-                myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
-                markersCollection = new ymaps.GeoObjectCollection();
-                myMap.geoObjects.add(markersCollection);
+                await initPrimaryMapInstance();
                 
                 initApp();
                 initGPS();
                 try { updateFollowButton(); } catch(e) { /* ignore */ }
                 loadMarkers();
-                setInterval(loadMarkersDebounced, 20000);
+                setInterval(loadMarkersDebounced, 10000);
                 
                 const openBtn = document.getElementById('openActionBtn');
                 if (openBtn && !actionCardVisible) openBtn.classList.add('visible');
@@ -10445,15 +11915,42 @@
 
         // Вставляем новый маркер в БД
         try {
+            let noTsExpMode = false;
+            try { noTsExpMode = localStorage.getItem(MARKER_INSERT_NO_TS_EXP_KEY) === '1'; } catch(e) {}
+
             const markerToCreate = {
                 coords: coords, // Центр текущей карты
-                ts: Date.now(), // Текущее время
-                exp: Date.now() + 7200000, // Время жизни маркера (2 часа)
                 type: selectedType, // Тип маркера (ДПС, Рейд и т.д.)
                 comment: rawComment, // Комментарий пользователя
                 author_id: uid // ID автора маркера
             };
-            const { data: insertedMarkers, error } = await _sb.from('markers').insert([markerToCreate]).select('id,type,comment,coords');
+            if (!noTsExpMode) {
+                markerToCreate.ts = Date.now(); // Текущее время
+                markerToCreate.exp = Date.now() + 7200000; // Время жизни маркера (2 часа)
+            }
+            let insertedMarkers = null;
+            let error = null;
+
+            ({ data: insertedMarkers, error } = await _sb
+                .from('markers')
+                .insert([markerToCreate])
+                .select('id,type,comment,coords'));
+
+            if (error && !noTsExpMode) {
+                const fallbackMarkerToCreate = {
+                    coords: coords,
+                    type: selectedType,
+                    comment: rawComment,
+                    author_id: uid
+                };
+                ({ data: insertedMarkers, error } = await _sb
+                    .from('markers')
+                    .insert([fallbackMarkerToCreate])
+                    .select('id,type,comment,coords'));
+                if (!error) {
+                    try { localStorage.setItem(MARKER_INSERT_NO_TS_EXP_KEY, '1'); } catch(e) {}
+                }
+            }
 
             if (!error) {
                 try { localStorage.setItem(rateKey, String(Date.now())); } catch(e) {}
@@ -10475,6 +11972,8 @@
                     notifyHelpBotAboutMarker(insertedMarkers[0]);
                 }
                 loadMarkers();
+            } else {
+                throw error;
             }
         } catch (e) {
             console.warn('Ошибка при добавлении метки:', e?.message || e);
@@ -10489,12 +11988,19 @@
 
     // Функция загрузки всех активных маркеров с карты
     async function loadMarkers() {
+        if (loadMarkersInFlight) {
+            loadMarkersPending = true;
+            return;
+        }
+        loadMarkersInFlight = true;
+        loadMarkersPending = false;
+
         // Загружаем маркеры, которые еще не истекли (exp > текущее время)
         // Загружаем все метки и фильтруем их по exp на клиенте,
         // чтобы корректно работать с разными типами поля exp (BIGINT или TIMESTAMPTZ)
         try {
             const { data: markers } = await Promise.race([
-                _sb.from('markers').select('*'),
+                _sb.from('markers').select('id,coords,type,comment,photo_url,votes_up,votes_down,author_id,leave_confirmations,exp,ts'),
                 new Promise((_, reject) => 
                     setTimeout(() => reject(new Error('Markers load timeout')), 10000)
                 )
@@ -10517,8 +12023,48 @@
             typeCounts[m.type] = (typeCounts[m.type] || 0) + 1;
         });
         
-        // Обновляем счётчик в UI
+        // Элемент счётчика в UI
         const counterEl = document.getElementById('markersCounter');
+        
+        // Используем GPS координаты пользователя, иначе центр карты
+        const fallbackCenter = (mapAdapter && typeof mapAdapter.getCenter === 'function') ? mapAdapter.getCenter() : (myMap?.getCenter?.() || null);
+        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : fallbackCenter;
+
+        // Для производительности рендерим только метки в видимой области (+запас)
+        // или рядом с пользователем (чтобы голос/подсказки не терялись при смещении карты).
+        const mapBounds = (mapAdapter && typeof mapAdapter.getBounds === 'function') ? mapAdapter.getBounds() : ((myMap && typeof myMap.getBounds === 'function') ? myMap.getBounds() : null);
+        const hasBounds = Array.isArray(mapBounds) && mapBounds.length >= 2 && Array.isArray(mapBounds[0]) && Array.isArray(mapBounds[1]);
+        const VIEWPORT_MARGIN_DEG = 0.035;
+        const NEARBY_RENDER_METERS = 3000;
+        let renderMarkers = (markerRenderMode === 'all')
+            ? activeMarkers
+            : activeMarkers.filter(m => {
+                const coords = extractMarkerCoordsForNotif(m);
+                if (!coords) return false;
+
+                let inBounds = true;
+                if (hasBounds) {
+                    const sw = mapBounds[0];
+                    const ne = mapBounds[1];
+                    inBounds = coords.lat >= (Number(sw[0]) - VIEWPORT_MARGIN_DEG)
+                        && coords.lat <= (Number(ne[0]) + VIEWPORT_MARGIN_DEG)
+                        && coords.lon >= (Number(sw[1]) - VIEWPORT_MARGIN_DEG)
+                        && coords.lon <= (Number(ne[1]) + VIEWPORT_MARGIN_DEG);
+                }
+
+                let nearUser = false;
+                if (Array.isArray(userCoords) && userCoords.length >= 2) {
+                    nearUser = calculateDistance(Number(userCoords[0]), Number(userCoords[1]), Number(coords.lat), Number(coords.lon)) <= NEARBY_RENDER_METERS;
+                }
+
+                return inBounds || nearUser;
+            });
+
+        if (markerRenderMode !== 'all' && renderMarkers.length === 0 && activeMarkers.length > 0) {
+            renderMarkers = activeMarkers;
+        }
+
+        // Обновляем счётчик в UI (включая видимость в viewport-режиме)
         if (counterEl) {
             const typeNames = {
                 dps: 'ДПС',
@@ -10543,61 +12089,59 @@
             }
             if (!hasCounters) {
                 counterHTML = '✅ Активных событий нет';
+            } else {
+                const modeLabel = markerRenderMode === 'all' ? 'Все' : 'Рядом';
+                counterHTML += `<div style="margin-top:4px; font-size:11px; opacity:.85;">Режим: ${modeLabel} • Показано на карте: ${renderMarkers.length} из ${activeMarkers.length}</div>`;
             }
             counterEl.innerHTML = counterHTML;
         }
-        
+
         // Удаляем только маркеры, которые мы рендерим (не трогаем userLocationMarker и служебные объекты)
-        if (markersCollection) markersCollection.removeAll();
-        // Используем GPS координаты пользователя, иначе центр карты
-        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : myMap.getCenter();
+        if (mapAdapter && typeof mapAdapter.clearMarkers === 'function') mapAdapter.clearMarkers();
+        else if (markersCollection) markersCollection.removeAll();
 
         // Подготовим данные об авторах (имя, likes_sum, is_trusted)
-        const authorIds = Array.from(new Set(markers.map(m => String(m.author_id))));
+        const authorIds = Array.from(new Set(renderMarkers.map(m => String(m.author_id))));
         const authorsInfoMap = {}; // user_id -> { name, likes_sum, is_trusted }
         try {
             // Запрашиваем имя и рейтинг из drivers (если таблица/колонки есть)
-            const { data: driversInfo } = await _sb.from('drivers').select('user_id,name,likes_sum,is_trusted').in('user_id', authorIds);
-            if (driversInfo) {
-                driversInfo.forEach(d => {
-                    const id = String(d.user_id);
-                    authorsInfoMap[id] = {
-                        name: d.name || 'Аноним',
-                        likes_sum: (typeof d.likes_sum !== 'undefined' && d.likes_sum !== null) ? Number(d.likes_sum) : 0,
-                        is_trusted: !!d.is_trusted
-                    };
-                });
+            if (authorIds.length > 0) {
+                const { data: driversInfo } = await _sb.from('drivers').select('user_id,name,likes_sum,is_trusted').in('user_id', authorIds);
+                if (driversInfo) {
+                    driversInfo.forEach(d => {
+                        const id = String(d.user_id);
+                        authorsInfoMap[id] = {
+                            name: d.name || 'Аноним',
+                            likes_sum: (typeof d.likes_sum !== 'undefined' && d.likes_sum !== null) ? Number(d.likes_sum) : 0,
+                            is_trusted: !!d.is_trusted
+                        };
+                    });
+                }
             }
         } catch (e) {
             console.warn('Не удалось получить данные drivers для авторов (возможно, таблица/колонки отсутствуют):', e?.message || e);
         }
 
-        // Для авторов без данных подсчитаем суммарные лайки по уже загруженным меткам
+        // Для авторов без данных подсчитаем суммарные лайки локально по уже загруженным активным меткам
         const missingAuthors = authorIds.filter(id => !authorsInfoMap[id]);
         if (missingAuthors.length > 0) {
-            try {
-                const { data: allMarkers } = await _sb.from('markers').select('author_id,votes_up').in('author_id', missingAuthors);
-                const sumMap = {};
-                if (allMarkers) {
-                    allMarkers.forEach(r => {
-                        const id = String(r.author_id);
-                        sumMap[id] = (sumMap[id] || 0) + (r.votes_up || 0);
-                    });
-                }
-                missingAuthors.forEach(id => {
-                    const likes = sumMap[id] || 0;
-                    authorsInfoMap[id] = { name: 'Аноним', likes_sum: likes, is_trusted: likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20) };
-                });
-            } catch (e) {
-                console.warn('Не удалось подсчитать суммарные лайки для авторов:', e?.message || e);
-            }
+            const sumMap = {};
+            activeMarkers.forEach(r => {
+                const id = String(r.author_id);
+                if (!missingAuthors.includes(id)) return;
+                sumMap[id] = (sumMap[id] || 0) + (r.votes_up || 0);
+            });
+            missingAuthors.forEach(id => {
+                const likes = sumMap[id] || 0;
+                authorsInfoMap[id] = { name: 'Аноним', likes_sum: likes, is_trusted: likes >= (typeof TRUST_LIKES_THRESHOLD !== 'undefined' ? TRUST_LIKES_THRESHOLD : 20) };
+            });
         }
 
         // SOS: кто "в пути" (Edge Function, чтобы не упираться в RLS таблицы)
         const sosEnrouteByMarker = {}; // marker_id -> user_id[]
         const sosResponderNames = {}; // user_id -> name
         try {
-            const sosIds = activeMarkers
+            const sosIds = renderMarkers
                 .filter(x => String(x?.type) === 'sos')
                 .map(x => Number(x?.id))
                 .filter(n => Number.isFinite(n) && n > 0);
@@ -10643,7 +12187,8 @@
         } catch (e) {}
 
         // Для каждого маркера создаем объект на карте
-        activeMarkers.forEach(m => {
+        renderMarkers.forEach(m => {
+            try {
             // Получаем ID автора в начале цикла
             const authorId = String(m.author_id);
             
@@ -10659,6 +12204,7 @@
             const authorInfo = authorsInfoMap[authorId] || { name: 'Аноним', likes_sum: 0, is_trusted: false };
             const isAdminMarker = isAdminUserId(authorId);
             const showAdminStyle = isAdminMarker && !adminInvisible;
+            const isSpecbatMarker = String(m.type) === 'specbat';
             // Переводим likes_sum в 0..5 звёзд
             function likesToStarsLocal(likes) {
                 const n = Number(likes) || 0;
@@ -10728,13 +12274,27 @@
             const isTrustedAuthor = authorInfo.is_trusted;
             const iconInner = showAdminStyle
                 ? `<div class="admin-marker admin-marker--map"><span class="admin-siren admin-siren-left"></span><span class="admin-siren admin-siren-right"></span>${MAP_ICONS[m.type]}<span class="admin-marker-badge">👑</span></div>`
-                : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`;
+                : (isSpecbatMarker
+                    ? `<div class="specbat-marker" title="Спецбат">${MAP_ICONS[m.type]}<span class="specbat-badge">SB</span></div>`
+                    : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`);
             // Создаем маркер с иконкой и балуном
-            const iconSize = showAdminStyle ? 34 : 30;
-            const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: iconInner }, 
+            const iconSize = showAdminStyle ? 34 : (isSpecbatMarker ? 34 : 30);
+            const normalizedCoords = extractMarkerCoordsForNotif(m);
+            if (!normalizedCoords) return;
+            const markerCoordsForMap = [Number(normalizedCoords.lat), Number(normalizedCoords.lon)];
+            if (!Number.isFinite(markerCoordsForMap[0]) || !Number.isFinite(markerCoordsForMap[1])) return;
+
+            const p = new ymaps.Placemark(markerCoordsForMap, { balloonContent: bHtml, iconContent: iconInner }, 
             { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
+            const markerDescriptor = {
+                coords: markerCoordsForMap,
+                icon: MAP_ICONS[m.type] || '📍',
+                hint: `${getMarkerLabel(m.type)}${m.comment ? ` • ${String(m.comment).slice(0, 48)}` : ''}`,
+                balloonHtml: bHtml
+            };
             // Добавляем маркер в коллекцию
-            if (markersCollection) markersCollection.add(p);
+            if (mapAdapter && typeof mapAdapter.addMarker === 'function') mapAdapter.addMarker(p, markerDescriptor);
+            else if (markersCollection) markersCollection.add(p);
             
             // Проверяем расстояние до маркера и выдаем уведомление если нужно
             checkMarkerDistance(m, userCoords);
@@ -10744,10 +12304,16 @@
                 const mc = extractMarkerCoordsForNotif(m);
                 if (mc) {
                     const distance = calculateDistance(userCoords[0], userCoords[1], mc.lat, mc.lon);
-                    if (distance > 800) {
+                    const releaseMeters = (String(m?.type || '') === 'sos')
+                        ? Math.max(MONOLITH_SOS_PRIORITY_RADIUS_METERS + 600, getUserDistSettingMeters() + 600)
+                        : (getUserDistSettingMeters() + 600);
+                    if (distance > releaseMeters) {
                         distanceNotifications.delete(m.id);
                     }
                 }
+            }
+            } catch (e) {
+                console.warn('Пропуск повреждённой метки:', m?.id, e?.message || e);
             }
         });
         if (dtpHeatmapEnabled) {
@@ -10760,6 +12326,12 @@
         }
         } catch (error) {
             console.error('Ошибка при загрузке маркеров (timeout или ошибка БД):', error?.message);
+        } finally {
+            loadMarkersInFlight = false;
+            if (loadMarkersPending) {
+                loadMarkersPending = false;
+                setTimeout(() => { loadMarkers().catch?.(()=>{}); }, 60);
+            }
         }
     }
 </script>
