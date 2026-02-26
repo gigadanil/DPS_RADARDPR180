@@ -4202,6 +4202,25 @@
             } catch (e) {}
 
             const token = String(localStorage.getItem('sb_jwt') || '').trim();
+            if (!token || token.split('.').length !== 3) {
+                return;
+            }
+            try {
+                const payloadPart = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+                const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
+                const payloadJwt = JSON.parse(atob(normalized));
+                const exp = Number(payloadJwt?.exp || 0);
+                const nowSec = Math.floor(Date.now() / 1000);
+                if (exp && exp <= (nowSec + 30)) {
+                    try {
+                        localStorage.removeItem('sb_jwt');
+                        localStorage.removeItem('sb_jwt_exp');
+                    } catch (e) {}
+                    return;
+                }
+            } catch (e) {
+                return;
+            }
 
             const addrText = (document.getElementById('addr-text')?.textContent || '').trim();
             const driverName = String(currentDriver?.name || 'Водитель');
@@ -4219,8 +4238,8 @@
                 driverRank
             };
 
-            const sendHelpNotify = async (jwt = '') => {
-                const authToken = String(jwt || '').trim() || String(SUPABASE_KEY || '').trim();
+            const sendHelpNotify = async (jwt) => {
+                const authToken = String(jwt || '').trim();
                 const headers = {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${authToken}`
@@ -4232,18 +4251,15 @@
                 });
             };
 
-            let resp = null;
-            if (token && token.split('.').length === 3) {
-                resp = await sendHelpNotify(token);
-                if (resp.status === 401) {
-                    try {
-                        localStorage.removeItem('sb_jwt');
-                        localStorage.removeItem('sb_jwt_exp');
-                    } catch (e) {}
-                    resp = await sendHelpNotify('');
-                }
-            } else {
-                resp = await sendHelpNotify('');
+            const resp = await sendHelpNotify(token);
+            if (resp.status === 401) {
+                try {
+                    localStorage.removeItem('sb_jwt');
+                    localStorage.removeItem('sb_jwt_exp');
+                } catch (e) {}
+                try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000)); } catch (e) {}
+                console.warn('help-notify: JWT недействителен, пропуск до следующей авторизации');
+                return;
             }
 
             if (!resp.ok) {
