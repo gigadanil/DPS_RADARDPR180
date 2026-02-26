@@ -5959,7 +5959,8 @@
                 const YMapCtor = ymaps3?.YMap;
                 const SchemeCtor = ymaps3?.YMapDefaultSchemeLayer;
                 const FeaturesCtor = ymaps3?.YMapDefaultFeaturesLayer;
-                if (YMapCtor && SchemeCtor && FeaturesCtor) {
+                const MarkerCtor = ymaps3?.YMapMarker;
+                if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
                     const root = new YMapCtor(document.getElementById('map'), {
                         location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, tilt: 0.8 }
                     });
@@ -5969,9 +5970,15 @@
                     root.addChild(features);
                     myMap.__ym3Root = root;
                     myMap.__ym3MarkerLayer = features;
+                } else {
+                    activeMapEngine = 'ymaps2';
                 }
             } catch (e) {
                 console.warn('ymaps3 marker layer init skipped:', e?.message || e);
+                activeMapEngine = 'ymaps2';
+            }
+            if (activeMapEngine === 'ymaps3-compat' && (!myMap.__ym3Root || !myMap.__ym3MarkerLayer)) {
+                activeMapEngine = 'ymaps2';
             }
         }
 
