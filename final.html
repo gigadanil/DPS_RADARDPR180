@@ -2557,6 +2557,16 @@
         } catch (e) {}
     }
 
+    function sanitizeMediaUrl(raw) {
+        const value = String(raw || '').trim();
+        if (!value) return '';
+        if (value.includes('${') || value.includes('}')) return '';
+        if (/^data:image\//i.test(value)) return value;
+        if (/^https?:\/\//i.test(value)) return value;
+        if (value.startsWith('/')) return value;
+        return value;
+    }
+
     function isFeatureAllowedByPolicy(featureName) {
         try {
             const policy = document.permissionsPolicy || document.featurePolicy;
@@ -10381,8 +10391,10 @@
                 messageEl.style.position = 'relative';
 
                 let photoHTML = '';
-                if (msg.photo_url && msg.photo_url.trim()) {
-                    photoHTML = `<img src="${msg.photo_url}" class="chat-message-photo" onclick="openPhotoViewer('${msg.photo_url}')" title="Нажмите для увеличения" style="display: block; margin-top: 8px; max-width: 100%;">`;
+                const safeMsgPhotoUrl = sanitizeMediaUrl(msg.photo_url);
+                if (safeMsgPhotoUrl) {
+                    const escapedPhotoUrl = safeMsgPhotoUrl.replace(/'/g, "\\'");
+                    photoHTML = `<img src="${safeMsgPhotoUrl}" class="chat-message-photo" onclick="openPhotoViewer('${escapedPhotoUrl}')" title="Нажмите для увеличения" style="display: block; margin-top: 8px; max-width: 100%;">`;
                 }
 
                 const timestamp = new Date(msg.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
@@ -10403,8 +10415,9 @@
 
                 // Отображаем аватар (фото или emoji)
                 let avatarHTML = '';
-                if (authorInfo.avatar_url) {
-                    avatarHTML = `<img src="${authorInfo.avatar_url}" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 6px; object-fit: cover;">`;
+                const safeAvatarUrl = sanitizeMediaUrl(authorInfo.avatar_url);
+                if (safeAvatarUrl) {
+                    avatarHTML = `<img src="${safeAvatarUrl}" style="width: 24px; height: 24px; border-radius: 50%; margin-right: 6px; object-fit: cover;">`;
                 } else {
                     const avatar = authorInfo.avatar || '👤';
                     avatarHTML = `<span style="margin-right: 6px; font-size: 16px;">${avatar}</span>`;
@@ -10667,9 +10680,15 @@
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     const preview = document.getElementById('chatPhotoPreview');
+                    const previewUrl = sanitizeMediaUrl(event?.target?.result);
+                    if (!previewUrl) {
+                        preview.innerHTML = '';
+                        preview.style.display = 'none';
+                        return;
+                    }
                     preview.innerHTML = `
                         <div style="position: relative; display: inline-block;">
-                            <img src="${event.target.result}" style="max-width: 100px; max-height: 100px; border-radius: 8px;">
+                            <img src="${previewUrl}" style="max-width: 100px; max-height: 100px; border-radius: 8px;">
                             <button onclick="selectedChatPhoto = null; document.getElementById('chatPhotoPreview').innerHTML = ''; document.getElementById('chatInput').focus();" 
                                 style="position: absolute; top: -5px; right: -5px; background: red; color: white; border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 14px;">✕</button>
                         </div>
@@ -12293,7 +12312,12 @@
                 <div style="font-size:13px; margin-bottom:6px; color:#222; cursor: ${window.isAdmin ? 'pointer' : 'default'}; padding: 4px; border-radius: 4px; transition: all 0.2s;" onmouseover="${window.isAdmin ? `this.style.background='#f0f0f5'; this.style.transform='scale(1.02)'` : ''}" onmouseout="${window.isAdmin ? `this.style.background=''; this.style.transform='scale(1)'` : ''}" onclick="${window.isAdmin ? `window.showUserModeratorMenuFromMarker(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')` : ''}">${authorNameHtml} ${authorBadgesHtml}</div>
                 ${adminOnlineHtml}
                 <strong>${m.comment || 'Метка'}</strong>
-                ${m.photo_url ? `<div style="margin-top: 8px; margin-bottom: 8px;"><img src="${m.photo_url}" style="max-width: 100%; border-radius: 8px; cursor: pointer; max-height: 250px;" onclick="openPhotoViewer('${m.photo_url}')" title="Нажмите для увеличения"></div>` : ''}
+                ${(() => {
+                    const safeMarkerPhoto = sanitizeMediaUrl(m.photo_url);
+                    if (!safeMarkerPhoto) return '';
+                    const escaped = safeMarkerPhoto.replace(/'/g, "\\'");
+                    return `<div style="margin-top: 8px; margin-bottom: 8px;"><img src="${safeMarkerPhoto}" style="max-width: 100%; border-radius: 8px; cursor: pointer; max-height: 250px;" onclick="openPhotoViewer('${escaped}')" title="Нажмите для увеличения"></div>`;
+                })()}
                 <div class="b-poll">
                     <button class="b-poll-btn" onclick="window.vote(${m.id}, true)">👍 ${m.votes_up || 0}</button>
                     <button class="b-poll-btn" onclick="window.vote(${m.id}, false)">👎 ${m.votes_down || 0}</button>

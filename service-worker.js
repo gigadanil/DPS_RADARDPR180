@@ -7,11 +7,12 @@
   - Supabase / внешние API: network-only.
 */
 
-const CACHE_VERSION = 'monolith180-static-v2';
+const CACHE_VERSION = 'monolith180-static-v3';
 const STATIC_CACHE = CACHE_VERSION;
 
 const PRECACHE_URLS = [
   './',
+  './index.html',
   './final.html',
   './manifest.json',
   './icon.svg',
