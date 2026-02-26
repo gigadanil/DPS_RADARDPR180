@@ -4220,11 +4220,11 @@
             };
 
             const sendHelpNotify = async (jwt = '') => {
+                const authToken = String(jwt || '').trim() || String(SUPABASE_KEY || '').trim();
                 const headers = {
                     'Content-Type': 'application/json',
-                    apikey: SUPABASE_KEY
+                    Authorization: `Bearer ${authToken}`
                 };
-                if (jwt) headers.Authorization = `Bearer ${jwt}`;
                 return fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
                     method: 'POST',
                     headers,
