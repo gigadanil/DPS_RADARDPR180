@@ -7,7 +7,7 @@
   - Supabase / внешние API: network-only.
 */
 
-const CACHE_VERSION = 'monolith180-static-v3';
+const CACHE_VERSION = 'monolith180-static-v4';
 const STATIC_CACHE = CACHE_VERSION;
 
 const PRECACHE_URLS = [
