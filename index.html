@@ -2847,6 +2847,7 @@
     const MAP_ENGINE_STORAGE_KEY = 'mapEnginePreference';
     const MAP_ENGINE_LEGACY_FORCE_KEY = 'mapEngineLegacyForce';
     const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
+    const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
@@ -4190,11 +4191,15 @@
             const helpTypes = new Set(['sos', 'dps', 'specbat', 'dtp', 'danger', 'traffic_jam', 'works']);
             if (!helpTypes.has(String(marker.type))) return;
 
+            const nowMs = Date.now();
+            try {
+                const cooldownUntil = Number(localStorage.getItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY) || 0);
+                if (cooldownUntil > nowMs) return;
+            } catch (e) {}
+
             let token = localStorage.getItem('sb_jwt') || '';
-            if (!token) {
-                const refreshed = await ensureSupabaseAuth();
-                token = refreshed || localStorage.getItem('sb_jwt') || '';
-            }
+            const refreshed = await ensureSupabaseAuth();
+            token = refreshed || token || localStorage.getItem('sb_jwt') || '';
             if (!token) {
                 console.warn('Пропуск отправки в help-notify: JWT токен отсутствует');
                 return;
@@ -4216,21 +4221,44 @@
                 driverRank
             };
 
-            const resp = await fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
+            const sendHelpNotify = async (jwt) => fetch(`${SUPABASE_URL}/functions/v1/help-notify`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
+                    Authorization: `Bearer ${jwt}`
                 },
                 body: JSON.stringify(payload)
             });
+
+            let resp = await sendHelpNotify(token);
+            if (resp.status === 401) {
+                try {
+                    clearSupabaseAuth();
+                    localStorage.removeItem('sb_jwt');
+                    localStorage.removeItem('sb_jwt_exp');
+                } catch (e) {}
+
+                const retryFresh = await ensureSupabaseAuth();
+                const retryToken = retryFresh || localStorage.getItem('sb_jwt') || '';
+                if (!retryToken) {
+                    try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000)); } catch (e) {}
+                    console.warn('help-notify: токен недействителен, требуется повторная авторизация');
+                    return;
+                }
+                resp = await sendHelpNotify(retryToken);
+            }
 
             if (!resp.ok) {
                 let bodyText = '';
                 try { bodyText = await resp.text(); } catch(e) { bodyText = ''; }
                 console.warn('help-notify вернул ошибку:', resp.status, bodyText || '(пустой ответ)');
+                if (resp.status === 401) {
+                    try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000)); } catch (e) {}
+                }
                 return;
             }
+
+            try { localStorage.removeItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY); } catch (e) {}
 
             try {
                 const payload = await resp.json();
