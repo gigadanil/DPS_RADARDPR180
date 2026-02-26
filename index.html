@@ -16,6 +16,7 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://api-maps.yandex.ru/v3/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <script src="https://api-maps.yandex.ru/2.1/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <style>
         :root {
@@ -479,6 +480,29 @@
             transition: opacity 0.3s ease;
         }
         #onlineCountBadge.online-count.visible { display: inline-flex; }
+        #mapEngineBadge.engine-badge {
+            position: fixed;
+            top: calc(56px + var(--safe-area-inset-top));
+            left: calc(12px + var(--safe-area-inset-left));
+            z-index: 2000;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.48);
+            color: #fff;
+            font-weight: 800;
+            font-size: 11px;
+            letter-spacing: 0.2px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+        }
+        #mapEngineBadge.engine-badge.is-v3 { border-color: rgba(0,212,255,0.45); }
+        #mapEngineBadge.engine-badge.is-v2 { border-color: rgba(255,149,0,0.45); }
         .online-dot {
             width: 10px;
             height: 10px;
@@ -1092,6 +1116,7 @@
         /* Требование: сдвинуть основной UI и модалки ниже системных кнопок ("Закрыть", "...") */
         .top-controls { top: var(--ui-safe-top) !important; }
         #onlineCountBadge.online-count { top: var(--ui-safe-top) !important; }
+        #mapEngineBadge.engine-badge { top: calc(var(--ui-safe-top) + 44px) !important; }
         .right-bar { top: var(--ui-safe-top) !important; }
         .admin-btn,
         .profile-btn,
@@ -1354,6 +1379,7 @@
         <span class="online-dot" aria-hidden="true"></span>
         <span id="onlineCountText">В сети: —</span>
     </div>
+    <div id="mapEngineBadge" class="engine-badge" aria-label="Движок карты">🗺️ ymaps3</div>
     <div id="map"></div>
     <div id="mapDimmingOverlay"></div>
 
@@ -2772,6 +2798,9 @@
     try { window.__siteTelegramUser = siteTelegramUser; } catch(e) {}
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
     let myMap, selectedType = 'dps';
+    let preferredMapEngine = 'ymaps3';
+    let activeMapEngine = 'ymaps2';
+    let mapAdapter = null;
     // Текущее GPS местоположение пользователя
     let userLocation = null;
     let lastReliableUserLocation = null;
@@ -2795,7 +2824,7 @@
     let dynamicCourseLastCompassTs = 0;
     let dynamicCourseCameraTimerId = null;
     let dynamicCourseCompassInit = false;
-    const DYNAMIC_COURSE_PITCH_DEG = 60;
+    const DYNAMIC_COURSE_TILT = 0.8;
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
     const DYNAMIC_COURSE_AHEAD_MAX_M = 2300;
     const DYNAMIC_COURSE_UPDATE_MS = 450;
@@ -2815,6 +2844,8 @@
     const TRUST_LIKES_THRESHOLD = 20; // можно менять по необходимости
     const TYPE_CATEGORY_STORAGE_KEY = 'selected_type_category';
     const DYNAMIC_COURSE_ENABLED_KEY = 'dynamicCourseEnabled';
+    const MAP_ENGINE_STORAGE_KEY = 'mapEnginePreference';
+    const MAP_ENGINE_LEGACY_FORCE_KEY = 'mapEngineLegacyForce';
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
@@ -5747,6 +5778,411 @@
         return blendCircularDeg(compassDeg, compassWeight, gpsDeg, gpsWeight);
     }
 
+    function getDynamicFollowZoomBySpeed(speedKmh) {
+        const s = Number(speedKmh) || 0;
+        if (s > 80) return 14;
+        if (s < 20) return 17;
+        return 16;
+    }
+
+    function attachYandexCameraCompat(map) {
+        if (!map || typeof map !== 'object') return;
+
+        if (typeof map.setBehaviors !== 'function') {
+            map.setBehaviors = function(behaviors) {
+                try {
+                    if (map.behaviors && typeof map.behaviors.enable === 'function') {
+                        map.behaviors.enable(Array.isArray(behaviors) ? behaviors : []);
+                    }
+                } catch (e) {}
+            };
+        }
+
+        if (typeof map.setCamera !== 'function') {
+            map.setCamera = function(camera = {}) {
+                const center = Array.isArray(camera.center) && camera.center.length >= 2
+                    ? [Number(camera.center[0]), Number(camera.center[1])]
+                    : null;
+                const zoom = Number.isFinite(Number(camera.zoom)) ? Number(camera.zoom) : (map.getZoom ? map.getZoom() : 16);
+                const duration = Number.isFinite(Number(camera.duration)) ? Number(camera.duration) : 500;
+
+                try {
+                    if (map.options && typeof map.options.set === 'function') {
+                        if (Number.isFinite(Number(camera.azimuth))) map.options.set('azimuth', normalizeDeg(camera.azimuth));
+                        if (Number.isFinite(Number(camera.tilt))) map.options.set('tilt', Number(camera.tilt));
+                    }
+                } catch (e) {}
+
+                if (center && map.setCenter) {
+                    try {
+                        map.setCenter(center, zoom, { duration, timingFunction: 'ease-out' });
+                        return;
+                    } catch (e) {
+                        try { map.setCenter(center, zoom); return; } catch (e2) {}
+                    }
+                }
+            };
+        }
+    }
+
+    function loadMapEnginePreference() {
+        try {
+            const qs = new URLSearchParams(window.location.search || '');
+            const forceLegacyByQuery = qs.get('map2') === '1' || qs.get('engine') === 'ymaps2';
+            const forceLegacyByStorage = localStorage.getItem(MAP_ENGINE_LEGACY_FORCE_KEY) === 'true';
+            if (forceLegacyByQuery || forceLegacyByStorage) {
+                preferredMapEngine = 'ymaps2';
+                return;
+            }
+
+            const raw = String(localStorage.getItem(MAP_ENGINE_STORAGE_KEY) || '').trim().toLowerCase();
+            preferredMapEngine = (raw === 'ymaps2') ? 'ymaps2' : 'ymaps3';
+        } catch (e) {
+            preferredMapEngine = 'ymaps3';
+        }
+        updateMapEngineBadge();
+    }
+
+    function updateMapEngineBadge() {
+        try {
+            const badge = document.getElementById('mapEngineBadge');
+            if (!badge) return;
+
+            const engine = String(activeMapEngine || preferredMapEngine || '').toLowerCase();
+            const isV3 = engine.includes('ymaps3');
+            badge.classList.toggle('is-v3', isV3);
+            badge.classList.toggle('is-v2', !isV3);
+            badge.textContent = isV3 ? '🗺️ ymaps3' : '🗺️ ymaps2 legacy';
+        } catch (e) {}
+    }
+
+    function saveMapEnginePreference() {
+        try { localStorage.setItem(MAP_ENGINE_STORAGE_KEY, preferredMapEngine); } catch (e) {}
+    }
+
+    function setMapEnginePreference(engine) {
+        preferredMapEngine = (String(engine || '').toLowerCase() === 'ymaps3') ? 'ymaps3' : 'ymaps2';
+        if (preferredMapEngine === 'ymaps2') activeMapEngine = 'ymaps2';
+        try {
+            localStorage.setItem(MAP_ENGINE_LEGACY_FORCE_KEY, preferredMapEngine === 'ymaps2' ? 'true' : 'false');
+        } catch (e) {}
+        saveMapEnginePreference();
+        updateMapEngineBadge();
+        try {
+            showInAppNotification({
+                title: '🗺 Движок карты',
+                body: preferredMapEngine === 'ymaps3' ? 'Режим ymaps3 сохранён. Перезапустите страницу.' : 'Режим ymaps2 (legacy) сохранён. Перезапустите страницу.',
+                priority: 'low'
+            });
+        } catch (e) {}
+        return preferredMapEngine;
+    }
+
+    window.setMapEnginePreference = setMapEnginePreference;
+
+    async function initPrimaryMapInstance() {
+        loadMapEnginePreference();
+        activeMapEngine = 'ymaps2';
+
+        if (preferredMapEngine === 'ymaps3') {
+            try {
+                if (window.ymaps3 && ymaps3.ready) {
+                    await ymaps3.ready;
+                    activeMapEngine = 'ymaps3-compat';
+                }
+            } catch (e) {
+                activeMapEngine = 'ymaps2';
+            }
+        }
+
+        myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+        attachYandexCameraCompat(myMap);
+        applyDynamicCourseBehaviors();
+
+        if (activeMapEngine === 'ymaps3-compat') {
+            try {
+                const YMapCtor = ymaps3?.YMap;
+                const SchemeCtor = ymaps3?.YMapDefaultSchemeLayer;
+                const FeaturesCtor = ymaps3?.YMapDefaultFeaturesLayer;
+                if (YMapCtor && SchemeCtor && FeaturesCtor) {
+                    const root = new YMapCtor(document.getElementById('map'), {
+                        location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, tilt: 0.8 }
+                    });
+                    const scheme = new SchemeCtor({});
+                    const features = new FeaturesCtor({});
+                    root.addChild(scheme);
+                    root.addChild(features);
+                    myMap.__ym3Root = root;
+                    myMap.__ym3MarkerLayer = features;
+                }
+            } catch (e) {
+                console.warn('ymaps3 marker layer init skipped:', e?.message || e);
+            }
+        }
+
+        markersCollection = new ymaps.GeoObjectCollection();
+        myMap.geoObjects.add(markersCollection);
+        mapAdapter = createMapAdapter(activeMapEngine, myMap, markersCollection);
+        updateMapEngineBadge();
+
+        if (activeMapEngine === 'ymaps3-compat') {
+            console.info('🧭 ymaps3 active: running staged adapter mode with legacy-safe fallback.');
+        }
+    }
+
+    function createMapAdapter(engine, map, markerCollection) {
+        const mode = String(engine || 'ymaps2');
+        const ym3Markers = [];
+        const ym3ActionEndHandlers = [];
+        const ym3ActionStartHandlers = [];
+        const ym3ClickHandlers = [];
+        let ym3ListenerEntity = null;
+        let ym3MapInAction = false;
+
+        function approximateBoundsFromCenterZoom(center, zoom) {
+            const lat = Number(center?.[0]);
+            const lon = Number(center?.[1]);
+            const z = Number(zoom);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(z)) return null;
+
+            const lonSpan = Math.max(0.01, 360 / Math.pow(2, z + 1));
+            const latSpan = Math.max(0.01, 180 / Math.pow(2, z + 1));
+            return [
+                [lat - latSpan, lon - lonSpan],
+                [lat + latSpan, lon + lonSpan]
+            ];
+        }
+
+        function ensureYmaps3Popup() {
+            let popup = document.getElementById('ym3MarkerPopup');
+            if (popup) return popup;
+            popup = document.createElement('div');
+            popup.id = 'ym3MarkerPopup';
+            popup.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(90px + env(safe-area-inset-bottom));z-index:4100;display:none;background:rgba(20,20,24,0.96);color:#fff;border-radius:14px;border:1px solid rgba(255,255,255,0.18);box-shadow:0 12px 26px rgba(0,0,0,0.35);max-height:46vh;overflow:auto;';
+            popup.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.12);"><strong style="font-size:13px;">Метка</strong><button id="ym3MarkerPopupClose" style="background:none;border:none;color:#fff;font-size:22px;line-height:1;cursor:pointer;">×</button></div><div id="ym3MarkerPopupBody" style="padding:10px 12px;"></div>';
+            document.body.appendChild(popup);
+            const closeBtn = document.getElementById('ym3MarkerPopupClose');
+            if (closeBtn) closeBtn.addEventListener('click', () => { popup.style.display = 'none'; });
+            return popup;
+        }
+
+        function showYmaps3Popup(html) {
+            try {
+                const popup = ensureYmaps3Popup();
+                const body = document.getElementById('ym3MarkerPopupBody');
+                if (body) body.innerHTML = String(html || '');
+                popup.style.display = 'block';
+            } catch (e) {}
+        }
+
+        function ensureYmaps3Listener() {
+            if (mode !== 'ymaps3-compat') return;
+            if (!map?.__ym3Root || !window.ymaps3 || ym3ListenerEntity) return;
+            try {
+                const YMapListenerCtor = ymaps3?.YMapListener;
+                if (!YMapListenerCtor) return;
+                ym3ListenerEntity = new YMapListenerCtor({
+                    onClick: () => {
+                        ym3ClickHandlers.forEach(fn => { try { fn(); } catch (e) {} });
+                    },
+                    onUpdate: (obj) => {
+                        const loc = obj?.location || obj?.camera || {};
+                        const isAction = !!(obj?.mapInAction || obj?.isInteracting || obj?.inAction || false);
+                        if (isAction && !ym3MapInAction) {
+                            ym3MapInAction = true;
+                            ym3ActionStartHandlers.forEach(fn => { try { fn(); } catch (e) {} });
+                        }
+                        if (!isAction && ym3MapInAction) {
+                            ym3MapInAction = false;
+                            ym3ActionEndHandlers.forEach(fn => { try { fn(); } catch (e) {} });
+                        }
+                        if (loc && Array.isArray(loc.center) && map && typeof map.setCenter === 'function') {
+                            try {
+                                const lon = Number(loc.center[0]);
+                                const lat = Number(loc.center[1]);
+                                const zoom = Number(loc.zoom);
+                                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                                    map.__ym3LastCenter = [lat, lon];
+                                    if (Number.isFinite(zoom)) map.__ym3LastZoom = zoom;
+                                    map.__ym3LastBounds = approximateBoundsFromCenterZoom([lat, lon], map.__ym3LastZoom || 16);
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                });
+                map.__ym3Root.addChild(ym3ListenerEntity);
+            } catch (e) {}
+        }
+
+        function addYmaps3MarkerFromDescriptor(descriptor) {
+            try {
+                if (!descriptor || !window.ymaps3 || !map || !map.__ym3Root) return false;
+                const coords = Array.isArray(descriptor.coords) ? descriptor.coords : null;
+                if (!coords || coords.length < 2) return false;
+                const lat = Number(coords[0]);
+                const lon = Number(coords[1]);
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+
+                const markerEl = document.createElement('div');
+                markerEl.style.cssText = 'width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #0a84ff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.28);cursor:pointer;';
+                markerEl.textContent = String(descriptor.icon || '📍');
+                if (descriptor.hint) markerEl.title = String(descriptor.hint);
+                if (descriptor.balloonHtml) {
+                    markerEl.addEventListener('click', () => {
+                        try {
+                            showYmaps3Popup(String(descriptor.balloonHtml));
+                        } catch (e) {}
+                    });
+                }
+
+                const YMapMarkerCtor = ymaps3?.YMapMarker;
+                if (!YMapMarkerCtor) return false;
+                const marker = new YMapMarkerCtor({ coordinates: [lon, lat] }, markerEl);
+                const parent = map.__ym3MarkerLayer || map.__ym3Root;
+                parent.addChild(marker);
+                ym3Markers.push({ marker, parent });
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        const adapter = {
+            mode,
+            map,
+            markerCollection,
+            clearMarkers() {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        while (ym3Markers.length) {
+                            const entry = ym3Markers.pop();
+                            try { entry?.parent?.removeChild(entry?.marker); } catch (e) {}
+                        }
+                        return;
+                    }
+                    if (this.markerCollection && typeof this.markerCollection.removeAll === 'function') this.markerCollection.removeAll();
+                } catch (e) {}
+            },
+            addMarker(marker, descriptor = null) {
+                try {
+                    if (this.mode === 'ymaps3-compat' && addYmaps3MarkerFromDescriptor(descriptor)) return;
+                    if (this.markerCollection && typeof this.markerCollection.add === 'function') this.markerCollection.add(marker);
+                } catch (e) {}
+            },
+            getCenter() {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        if (Array.isArray(this.map?.__ym3LastCenter) && this.map.__ym3LastCenter.length >= 2) return this.map.__ym3LastCenter;
+                    }
+                    if (this.map && typeof this.map.getCenter === 'function') return this.map.getCenter();
+                } catch (e) {}
+                return null;
+            },
+            getZoom() {
+                try {
+                    if (this.mode === 'ymaps3-compat' && Number.isFinite(Number(this.map?.__ym3LastZoom))) return Number(this.map.__ym3LastZoom);
+                    if (this.map && typeof this.map.getZoom === 'function') return Number(this.map.getZoom());
+                } catch (e) {}
+                return null;
+            },
+            getBounds() {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        if (Array.isArray(this.map?.__ym3LastBounds) && this.map.__ym3LastBounds.length >= 2) return this.map.__ym3LastBounds;
+                        const c = this.getCenter();
+                        const z = this.getZoom();
+                        return approximateBoundsFromCenterZoom(c, Number.isFinite(Number(z)) ? z : 16);
+                    }
+                    if (this.map && typeof this.map.getBounds === 'function') return this.map.getBounds();
+                } catch (e) {}
+                return null;
+            },
+            onActionEnd(handler) {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        ym3ActionEndHandlers.push(handler);
+                        ensureYmaps3Listener();
+                        return;
+                    }
+                    if (this.map?.events?.add) this.map.events.add('actionend', handler);
+                } catch (e) {}
+            },
+            onActionStart(handler) {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        ym3ActionStartHandlers.push(handler);
+                        ensureYmaps3Listener();
+                        return;
+                    }
+                    if (this.map?.events?.add) this.map.events.add('actionstart', handler);
+                } catch (e) {}
+            },
+            onClick(handler) {
+                try {
+                    if (this.mode === 'ymaps3-compat') {
+                        ym3ClickHandlers.push(handler);
+                        ensureYmaps3Listener();
+                        return;
+                    }
+                    if (this.map?.events?.add) this.map.events.add('click', handler);
+                } catch (e) {}
+            }
+        };
+        return adapter;
+    }
+
+    function bindMapCoreEvents() {
+        const a = mapAdapter;
+        if (!a || !a.map) return;
+
+        a.onActionEnd(() => {
+            const targetCoords = getTargetPlacementCoords();
+            ymaps.geocode(targetCoords).then(res => {
+                const obj = res.geoObjects.get(0);
+                document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
+
+                const coords = targetCoords;
+                if (isInDonetskRegion(coords)) {
+                    document.getElementById('addr-text').style.color = '#34c759';
+                } else {
+                    document.getElementById('addr-text').style.color = '#ff3b30';
+                }
+            });
+            if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
+            if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
+            loadMarkersDebounced();
+        });
+
+        a.onActionStart(() => {
+            if (autoFollow) {
+                autoFollow = false;
+                try { updateFollowButton(); } catch(e) {}
+            }
+        });
+
+        a.onClick(() => {
+            try {
+                if (!actionCardVisible) toggleActionCard();
+            } catch (e) {}
+        });
+    }
+
+    function applyDynamicCourseBehaviors() {
+        if (!myMap) return;
+        attachYandexCameraCompat(myMap);
+        try {
+            if (typeof myMap.setBehaviors === 'function') {
+                myMap.setBehaviors(['drag', 'scrollZoom', 'tilt', 'rotate']);
+                return;
+            }
+        } catch (e) {}
+        try {
+            if (myMap.behaviors && typeof myMap.behaviors.enable === 'function') {
+                myMap.behaviors.enable(['drag', 'scrollZoom', 'tilt', 'rotate']);
+            }
+        } catch (e) {}
+    }
+
     function updateDynamicCourseCamera() {
         if (!dynamicCourseEnabled) return;
         if (!myMap || !autoFollow || !userLocation) return;
@@ -5755,6 +6191,7 @@
         if (!Number.isFinite(Number(heading))) return;
 
         const speed = Number(userSpeedKmh) || 0;
+        const targetZoom = getDynamicFollowZoomBySpeed(speed);
         const aheadMeters = Math.max(
             DYNAMIC_COURSE_AHEAD_MIN_M,
             Math.min(DYNAMIC_COURSE_AHEAD_MAX_M, 650 + speed * 10)
@@ -5769,11 +6206,18 @@
 
         try {
             const mapAny = myMap;
-            if (mapAny?.options?.set) {
-                // В API 2.x это best-effort: где поддерживается, карта повернётся/наклонится.
+            if (typeof mapAny?.setCamera === 'function') {
+                mapAny.setCamera({
+                    center: cameraTarget,
+                    azimuth: smoothedHeading,
+                    tilt: DYNAMIC_COURSE_TILT,
+                    zoom: targetZoom,
+                    duration: 500
+                });
+            } else if (mapAny?.options?.set) {
                 mapAny.options.set('rotation', smoothedHeading);
                 mapAny.options.set('azimuth', smoothedHeading);
-                mapAny.options.set('tilt', DYNAMIC_COURSE_PITCH_DEG);
+                mapAny.options.set('tilt', DYNAMIC_COURSE_TILT);
             }
         } catch (e) {}
 
@@ -5784,9 +6228,9 @@
 
         dynamicCourseLastCameraDeg = smoothedHeading;
         try {
-            myMap.setCenter(cameraTarget, myMap.getZoom() || 17, { duration: 240, timingFunction: 'ease-out' });
+            myMap.setCenter(cameraTarget, targetZoom, { duration: 500, timingFunction: 'ease-out' });
         } catch (e) {
-            try { myMap.setCenter(cameraTarget, myMap.getZoom() || 17); } catch (e2) {}
+            try { myMap.setCenter(cameraTarget, targetZoom); } catch (e2) {}
         }
     }
 
@@ -11276,7 +11720,7 @@
 
             // Если не забанен - инициализируем карту
             // Создаем карту с центром и уровнем зума
-            myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+            await initPrimaryMapInstance();
             
             // Границы Донецкой области (скрыты)
             // const donetskBoundary = new ymaps.Rectangle([
@@ -11289,43 +11733,10 @@
             //     strokeOpacity: 0.7
             // });
             // myMap.geoObjects.add(donetskBoundary);
-            // Инициализируем коллекцию маркеров — её можно безопасно очищать без удаления прочих объектов
-            markersCollection = new ymaps.GeoObjectCollection();
-            myMap.geoObjects.add(markersCollection);
+            // Инициализируем коллекцию маркеров внутри initPrimaryMapInstance()
             
-            // При изменении центра карты обновляем адрес
-            myMap.events.add('actionend', () => {
-                const targetCoords = getTargetPlacementCoords();
-                ymaps.geocode(targetCoords).then(res => {
-                    const obj = res.geoObjects.get(0);
-                    document.getElementById('addr-text').innerText = obj ? obj.getAddressLine() : "Местоположение";
-                    
-                    // Проверяем, в какой области находимся
-                    const coords = targetCoords;
-                    if (isInDonetskRegion(coords)) {
-                        document.getElementById('addr-text').style.color = '#34c759';
-                    } else {
-                        document.getElementById('addr-text').style.color = '#ff3b30';
-                    }
-                });
-                if (dtpHeatmapEnabled) scheduleDtpHeatmapRender();
-                if (patrolHeatmapEnabled) schedulePatrolHeatmapRender();
-                loadMarkersDebounced();
-            });
-            // Если пользователь начал вручную передвигать карту — отключаем автоследование
-            myMap.events.add('actionstart', () => {
-                if (autoFollow) {
-                    autoFollow = false;
-                    try { updateFollowButton(); } catch(e) {}
-                }
-            });
-
-            // Открываем нижнюю панель выбора (action-panel) по тапу по карте
-            myMap.events.add('click', () => {
-                try {
-                    if (!actionCardVisible) toggleActionCard();
-                } catch (e) {}
-            });
+            // События карты (через адаптер движка)
+            bindMapCoreEvents();
             
             // Инициализируем приложение (проверяем регистрацию)
             appInitialized = true;
@@ -11376,9 +11787,7 @@
             
             // Пытаемся инициализировать карту, даже при ошибке проверки бана
             try {
-                myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
-                markersCollection = new ymaps.GeoObjectCollection();
-                myMap.geoObjects.add(markersCollection);
+                await initPrimaryMapInstance();
                 
                 initApp();
                 initGPS();
@@ -11534,11 +11943,12 @@
         const counterEl = document.getElementById('markersCounter');
         
         // Используем GPS координаты пользователя, иначе центр карты
-        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : myMap.getCenter();
+        const fallbackCenter = (mapAdapter && typeof mapAdapter.getCenter === 'function') ? mapAdapter.getCenter() : (myMap?.getCenter?.() || null);
+        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : fallbackCenter;
 
         // Для производительности рендерим только метки в видимой области (+запас)
         // или рядом с пользователем (чтобы голос/подсказки не терялись при смещении карты).
-        const mapBounds = (myMap && typeof myMap.getBounds === 'function') ? myMap.getBounds() : null;
+        const mapBounds = (mapAdapter && typeof mapAdapter.getBounds === 'function') ? mapAdapter.getBounds() : ((myMap && typeof myMap.getBounds === 'function') ? myMap.getBounds() : null);
         const hasBounds = Array.isArray(mapBounds) && mapBounds.length >= 2 && Array.isArray(mapBounds[0]) && Array.isArray(mapBounds[1]);
         const VIEWPORT_MARGIN_DEG = 0.035;
         const NEARBY_RENDER_METERS = 3000;
@@ -11599,7 +12009,8 @@
         }
 
         // Удаляем только маркеры, которые мы рендерим (не трогаем userLocationMarker и служебные объекты)
-        if (markersCollection) markersCollection.removeAll();
+        if (mapAdapter && typeof mapAdapter.clearMarkers === 'function') mapAdapter.clearMarkers();
+        else if (markersCollection) markersCollection.removeAll();
 
         // Подготовим данные об авторах (имя, likes_sum, is_trusted)
         const authorIds = Array.from(new Set(renderMarkers.map(m => String(m.author_id))));
@@ -11781,8 +12192,15 @@
             const iconSize = showAdminStyle ? 34 : (isSpecbatMarker ? 34 : 30);
             const p = new ymaps.Placemark(m.coords, { balloonContent: bHtml, iconContent: iconInner }, 
             { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
+            const markerDescriptor = {
+                coords: Array.isArray(m.coords) ? [Number(m.coords[0]), Number(m.coords[1])] : null,
+                icon: MAP_ICONS[m.type] || '📍',
+                hint: `${getMarkerLabel(m.type)}${m.comment ? ` • ${String(m.comment).slice(0, 48)}` : ''}`,
+                balloonHtml: bHtml
+            };
             // Добавляем маркер в коллекцию
-            if (markersCollection) markersCollection.add(p);
+            if (mapAdapter && typeof mapAdapter.addMarker === 'function') mapAdapter.addMarker(p, markerDescriptor);
+            else if (markersCollection) markersCollection.add(p);
             
             // Проверяем расстояние до маркера и выдаем уведомление если нужно
             checkMarkerDistance(m, userCoords);
