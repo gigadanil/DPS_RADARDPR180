@@ -2827,6 +2827,11 @@
     let distanceNotifications = new Map(); // { markerId: 'far'|'near' }
     // Тренд расстояния до маркера (marker_id -> { lastDistance, lastTrend, lastUpdate })
     let markerDistanceState = new Map();
+    const MONOLITH_WARNING_OPTIONS = [300, 500, 1000, 2000];
+    const MONOLITH_SOS_PRIORITY_RADIUS_METERS = 5000;
+    const MONOLITH_POST_PASS_ASK_METERS = 200;
+    const monolithStreetCache = new Map();
+    const monolithStreetInflight = new Map();
     // Состояние динамического баннера приближения
     let proximityBannerState = {
         markerId: null,
@@ -2886,7 +2891,7 @@
     // Оповещения по расстоянию только при автослежении
     let proximityRequiresFollow = false;
     // Дистанция предупреждения (в метрах)
-    let warningDistanceMeters = 800;
+    let warningDistanceMeters = 500;
     // Флаг видимости нижнего виджета
     let actionCardVisible = false;
     // Флаг для отключения автосцентрирования GPS после размещения метки
@@ -4291,12 +4296,27 @@
         return R * c;
     }
 
+    function normalizeWarningDistanceMeters(value) {
+        const v = Number(value);
+        if (!Number.isFinite(v)) return 500;
+        let best = MONOLITH_WARNING_OPTIONS[0];
+        let bestDiff = Math.abs(v - best);
+        for (const opt of MONOLITH_WARNING_OPTIONS) {
+            const diff = Math.abs(v - opt);
+            if (diff < bestDiff) {
+                best = opt;
+                bestDiff = diff;
+            }
+        }
+        return best;
+    }
+
+    function getUserDistSettingMeters() {
+        return normalizeWarningDistanceMeters(warningDistanceMeters);
+    }
+
     function getDynamicWarningMaxMeters() {
-        const base = Math.max(300, Number(warningDistanceMeters) || 800);
-        const speed = Number(userSpeedKmh) || 0;
-        if (speed > 80) return Math.max(base, 1200);
-        if (speed < 40) return Math.min(base, 600);
-        return base;
+        return getUserDistSettingMeters();
     }
 
     function getWarningMinMeters(maxMeters) {
@@ -4312,6 +4332,65 @@
         if (distance >= 1000) return `${Math.round(distance / 10) * 10} м`;
         if (distance >= 100) return `${Math.round(distance / 10) * 10} м`;
         return `${Math.round(distance)} м`;
+    }
+
+    function formatMonolithVoiceDistance(distanceMeters) {
+        const m = Math.max(0, Math.round(Number(distanceMeters) || 0));
+        if (m === 1000) return '1 километр';
+        if (m === 2000) return '2 километра';
+        return `${m} метров`;
+    }
+
+    function extractStreetFromAddressLine(line) {
+        const raw = String(line || '').trim();
+        if (!raw) return '';
+        const firstPart = raw.split(',').map(s => String(s || '').trim()).find(Boolean) || raw;
+        const cleaned = firstPart.replace(/^(Россия|Донецк|ДНР)\s*[,.]\s*/i, '').trim();
+        return cleaned || firstPart;
+    }
+
+    function monolithGetTargetVoiceLabel(type) {
+        const t = String(type || '');
+        const labels = {
+            specbat: 'Спецбат',
+            dps: 'ДПС',
+            sos: 'SOS',
+            traffic_jam: 'Пробка'
+        };
+        return labels[t] || getMarkerLabel(t);
+    }
+
+    function monolithBuildApproachVoiceText(type, street, triggerDistanceMeters) {
+        const target = monolithGetTargetVoiceLabel(type);
+        const place = String(street || '').trim() || 'этой улице';
+        return `Внимание! ${target} на ${place}. Осталось ${formatMonolithVoiceDistance(triggerDistanceMeters)}`;
+    }
+
+    function monolithBuildSosPriorityText(street) {
+        const place = String(street || '').trim() || 'этой улице';
+        return `Внимание! Нужна помощь брату на ${place}. Кто рядом — подтянитесь`;
+    }
+
+    function monolithResolveStreetForMarker(markerId, lat, lon) {
+        if (!markerId) return '';
+        const cached = monolithStreetCache.get(markerId);
+        if (cached) return cached;
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+        if (!window.ymaps || !ymaps.geocode) return '';
+        if (monolithStreetInflight.has(markerId)) return '';
+
+        const req = ymaps.geocode([lat, lon]).then(res => {
+            const obj = res?.geoObjects?.get?.(0);
+            const line = obj ? String(obj.getAddressLine() || '').trim() : '';
+            const street = extractStreetFromAddressLine(line);
+            if (street) monolithStreetCache.set(markerId, street);
+            return street;
+        }).catch(() => '').finally(() => {
+            monolithStreetInflight.delete(markerId);
+        });
+
+        monolithStreetInflight.set(markerId, req);
+        return '';
     }
 
     function getMarkerLabel(type) {
@@ -4414,6 +4493,9 @@
     let monolithSelectedRuVoice = null;
 
     let monolithKeepAliveAudio = null;
+    let monolithAudioCtx = null;
+    let monolithKeepAliveOsc = null;
+    let monolithKeepAliveGain = null;
     let monolithKeepAliveTimerId = null;
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
@@ -4607,6 +4689,65 @@
                 // ignore
             });
         } catch (e) {}
+
+        try { monolithStartAudioContextKeepAlive(); } catch (e) {}
+    }
+
+    function monolithEnsureAudioContext() {
+        if (monolithAudioCtx) return monolithAudioCtx;
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return null;
+        try {
+            monolithAudioCtx = new Ctx();
+            return monolithAudioCtx;
+        } catch (e) {
+            monolithAudioCtx = null;
+            return null;
+        }
+    }
+
+    function monolithStartAudioContextKeepAlive() {
+        if (!isMonolithVoiceEnabled() || !monolithNavigationActive || !monolithAudioPrimed) return;
+        const ctx = monolithEnsureAudioContext();
+        if (!ctx) return;
+
+        try {
+            if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+                ctx.resume().catch(() => {});
+            }
+        } catch (e) {}
+
+        if (monolithKeepAliveOsc) return;
+
+        try {
+            const gain = ctx.createGain();
+            gain.gain.value = 0.00001;
+            const osc = ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.value = 24;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            monolithKeepAliveGain = gain;
+            monolithKeepAliveOsc = osc;
+        } catch (e) {
+            monolithKeepAliveOsc = null;
+            monolithKeepAliveGain = null;
+        }
+    }
+
+    function monolithStopAudioContextKeepAlive() {
+        try {
+            if (monolithKeepAliveOsc) {
+                monolithKeepAliveOsc.stop();
+                monolithKeepAliveOsc.disconnect();
+            }
+        } catch (e) {}
+        monolithKeepAliveOsc = null;
+        try {
+            if (monolithKeepAliveGain) monolithKeepAliveGain.disconnect();
+        } catch (e) {}
+        monolithKeepAliveGain = null;
     }
 
     function monolithMaybeStartKeepAliveAudio() {
@@ -4615,6 +4756,8 @@
 
         // многие браузеры запрещают autoplay без user gesture
         if (!monolithAudioPrimed) return;
+
+        monolithStartAudioContextKeepAlive();
 
         if (!monolithKeepAliveAudio) {
             monolithKeepAliveAudio = new Audio(MONOLITH_SILENT_WAV);
@@ -4665,6 +4808,7 @@
                 monolithKeepAliveAudio.currentTime = 0;
             }
         } catch (e) {}
+        monolithStopAudioContextKeepAlive();
     }
 
     // Prime audio on first user interaction (needed for background keep-alive hacks)
@@ -4992,12 +5136,17 @@
             if (mLat === null || mLon === null) return;
 
             const distance = calculateDistance(userCoords[0], userCoords[1], mLat, mLon);
+            const markerType = String(marker?.type || '');
+            const userDistSetting = getUserDistSettingMeters();
+
+            if (distance <= Math.max(userDistSetting + 600, MONOLITH_SOS_PRIORITY_RADIUS_METERS + 300)) {
+                monolithResolveStreetForMarker(marker.id, mLat, mLon);
+            }
+            const knownStreet = monolithResolveStreetForMarker(marker.id, mLat, mLon);
         
         const markerId = marker.id;
-        const currentNotification = distanceNotifications.get(markerId);
+        const currentNotification = distanceNotifications.get(markerId) || {};
         const warningMax = getDynamicWarningMaxMeters();
-        const warningMin = getWarningMinMeters(warningMax);
-        const nearThreshold = getNearThresholdMeters(warningMax);
 
         const prevState = markerDistanceState.get(markerId);
         let trend = prevState?.lastTrend || 'approaching';
@@ -5018,18 +5167,15 @@
                 if (!gpsReliable || speed < 10) {
                     crowdConfirmState.set(markerId, st);
                 } else {
-
-                    // На практике 120м слишком строго (GPS шум / проезд по соседней улице).
-                    // Считаем "рядом" если подходили ближе 250м.
-                    if (distance < 250) st.wasNear = true;
+                    const passNearMeters = Math.max(80, Math.min(180, Math.round(userDistSetting * 0.35)));
+                    if (distance <= passNearMeters) st.wasNear = true;
 
                     const cooldownOk = !st.askedAt || (now - st.askedAt) > CROWD_CONFIRM_COOLDOWN_MS;
-                    // Чтобы не срабатывало на дрожании GPS — спрашиваем только когда уже начали реально удаляться.
-                    if (trend === 'away' && st.wasNear && cooldownOk && distance > 300) {
+                    if (trend === 'away' && st.wasNear && cooldownOk && distance >= MONOLITH_POST_PASS_ASK_METERS) {
                         st.askedAt = now;
                         st.wasNear = false;
                         crowdConfirmState.set(markerId, st);
-                        crowdConfirmShow(markerId, marker.type);
+                        crowdConfirmShow(markerId, marker.type, knownStreet);
                     } else {
                         crowdConfirmState.set(markerId, st);
                     }
@@ -5056,43 +5202,42 @@
             }
         }
 
-        // MONOLITH 180: простая логика — озвучиваем только при < 1000м
         if (!isMonolithVoiceEnabled()) return;
-        const threshold = 1000;
-        const hysteresis = 1100;
+        const threshold = userDistSetting;
+        const hysteresis = threshold + 140;
+        const prevDistance = Number(prevState?.lastDistance);
+        const crossedThreshold = Number.isFinite(prevDistance) && prevDistance > threshold && distance <= threshold;
+        const street = knownStreet || 'этой улице';
 
-        if (distance < threshold && currentNotification !== 'near1k') {
-            const label = getMarkerLabel(marker.type);
-            const ageMin = getMarkerAgeMinutes(marker);
-            const type = String(marker.type || '');
-
-            // Округляем дистанцию для озвучки
-            let distancePretty;
-            if (distance > 1000) distancePretty = Math.round(distance / 100) * 100;
-            else if (distance > 100) distancePretty = Math.round(distance / 10) * 10;
-            else distancePretty = Math.round(distance);
-
-            let suffix = '';
-            // "До сколько" предсказать нельзя; можем сказать только сколько минут назад добавили/подтвердили.
-            if (ageMin !== null && ageMin >= 0 && ageMin <= 24 * 60) {
-                if (['dps', 'patrol', 'specbat', 'motobat', 'cargo_control'].includes(type)) {
-                    suffix = `. Стоят уже ${formatMinutesRu(ageMin)}`;
-                } else {
-                    suffix = `. Метка ${formatMinutesRu(ageMin)} назад`;
-                }
+        if (markerType === 'sos') {
+            if (distance <= MONOLITH_SOS_PRIORITY_RADIUS_METERS && !currentNotification.sosPriorityAnnounced) {
+                aiSpeak(monolithBuildSosPriorityText(street));
+                currentNotification.sosPriorityAnnounced = true;
+                currentNotification.sosPriorityAt = Date.now();
+                distanceNotifications.set(markerId, currentNotification);
+            } else if (distance > (MONOLITH_SOS_PRIORITY_RADIUS_METERS + 500) && currentNotification.sosPriorityAnnounced) {
+                currentNotification.sosPriorityAnnounced = false;
+                if (!currentNotification.mainAnnounced) distanceNotifications.delete(markerId);
+                else distanceNotifications.set(markerId, currentNotification);
             }
+            return;
+        }
 
-            // Спецбат: отдельный сигнал (звук+вибро) при первом входе в зону уведомления
-            if (type === 'specbat') {
+        if (crossedThreshold || (!currentNotification.mainAnnounced && distance <= threshold && trend !== 'away')) {
+            if (markerType === 'specbat') {
                 try { playSpecbatSound(); } catch (e) {}
                 try { navigator.vibrate([90, 60, 90, 60, 140]); } catch (e) {}
             }
 
-            aiSpeak(`Внимание, впереди ${label}, примерно через ${distancePretty} метров${suffix}`);
-            distanceNotifications.set(markerId, 'near1k');
+            aiSpeak(monolithBuildApproachVoiceText(markerType, street, threshold));
+            currentNotification.mainAnnounced = true;
+            currentNotification.mainAt = Date.now();
+            distanceNotifications.set(markerId, currentNotification);
             console.log(`📍 Голос: маркер ${markerId} (${distance.toFixed(0)}м)`);
-        } else if (distance > hysteresis && currentNotification) {
-            distanceNotifications.delete(markerId);
+        } else if (distance > hysteresis && currentNotification.mainAnnounced) {
+            currentNotification.mainAnnounced = false;
+            if (!currentNotification.sosPriorityAnnounced) distanceNotifications.delete(markerId);
+            else distanceNotifications.set(markerId, currentNotification);
         }
     }
 
@@ -5152,7 +5297,7 @@
     function updateWarningDistanceUI() {
         const label = document.getElementById('warningDistanceLabel');
         const range = document.getElementById('warningDistanceRange');
-        const meters = Math.max(300, Number(warningDistanceMeters) || 800);
+        const meters = getUserDistSettingMeters();
         if (label) {
             label.textContent = meters >= 1000 ? `${(meters / 1000).toFixed(1)} км` : `${meters} м`;
         }
@@ -5163,7 +5308,7 @@
 
     function setWarningDistance(value) {
         if (!isViewingOwnProfile) return;
-        warningDistanceMeters = Math.max(300, Math.min(2000, Number(value) || 800));
+        warningDistanceMeters = normalizeWarningDistanceMeters(value);
         updateWarningDistanceUI();
         distanceNotifications.clear();
         try {
@@ -5176,7 +5321,7 @@
     function loadWarningDistance() {
         try {
             const saved = localStorage.getItem('warningDistanceMeters');
-            if (saved) warningDistanceMeters = Number(saved) || warningDistanceMeters;
+            if (saved) warningDistanceMeters = normalizeWarningDistanceMeters(saved);
         } catch (e) {
             console.warn('Не удалось загрузить дистанцию предупреждения:', e);
         }
@@ -9876,7 +10021,7 @@
         return ['dps', 'patrol', 'specbat', 'motobat', 'cargo_control', 'camera'].includes(String(type || ''));
     }
 
-    function crowdConfirmShow(markerId, markerType) {
+    function crowdConfirmShow(markerId, markerType, streetName = '') {
         try {
             const wrap = document.getElementById('crowdConfirm');
             if (wrap && wrap.classList.contains('active')) return; // не спамим поверх уже открытого
@@ -9886,10 +10031,11 @@
         const title = document.getElementById('crowdConfirmTitle');
         const sub = document.getElementById('crowdConfirmSub');
         const label = getMarkerLabel(markerType);
-        if (title) title.textContent = `Тут ещё стоят? (${label})`;
-        if (sub) sub.textContent = 'Один тап: подтвердить или убрать метку';
+        const place = String(streetName || '').trim() || 'этот участок';
+        if (title) title.textContent = `Проехал ${place}. ${label}: стоят или уехали?`;
+        if (sub) sub.textContent = 'Подтверди кнопкой';
         if (wrap) wrap.classList.add('active');
-        try { if (typeof aiSpeak === 'function') aiSpeak('Тут ещё стоят?'); } catch (e) {}
+        try { if (typeof aiSpeak === 'function') aiSpeak(`Проехал ${place}. Пост еще на месте или уехали? Подтверди кнопкой`); } catch (e) {}
     }
 
     function crowdConfirmHide() {
@@ -11328,7 +11474,10 @@
                 const mc = extractMarkerCoordsForNotif(m);
                 if (mc) {
                     const distance = calculateDistance(userCoords[0], userCoords[1], mc.lat, mc.lon);
-                    if (distance > 800) {
+                    const releaseMeters = (String(m?.type || '') === 'sos')
+                        ? Math.max(MONOLITH_SOS_PRIORITY_RADIUS_METERS + 600, getUserDistSettingMeters() + 600)
+                        : (getUserDistSettingMeters() + 600);
+                    if (distance > releaseMeters) {
                         distanceNotifications.delete(m.id);
                     }
                 }
