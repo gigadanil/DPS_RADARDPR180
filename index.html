@@ -1362,6 +1362,7 @@
         <button class="action-btn" id="ccProfileBtn" onclick="openProfileModal()" title="Профиль" aria-label="Профиль">👤</button>
         <button class="action-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
         <button class="action-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
+        <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс">🧭</button>
         <button class="action-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
         <button class="action-btn" id="ccChatBtn" onclick="openChatModal()" title="Чат" aria-label="Чат">💬</button>
         <button class="action-btn" id="ccActivityBtn" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС/Спецбат" aria-label="Активность ДПС/Спецбат">👮🛡️</button>
@@ -2813,6 +2814,7 @@
     // Порог подтверждений для статуса "Проверенный водитель"
     const TRUST_LIKES_THRESHOLD = 20; // можно менять по необходимости
     const TYPE_CATEGORY_STORAGE_KEY = 'selected_type_category';
+    const DYNAMIC_COURSE_ENABLED_KEY = 'dynamicCourseEnabled';
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
@@ -5432,6 +5434,36 @@
         updateMarkerRenderModeUI();
     }
 
+    function loadDynamicCourseEnabled() {
+        try {
+            const raw = localStorage.getItem(DYNAMIC_COURSE_ENABLED_KEY);
+            if (raw === 'true' || raw === 'false') dynamicCourseEnabled = (raw === 'true');
+        } catch (e) {}
+    }
+
+    function saveDynamicCourseEnabled() {
+        try { localStorage.setItem(DYNAMIC_COURSE_ENABLED_KEY, dynamicCourseEnabled ? 'true' : 'false'); } catch (e) {}
+    }
+
+    function updateCourseBtnUiState() {
+        const btn = document.getElementById('ccCourseBtn');
+        if (!btn) return;
+        btn.classList.toggle('active', !!dynamicCourseEnabled);
+        btn.classList.toggle('off', !dynamicCourseEnabled);
+        btn.textContent = dynamicCourseEnabled ? '🧭' : '🧱';
+        btn.title = dynamicCourseEnabled ? 'Динамический курс: ВКЛ' : 'Динамический курс: ВЫКЛ';
+    }
+
+    function toggleDynamicCourseFromUI() {
+        dynamicCourseEnabled = !dynamicCourseEnabled;
+        saveDynamicCourseEnabled();
+        if (dynamicCourseEnabled) {
+            requestDynamicCourseOrientationPermission().catch(()=>{});
+            try { updateDynamicCourseCamera(); } catch (e) {}
+        }
+        updateCourseBtnUiState();
+    }
+
         function isReliableGeoPosition(lat, lon, accuracyMeters) {
                 const a = Number(accuracyMeters);
                 if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
@@ -6220,6 +6252,7 @@
         try { initMonolithVoiceToggle(); } catch(e) {}
         loadProximityMode();
         loadMarkerRenderMode();
+        loadDynamicCourseEnabled();
         loadWarningDistance();
         loadSpeedometerPreference();
         restoreTypeCategoryPreference();
@@ -6250,6 +6283,7 @@
         // Ergo UI: синхронизируем состояния кнопок
         try { updateFollowButton(); } catch (e) {}
         try { updateVoiceBtnUiState(); } catch (e) {}
+        try { updateCourseBtnUiState(); } catch (e) {}
         try { updateLayersBtnUiState(); } catch (e) {}
         try { setRightActionsHidden(!!actionCardVisible); } catch (e) {}
 
