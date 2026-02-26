@@ -2866,6 +2866,7 @@
     const DYNAMIC_COURSE_ENABLED_KEY = 'dynamicCourseEnabled';
     const MAP_ENGINE_STORAGE_KEY = 'mapEnginePreference';
     const MAP_ENGINE_LEGACY_FORCE_KEY = 'mapEngineLegacyForce';
+    const MAP_ENGINE_YM3_FAIL_KEY = 'mapEngineYm3Failed';
     const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
     const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
@@ -5900,16 +5901,24 @@
         try {
             const qs = new URLSearchParams(window.location.search || '');
             const forceLegacyByQuery = qs.get('map2') === '1' || qs.get('engine') === 'ymaps2';
+            const forceYm3ByQuery = qs.get('map3') === '1' || qs.get('engine') === 'ymaps3';
             const forceLegacyByStorage = localStorage.getItem(MAP_ENGINE_LEGACY_FORCE_KEY) === 'true';
-            if (forceLegacyByQuery || forceLegacyByStorage) {
+            const ym3FailedBefore = localStorage.getItem(MAP_ENGINE_YM3_FAIL_KEY) === '1';
+
+            if (forceYm3ByQuery) {
+                preferredMapEngine = 'ymaps3';
+                return;
+            }
+
+            if (forceLegacyByQuery || forceLegacyByStorage || ym3FailedBefore) {
                 preferredMapEngine = 'ymaps2';
                 return;
             }
 
             const raw = String(localStorage.getItem(MAP_ENGINE_STORAGE_KEY) || '').trim().toLowerCase();
-            preferredMapEngine = (raw === 'ymaps2') ? 'ymaps2' : 'ymaps3';
+            preferredMapEngine = (raw === 'ymaps3') ? 'ymaps3' : 'ymaps2';
         } catch (e) {
-            preferredMapEngine = 'ymaps3';
+            preferredMapEngine = 'ymaps2';
         }
         updateMapEngineBadge();
     }
@@ -6009,13 +6018,33 @@
     }
 
     function createMapAdapter(engine, map, markerCollection) {
-        const mode = String(engine || 'ymaps2');
+        let runtimeMode = String(engine || 'ymaps2');
         const ym3Markers = [];
         const ym3ActionEndHandlers = [];
         const ym3ActionStartHandlers = [];
         const ym3ClickHandlers = [];
         let ym3ListenerEntity = null;
         let ym3MapInAction = false;
+
+        function forceLegacyFromYm3(reason = '') {
+            if (runtimeMode !== 'ymaps3-compat') return;
+            runtimeMode = 'ymaps2';
+            activeMapEngine = 'ymaps2';
+            try {
+                localStorage.setItem(MAP_ENGINE_LEGACY_FORCE_KEY, 'true');
+                localStorage.setItem(MAP_ENGINE_YM3_FAIL_KEY, '1');
+            } catch (e) {}
+            try {
+                const root = map?.__ym3Root;
+                if (root && typeof root.destroy === 'function') root.destroy();
+            } catch (e) {}
+            try {
+                map.__ym3Root = null;
+                map.__ym3MarkerLayer = null;
+            } catch (e) {}
+            updateMapEngineBadge();
+            console.warn('ymaps3 отключён, fallback на ymaps2:', reason || 'marker render failure');
+        }
 
         function approximateBoundsFromCenterZoom(center, zoom) {
             const lat = Number(center?.[0]);
@@ -6054,7 +6083,7 @@
         }
 
         function ensureYmaps3Listener() {
-            if (mode !== 'ymaps3-compat') return;
+            if (runtimeMode !== 'ymaps3-compat') return;
             if (!map?.__ym3Root || !window.ymaps3 || ym3ListenerEntity) return;
             try {
                 const YMapListenerCtor = ymaps3?.YMapListener;
@@ -6094,7 +6123,10 @@
 
         function addYmaps3MarkerFromDescriptor(descriptor) {
             try {
-                if (!descriptor || !window.ymaps3 || !map || !map.__ym3Root) return false;
+                if (!descriptor || !window.ymaps3 || !map || !map.__ym3Root) {
+                    forceLegacyFromYm3('no ymaps3 root');
+                    return false;
+                }
                 const coords = Array.isArray(descriptor.coords) ? descriptor.coords : null;
                 if (!coords || coords.length < 2) return false;
                 const lon = Number(coords[0]);
@@ -6114,24 +6146,28 @@
                 }
 
                 const YMapMarkerCtor = ymaps3?.YMapMarker;
-                if (!YMapMarkerCtor) return false;
+                if (!YMapMarkerCtor) {
+                    forceLegacyFromYm3('YMapMarker unavailable');
+                    return false;
+                }
                 const marker = new YMapMarkerCtor({ coordinates: [lon, lat] }, markerEl);
                 const parent = map.__ym3MarkerLayer || map.__ym3Root;
                 parent.addChild(marker);
                 ym3Markers.push({ marker, parent });
                 return true;
             } catch (e) {
+                forceLegacyFromYm3(e?.message || 'ymaps3 marker error');
                 return false;
             }
         }
 
         const adapter = {
-            mode,
+            get mode() { return runtimeMode; },
             map,
             markerCollection,
             clearMarkers() {
                 try {
-                    if (this.mode === 'ymaps3-compat') {
+                    if (runtimeMode === 'ymaps3-compat') {
                         while (ym3Markers.length) {
                             const entry = ym3Markers.pop();
                             try { entry?.parent?.removeChild(entry?.marker); } catch (e) {}
@@ -6143,13 +6179,13 @@
             },
             addMarker(marker, descriptor = null) {
                 try {
-                    if (this.mode === 'ymaps3-compat' && addYmaps3MarkerFromDescriptor(descriptor)) return;
+                    if (runtimeMode === 'ymaps3-compat' && addYmaps3MarkerFromDescriptor(descriptor)) return;
                     if (this.markerCollection && typeof this.markerCollection.add === 'function') this.markerCollection.add(marker);
                 } catch (e) {}
             },
             getCenter() {
                 try {
-                    if (this.mode === 'ymaps3-compat') {
+                    if (runtimeMode === 'ymaps3-compat') {
                         if (Array.isArray(this.map?.__ym3LastCenter) && this.map.__ym3LastCenter.length >= 2) return this.map.__ym3LastCenter;
                     }
                     if (this.map && typeof this.map.getCenter === 'function') return this.map.getCenter();
@@ -6158,14 +6194,14 @@
             },
             getZoom() {
                 try {
-                    if (this.mode === 'ymaps3-compat' && Number.isFinite(Number(this.map?.__ym3LastZoom))) return Number(this.map.__ym3LastZoom);
+                    if (runtimeMode === 'ymaps3-compat' && Number.isFinite(Number(this.map?.__ym3LastZoom))) return Number(this.map.__ym3LastZoom);
                     if (this.map && typeof this.map.getZoom === 'function') return Number(this.map.getZoom());
                 } catch (e) {}
                 return null;
             },
             getBounds() {
                 try {
-                    if (this.mode === 'ymaps3-compat') {
+                    if (runtimeMode === 'ymaps3-compat') {
                         if (Array.isArray(this.map?.__ym3LastBounds) && this.map.__ym3LastBounds.length >= 2) return this.map.__ym3LastBounds;
                         const c = this.getCenter();
                         const z = this.getZoom();
@@ -6177,7 +6213,7 @@
             },
             onActionEnd(handler) {
                 try {
-                    if (this.mode === 'ymaps3-compat') {
+                    if (runtimeMode === 'ymaps3-compat') {
                         ym3ActionEndHandlers.push(handler);
                         ensureYmaps3Listener();
                         return;
@@ -6187,7 +6223,7 @@
             },
             onActionStart(handler) {
                 try {
-                    if (this.mode === 'ymaps3-compat') {
+                    if (runtimeMode === 'ymaps3-compat') {
                         ym3ActionStartHandlers.push(handler);
                         ensureYmaps3Listener();
                         return;
@@ -6197,7 +6233,7 @@
             },
             onClick(handler) {
                 try {
-                    if (this.mode === 'ymaps3-compat') {
+                    if (runtimeMode === 'ymaps3-compat') {
                         ym3ClickHandlers.push(handler);
                         ensureYmaps3Listener();
                         return;
