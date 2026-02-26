@@ -2846,6 +2846,7 @@
     const DYNAMIC_COURSE_ENABLED_KEY = 'dynamicCourseEnabled';
     const MAP_ENGINE_STORAGE_KEY = 'mapEnginePreference';
     const MAP_ENGINE_LEGACY_FORCE_KEY = 'mapEngineLegacyForce';
+    const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
@@ -11865,14 +11866,19 @@
 
         // Вставляем новый маркер в БД
         try {
+            let noTsExpMode = false;
+            try { noTsExpMode = localStorage.getItem(MARKER_INSERT_NO_TS_EXP_KEY) === '1'; } catch(e) {}
+
             const markerToCreate = {
                 coords: coords, // Центр текущей карты
-                ts: Date.now(), // Текущее время
-                exp: Date.now() + 7200000, // Время жизни маркера (2 часа)
                 type: selectedType, // Тип маркера (ДПС, Рейд и т.д.)
                 comment: rawComment, // Комментарий пользователя
                 author_id: uid // ID автора маркера
             };
+            if (!noTsExpMode) {
+                markerToCreate.ts = Date.now(); // Текущее время
+                markerToCreate.exp = Date.now() + 7200000; // Время жизни маркера (2 часа)
+            }
             let insertedMarkers = null;
             let error = null;
 
@@ -11881,7 +11887,7 @@
                 .insert([markerToCreate])
                 .select('id,type,comment,coords'));
 
-            if (error) {
+            if (error && !noTsExpMode) {
                 const fallbackMarkerToCreate = {
                     coords: coords,
                     type: selectedType,
@@ -11892,6 +11898,9 @@
                     .from('markers')
                     .insert([fallbackMarkerToCreate])
                     .select('id,type,comment,coords'));
+                if (!error) {
+                    try { localStorage.setItem(MARKER_INSERT_NO_TS_EXP_KEY, '1'); } catch(e) {}
+                }
             }
 
             if (!error) {
