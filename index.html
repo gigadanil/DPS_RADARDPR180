@@ -6285,7 +6285,11 @@
                         try {
                             if (typeof window.openBottomWidget === 'function') {
                                 window.openBottomWidget(descriptor.markerData || descriptor);
+                                return;
                             }
+                            const rect = markerEl.getBoundingClientRect ? markerEl.getBoundingClientRect() : null;
+                            showYmaps3Popup(String(descriptor.balloonHtml || ''), rect);
+                            console.warn('openBottomWidget недоступна, использован fallback popup для админ-метки');
                         } catch (e) {}
                     });
                 } else if (descriptor.balloonHtml) {
