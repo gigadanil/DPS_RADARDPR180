@@ -93,11 +93,14 @@
         /* --- YM3 кастомный маркер пользователя --- */
         .ym3-user-marker {
             position: relative;
-            width: 44px;
-            height: 44px;
+            width: 32px;
+            height: 32px;
             pointer-events: none;
             z-index: 1000;
             will-change: transform;
+            transform-origin: 50% 50%;
+            transform-box: fill-box;
+            transition: transform 0.5s linear;
         }
         .ym3-user-arrow {
             position: absolute;
@@ -106,41 +109,44 @@
             width: 0;
             height: 0;
             transform: translate(-50%, -50%) rotate(0deg);
-            transition: transform 0.3s cubic-bezier(.4,1.4,.6,1);
-            border-left: 12px solid transparent;
-            border-right: 12px solid transparent;
-            border-bottom: 28px solid #FFD700;
-            filter: drop-shadow(0 0 6px #FFD70088);
+            transform-origin: 50% 68%;
+            transform-box: fill-box;
+            transition: transform 0.3s linear;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 18px solid #FFD700;
+            filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.75));
             z-index: 2;
         }
         .ym3-user-pulse {
             position: absolute;
             left: 50%;
             top: 50%;
-            width: 32px;
-            height: 32px;
-            background: rgba(255, 215, 0, 0.18);
+            width: 14px;
+            height: 14px;
+            border: 1.5px solid rgba(255, 215, 0, 0.45);
+            background: transparent;
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 16px 4px #FFD70088, 0 0 0 0 #FFD70044;
-            animation: ym3UserPulse 1.4s ease-out infinite;
+            box-shadow: 0 0 8px rgba(255, 215, 0, 0.24);
+            animation: ym3UserPulse 1.35s ease-out infinite;
             z-index: 1;
         }
         @keyframes ym3UserPulse {
             0% {
-                opacity: 0.7;
+                opacity: 0.6;
                 transform: translate(-50%, -50%) scale(1);
-                box-shadow: 0 0 16px 4px #FFD70088, 0 0 0 0 #FFD70044;
+                border-color: rgba(255, 215, 0, 0.55);
             }
             70% {
-                opacity: 0.15;
-                transform: translate(-50%, -50%) scale(2.1);
-                box-shadow: 0 0 32px 12px #FFD70044, 0 0 0 16px #FFD70022;
+                opacity: 0.2;
+                transform: translate(-50%, -50%) scale(2.25);
+                border-color: rgba(255, 215, 0, 0.2);
             }
             100% {
                 opacity: 0.0;
-                transform: translate(-50%, -50%) scale(2.5);
-                box-shadow: 0 0 32px 12px #FFD70022, 0 0 0 24px #FFD70011;
+                transform: translate(-50%, -50%) scale(2.7);
+                border-color: rgba(255, 215, 0, 0.0);
             }
         }
         #splashScreen {
@@ -5827,7 +5833,9 @@
                 },
                 (error) => {
                     // Ошибка получения координат
-                    const isTimeoutError = Number(error?.code) === Number(error?.TIMEOUT || 3);
+                    const timeoutByCode = Number(error?.code) === Number(error?.TIMEOUT || 3);
+                    const timeoutByMessage = /timeout expired|timeout|истекло время/i.test(String(error?.message || ''));
+                    const isTimeoutError = timeoutByCode || timeoutByMessage;
                     if (!isTimeoutError) {
                         console.warn('Ошибка GPS:', error?.message || error);
                     }
@@ -6246,9 +6254,11 @@
 
         if (activeMapEngine === 'ymaps3-compat') {
             try {
+                const FORCED_3D_PITCH = 60;
                 let ym3Core = null;
                 let ym3Markers = null;
                 let ym3DefaultUi = null;
+                let ym3Controls = null;
                 try { ym3Core = await ymaps3.import('@yandex/ymaps3'); } catch (e) { ym3Core = null; }
                 try { ym3Markers = await ymaps3.import('@yandex/ymaps3-markers@0.0.1'); } catch (e) {
                     try { ym3Markers = await ymaps3.import('@yandex/ymaps3-markers'); } catch (e2) { ym3Markers = null; }
@@ -6256,19 +6266,62 @@
                 try { ym3DefaultUi = await ymaps3.import('@yandex/ymaps3-default-ui-theme@0.0.1'); } catch (e) {
                     try { ym3DefaultUi = await ymaps3.import('@yandex/ymaps3-default-ui-theme'); } catch (e2) { ym3DefaultUi = null; }
                 }
+                try { ym3Controls = await ymaps3.import('@yandex/ymaps3-controls@0.0.1'); } catch (e) {
+                    try { ym3Controls = await ymaps3.import('@yandex/ymaps3-controls'); } catch (e2) { ym3Controls = null; }
+                }
 
                 const YMapCtor = ym3Core?.YMap || ymaps3?.YMap;
                 const SchemeCtor = ym3Core?.YMapDefaultSchemeLayer || ymaps3?.YMapDefaultSchemeLayer;
                 const FeaturesCtor = ym3Core?.YMapDefaultFeaturesLayer || ymaps3?.YMapDefaultFeaturesLayer;
                 const MarkerCtor = ym3Markers?.YMapMarker || ymaps3?.YMapMarker;
                 if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
+                    map3dEnabled = true;
                     const root = new YMapCtor(visualMapHost, {
-                        location: { center: [37.80, 48.01], zoom: map3dEnabled ? Math.max(16, MAP_3D_MIN_ZOOM) : 16, azimuth: 0, tilt: map3dEnabled ? MAP_3D_TILT_DEG : 0 }
+                        location: {
+                            center: [37.80, 48.01],
+                            zoom: 16,
+                            pitch: FORCED_3D_PITCH,
+                            tilt: FORCED_3D_PITCH,
+                            azimuth: 0
+                        }
                     });
+                    try {
+                        if (typeof root.setUpdateProps === 'function') {
+                            root.setUpdateProps({ location: { pitch: FORCED_3D_PITCH, tilt: FORCED_3D_PITCH } });
+                        }
+                    } catch (e) {}
                     const scheme = new SchemeCtor({ id: 'scheme' });
                     root.addChild(scheme);
                     const features = new ymaps3.YMapDefaultFeaturesLayer({});
                     root.addChild(features);
+                    try {
+                        const YMapControlsCtor = ym3Controls?.YMapControls || ym3Core?.YMapControls || ymaps3?.YMapControls;
+                        const YMapControlCtor = ym3Controls?.YMapControl || ym3Core?.YMapControl || ymaps3?.YMapControl;
+                        if (YMapControlsCtor && YMapControlCtor) {
+                            const cameraCtrlHost = document.createElement('button');
+                            cameraCtrlHost.type = 'button';
+                            cameraCtrlHost.textContent = '3D';
+                            cameraCtrlHost.style.cssText = 'background:rgba(0,0,0,.62);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:10px;padding:6px 10px;cursor:pointer;';
+                            cameraCtrlHost.addEventListener('click', () => {
+                                try {
+                                    if (typeof root.setLocation === 'function') {
+                                        root.setLocation({
+                                            center: [Number(myMap.__ym3LastCenter?.[1] || 37.80), Number(myMap.__ym3LastCenter?.[0] || 48.01)],
+                                            zoom: Math.max(16, Number(myMap.__ym3LastZoom || 16)),
+                                            pitch: FORCED_3D_PITCH,
+                                            tilt: FORCED_3D_PITCH,
+                                            azimuth: Number(myMap.__ym3LastAzimuth || 0),
+                                            duration: 1000
+                                        });
+                                    }
+                                } catch (e) {}
+                            });
+                            root.addChild(
+                                new YMapControlsCtor({ position: 'right' })
+                                    .addChild(new YMapControlCtor({ position: 'top right' }, cameraCtrlHost))
+                            );
+                        }
+                    } catch (e) {}
                     try {
                         const ZoomControlCtor = ym3DefaultUi?.YMapZoomControl;
                         if (ZoomControlCtor) root.addChild(new ZoomControlCtor({}));
@@ -6279,8 +6332,30 @@
                     myMap.__ym3BuildingsLayer = null;
                     myMap.__ym3LastCenter = [48.01, 37.80];
                     myMap.__ym3LastZoom = 16;
-                    myMap.__ym3LastTilt = map3dEnabled ? MAP_3D_TILT_DEG : 0;
+                    myMap.__ym3LastTilt = FORCED_3D_PITCH;
                     myMap.__ym3LastAzimuth = 0;
+
+                    setTimeout(() => {
+                        try {
+                            if (!myMap?.__ym3Root) return;
+                            const centerNow = Array.isArray(myMap.__ym3LastCenter) ? myMap.__ym3LastCenter : [48.01, 37.80];
+                            const zoomNow = Math.max(16, Number(myMap.__ym3LastZoom || 16));
+                            const azNow = Number(myMap.__ym3LastAzimuth || 0);
+                            const loc = {
+                                center: [Number(centerNow[1]), Number(centerNow[0])],
+                                zoom: zoomNow,
+                                pitch: FORCED_3D_PITCH,
+                                tilt: FORCED_3D_PITCH,
+                                azimuth: azNow,
+                                duration: 1000
+                            };
+                            if (typeof root.setLocation === 'function') root.setLocation(loc);
+                            else root.update({ location: loc });
+                            myMap.__ym3LastTilt = FORCED_3D_PITCH;
+                            myMap.__ym3LastZoom = zoomNow;
+                            myMap.__ym3LastAzimuth = azNow;
+                        } catch (e) {}
+                    }, 500);
 
                     const approximateBoundsFromCenterZoom = (center, zoom) => {
                         const lat = Number(center?.[0]);
@@ -6788,6 +6863,7 @@
     let ym3UserPulseEl = null;
     let lastUserHeading = 0;
     let lastUserCoords = null;
+    const MIN_ROTATE_SPEED_MS = 1.5;
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
@@ -6795,6 +6871,7 @@
         if (window.ymaps3 && myMap.__ym3Root) {
             const [lat, lon] = userLocation;
             const speed = Number(userSpeedKmh) || 0;
+            const speedMs = speed / 3.6;
             const heading = (Number(userHeadingDeg) || 0) % 360;
             // Создаём маркер один раз
             if (!ym3UserMarker) {
@@ -6818,12 +6895,12 @@
             }
             // Плавный поворот стрелки
             if (ym3UserArrowEl) {
-                if (speed >= 2 && Number.isFinite(heading)) {
+                if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
                     ym3UserArrowEl.style.transform = `rotate(${heading}deg)`;
                 } else {
                     ym3UserArrowEl.style.transform = `rotate(${lastUserHeading}deg)`;
                 }
-                lastUserHeading = (speed >= 2 && Number.isFinite(heading)) ? heading : lastUserHeading;
+                lastUserHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
             }
             lastUserCoords = [lat, lon];
             return;
