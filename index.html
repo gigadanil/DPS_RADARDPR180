@@ -991,18 +991,19 @@
         .speedometer-open-btn.visible { display: flex; }
 
         /* Админский маркер и имя */
-        .admin-marker { background: #fff; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 2px solid #d4af37; font-size: 18px; position: relative; box-shadow: 0 0 12px rgba(212, 175, 55, 0.55); }
-        .admin-marker::before { content: ''; position: absolute; inset: -10px; border-radius: 50%; background: radial-gradient(circle, rgba(212,175,55,0.35) 0%, rgba(212,175,55,0.0) 70%); }
-        .admin-marker::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid rgba(212, 175, 55, 0.5); animation: adminPulse 1.8s ease-out infinite; }
+        .admin-marker { background: radial-gradient(circle at 30% 28%, #fff8d6 0%, #f3d57a 38%, #b7851f 100%); border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 2px solid #f5d76e; font-size: 18px; position: relative; box-shadow: 0 0 0 2px rgba(0,0,0,0.12), 0 0 16px rgba(245, 198, 66, 0.7), 0 8px 18px rgba(0,0,0,0.28); }
+        .admin-marker::before { content: ''; position: absolute; inset: -12px; border-radius: 50%; background: radial-gradient(circle, rgba(245,198,66,0.45) 0%, rgba(245,198,66,0.0) 72%); }
+        .admin-marker::after { content: ''; position: absolute; inset: -7px; border-radius: 50%; border: 2px solid rgba(245, 198, 66, 0.58); animation: adminPulse 1.6s ease-out infinite; }
         .admin-marker--map { width: 34px; height: 34px; font-size: 18px; }
         .admin-marker--self { width: 36px; height: 36px; font-size: 19px; }
-        .admin-marker-badge { position: absolute; top: -8px; right: -8px; font-size: 12px; }
+        .admin-marker-core { position: relative; z-index: 1; text-shadow: 0 1px 0 rgba(255,255,255,0.45), 0 0 8px rgba(0,0,0,0.25); }
+        .admin-marker-badge { position: absolute; top: -9px; right: -9px; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 999px; font-size: 11px; line-height: 16px; text-align: center; font-weight: 900; color: #2d1a00; background: linear-gradient(135deg, #fff0b3 0%, #f5c64a 52%, #c68d00 100%); border: 1px solid rgba(120,76,0,0.45); box-shadow: 0 2px 8px rgba(0,0,0,0.28); z-index: 2; }
         .admin-siren { position: absolute; top: -6px; width: 10px; height: 6px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.25); animation: adminSiren 1.2s ease-in-out infinite; }
         .admin-siren-left { left: -2px; background: #ff3b30; }
         .admin-siren-right { right: -2px; background: #007aff; animation-delay: 0.6s; }
-        .admin-confirm { margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: linear-gradient(135deg, #f5d76e 0%, #d4af37 100%); color: #111; font-size: 11px; font-weight: 800; text-align: center; }
-        .admin-name { background: linear-gradient(90deg, #f5d76e 0%, #d4af37 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; font-weight: 800; }
-        .admin-rank { font-size: 11px; color: #d4af37; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+        .admin-confirm { margin-top: 8px; padding: 6px 8px; border-radius: 8px; background: linear-gradient(135deg, #fff0b3 0%, #f5c64a 52%, #c68d00 100%); color: #2d1a00; font-size: 11px; font-weight: 900; text-align: center; border: 1px solid rgba(120,76,0,0.35); box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+        .admin-name { background: linear-gradient(90deg, #fff0b3 0%, #f5c64a 55%, #b88400 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; font-weight: 900; text-shadow: 0 1px 0 rgba(0,0,0,0.15); }
+        .admin-rank { font-size: 11px; color: #d39d10; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
         .admin-online { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #34c759; font-weight: 700; }
         .admin-online-dot { width: 6px; height: 6px; border-radius: 50%; background: #34c759; box-shadow: 0 0 6px rgba(52, 199, 89, 0.9); }
 
@@ -6494,8 +6495,8 @@
                 <div class="admin-marker admin-marker--self">
                     <span class="admin-siren admin-siren-left"></span>
                     <span class="admin-siren admin-siren-right"></span>
-                    🚗
-                    <span class="admin-marker-badge">👑</span>
+                    <span class="admin-marker-core">🚗</span>
+                    <span class="admin-marker-badge">♛</span>
                 </div>
             `;
             userLocationMarker = new ymaps.Placemark(userLocation,
@@ -12492,7 +12493,7 @@
             // Определяем доверие автора и добавляем звездочку к иконке, если он проверен
             const isTrustedAuthor = authorInfo.is_trusted;
             const iconInner = showAdminStyle
-                ? `<div class="admin-marker admin-marker--map"><span class="admin-siren admin-siren-left"></span><span class="admin-siren admin-siren-right"></span>${MAP_ICONS[m.type]}<span class="admin-marker-badge">👑</span></div>`
+                ? `<div class="admin-marker admin-marker--map"><span class="admin-siren admin-siren-left"></span><span class="admin-siren admin-siren-right"></span><span class="admin-marker-core">${MAP_ICONS[m.type]}</span><span class="admin-marker-badge">♛</span></div>`
                 : (isSpecbatMarker
                     ? `<div class="specbat-marker" title="Спецбат">${MAP_ICONS[m.type]}<span class="specbat-badge">SB</span></div>`
                     : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`);
