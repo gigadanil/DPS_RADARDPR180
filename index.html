@@ -504,6 +504,34 @@
         }
         #mapEngineBadge.engine-badge.is-v3 { border-color: rgba(0,212,255,0.45); }
         #mapEngineBadge.engine-badge.is-v2 { border-color: rgba(255,149,0,0.45); }
+        #map3dToggleFloating {
+            position: fixed;
+            top: calc(92px + var(--safe-area-inset-top));
+            left: calc(12px + var(--safe-area-inset-left));
+            z-index: 2000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 52px;
+            height: 30px;
+            padding: 0 10px;
+            border-radius: 12px;
+            border: 1px solid rgba(245,198,66,0.55);
+            background: rgba(0,0,0,0.86);
+            color: #f5c64a;
+            font-weight: 900;
+            font-size: 11px;
+            letter-spacing: 0.4px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+            backdrop-filter: blur(8px);
+            cursor: pointer;
+            transition: box-shadow 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+        }
+        #map3dToggleFloating.is-on {
+            border-color: rgba(57,255,20,0.72);
+            color: #b9ffb3;
+            box-shadow: 0 0 0 1px rgba(57,255,20,0.25), 0 0 18px rgba(57,255,20,0.38), 0 8px 24px rgba(0,0,0,0.30);
+        }
         .online-dot {
             width: 10px;
             height: 10px;
@@ -1125,6 +1153,7 @@
         .top-controls { top: var(--ui-safe-top) !important; }
         #onlineCountBadge.online-count { top: var(--ui-safe-top) !important; }
         #mapEngineBadge.engine-badge { top: calc(var(--ui-safe-top) + 44px) !important; }
+        #map3dToggleFloating { top: calc(var(--ui-safe-top) + 80px) !important; }
         .right-bar { top: var(--ui-safe-top) !important; }
         .admin-btn,
         .profile-btn,
@@ -1388,6 +1417,7 @@
         <span id="onlineCountText">В сети: —</span>
     </div>
     <div id="mapEngineBadge" class="engine-badge" aria-label="Движок карты">🗺️ ymaps3</div>
+    <button id="map3dToggleFloating" onclick="toggleMap3dFromUI()" title="Переключить 2D/3D" aria-label="Переключить 2D/3D">3D OFF</button>
     <div id="map"></div>
     <div id="mapDimmingOverlay"></div>
 
@@ -2109,8 +2139,14 @@
                 <button onclick="toggleMapEngineFromUI()" id="mapEngineSettingsBtn" class="main-btn" style="width:100%; background:#007aff; padding:10px; font-size:12px; border-radius:8px;">
                     Переключить ymaps2 / ymaps3
                 </button>
+                <button onclick="toggleMap3dFromUI()" id="map3dSettingsBtn" class="main-btn" style="width:100%; margin-top:8px; background:#111; color:#f5c64a; border:1px solid rgba(245,198,66,0.6); box-shadow:0 0 0 1px rgba(245,198,66,0.15); padding:10px; font-size:12px; border-radius:8px;">
+                    3D: ВЫКЛ
+                </button>
                 <div id="mapEngineSettingsHint" style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
                     Текущий режим: —
+                </div>
+                <div id="map3dSettingsHint" style="font-size: 11px; color: var(--gray); margin-top: 6px; text-align: center;">
+                    3D доступно только в ymaps3
                 </div>
             </div>
 
@@ -2886,6 +2922,7 @@
     const MAP_ENGINE_STORAGE_KEY = 'mapEnginePreference';
     const MAP_ENGINE_LEGACY_FORCE_KEY = 'mapEngineLegacyForce';
     const MAP_ENGINE_YM3_FAIL_KEY = 'mapEngineYm3Failed';
+    const MAP_3D_MODE_KEY = 'map3dModeEnabled';
     const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
     const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
@@ -2908,6 +2945,7 @@
     let initAppInProgress = false;
     // Спидометр: видимость
     let speedometerEnabled = true;
+    let map3dEnabled = false;
     // Анти-спам для меток
     const MARKER_RATE_LIMIT_MS = 120000;
     // Переменная для хранения выбранной фотографии
@@ -5949,6 +5987,117 @@
         updateMapEngineBadge();
     }
 
+    function loadMap3dPreference() {
+        try {
+            map3dEnabled = localStorage.getItem(MAP_3D_MODE_KEY) === '1';
+        } catch (e) {
+            map3dEnabled = false;
+        }
+    }
+
+    function saveMap3dPreference() {
+        try { localStorage.setItem(MAP_3D_MODE_KEY, map3dEnabled ? '1' : '0'); } catch (e) {}
+    }
+
+    function updateMap3dToggleUi() {
+        const isYm3Active = String(activeMapEngine || preferredMapEngine || '').includes('ymaps3');
+        const effectiveOn = !!(map3dEnabled && isYm3Active);
+
+        const floatingBtn = document.getElementById('map3dToggleFloating');
+        if (floatingBtn) {
+            floatingBtn.classList.toggle('is-on', effectiveOn);
+            floatingBtn.textContent = effectiveOn ? '3D ON' : '3D OFF';
+            floatingBtn.title = isYm3Active ? (effectiveOn ? 'Отключить 3D режим карты' : 'Включить 3D режим карты') : '3D доступно только в ymaps3';
+        }
+
+        const settingsBtn = document.getElementById('map3dSettingsBtn');
+        if (settingsBtn) {
+            settingsBtn.classList.toggle('active', effectiveOn);
+            settingsBtn.textContent = `3D: ${effectiveOn ? 'ВКЛ' : 'ВЫКЛ'}`;
+        }
+
+        const hint = document.getElementById('map3dSettingsHint');
+        if (hint) {
+            hint.textContent = isYm3Active
+                ? `Режим карты: ${effectiveOn ? '3D (pitch 60)' : '2D (pitch 0)'}`
+                : '3D доступно только в ymaps3';
+        }
+    }
+
+    function ensureYm3BuildingsLayer(enabled) {
+        try {
+            const root = myMap?.__ym3Root;
+            if (!root) return false;
+            const YMapLayerCtor = myMap?.__ym3Core?.YMapLayer || ymaps3?.YMapLayer;
+            if (!YMapLayerCtor) return false;
+
+            if (enabled) {
+                if (!myMap.__ym3BuildingsLayer) {
+                    myMap.__ym3BuildingsLayer = new YMapLayerCtor({ source: 'scheme', type: 'buildings', zIndex: 1800 });
+                    root.addChild(myMap.__ym3BuildingsLayer);
+                }
+            } else if (myMap.__ym3BuildingsLayer) {
+                try { root.removeChild(myMap.__ym3BuildingsLayer); } catch (e) {}
+                myMap.__ym3BuildingsLayer = null;
+            }
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function applyMap3dMode(options = {}) {
+        const animate = options?.animate !== false;
+        const root = myMap?.__ym3Root;
+        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') && !!root;
+        if (!isYm3Active) {
+            updateMap3dToggleUi();
+            return false;
+        }
+
+        const center = Array.isArray(myMap.__ym3LastCenter) ? myMap.__ym3LastCenter : (typeof myMap.getCenter === 'function' ? myMap.getCenter() : [48.01, 37.8]);
+        const zoom = Number.isFinite(Number(myMap.__ym3LastZoom)) ? Number(myMap.__ym3LastZoom) : (typeof myMap.getZoom === 'function' ? Number(myMap.getZoom() || 16) : 16);
+        const lat = Number(center?.[0]);
+        const lon = Number(center?.[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+
+        const pitch = map3dEnabled ? 60 : 0;
+        const tilt = map3dEnabled ? Math.PI / 3 : 0;
+        const azimuth = Number.isFinite(Number(myMap.__ym3LastAzimuth)) ? Number(myMap.__ym3LastAzimuth) : 0;
+        ensureYm3BuildingsLayer(map3dEnabled);
+
+        const location = {
+            center: [lon, lat],
+            zoom,
+            azimuth,
+            pitch,
+            tilt,
+            duration: animate ? 650 : 0
+        };
+
+        try {
+            if (typeof root.setLocation === 'function') root.setLocation(location);
+            else root.update({ location });
+            myMap.__ym3LastTilt = tilt;
+            myMap.__ym3LastAzimuth = azimuth;
+        } catch (e) {}
+
+        updateMap3dToggleUi();
+        return true;
+    }
+
+    function toggleMap3dFromUI() {
+        map3dEnabled = !map3dEnabled;
+        saveMap3dPreference();
+        const applied = applyMap3dMode({ animate: true });
+        if (!applied) {
+            updateMap3dToggleUi();
+            showInAppNotification({ title: '3D режим', body: '3D доступен только при активном ymaps3.', priority: 'low' });
+        }
+    }
+
+    window.toggleMap3dFromUI = toggleMap3dFromUI;
+
     function updateMapEngineBadge() {
         try {
             const badge = document.getElementById('mapEngineBadge');
@@ -5974,6 +6123,7 @@
         } catch (e) {}
         saveMapEnginePreference();
         updateMapEngineBadge();
+        updateMap3dToggleUi();
         try {
             showInAppNotification({
                 title: '🗺 Движок карты',
@@ -5998,6 +6148,7 @@
 
     async function initPrimaryMapInstance() {
         loadMapEnginePreference();
+        loadMap3dPreference();
         activeMapEngine = 'ymaps2';
 
         if (preferredMapEngine === 'ymaps3') {
@@ -6036,7 +6187,7 @@
                 const MarkerCtor = ym3Markers?.YMapMarker || ymaps3?.YMapMarker;
                 if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
                     const root = new YMapCtor(visualMapHost, {
-                        location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, tilt: 0.8 }
+                        location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, pitch: map3dEnabled ? 60 : 0, tilt: map3dEnabled ? Math.PI / 3 : 0 }
                     });
                     const scheme = new SchemeCtor({});
                     root.addChild(scheme);
@@ -6047,9 +6198,13 @@
                         if (ZoomControlCtor) root.addChild(new ZoomControlCtor({}));
                     } catch (e) {}
                     myMap.__ym3Root = root;
+                    myMap.__ym3Core = ym3Core || ymaps3;
                     myMap.__ym3MarkerLayer = features;
+                    myMap.__ym3BuildingsLayer = null;
                     myMap.__ym3LastCenter = [48.01, 37.80];
                     myMap.__ym3LastZoom = 16;
+                    myMap.__ym3LastTilt = map3dEnabled ? Math.PI / 3 : 0;
+                    myMap.__ym3LastAzimuth = 0;
 
                     const approximateBoundsFromCenterZoom = (center, zoom) => {
                         const lat = Number(center?.[0]);
@@ -6078,6 +6233,7 @@
                         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return myMap;
                         myMap.__ym3LastCenter = [lat, lon];
                         myMap.__ym3LastZoom = nextZoom;
+                        myMap.__ym3LastAzimuth = Number.isFinite(Number(options?.azimuth)) ? Number(options.azimuth) : Number(myMap.__ym3LastAzimuth || 0);
                         myMap.__ym3LastBounds = approximateBoundsFromCenterZoom(myMap.__ym3LastCenter, myMap.__ym3LastZoom);
                         try {
                             root.update({
@@ -6085,7 +6241,8 @@
                                     center: [lon, lat],
                                     zoom: nextZoom,
                                     azimuth: Number(options?.azimuth || 0),
-                                    tilt: Number.isFinite(Number(options?.tilt)) ? Number(options.tilt) : 0.8
+                                    pitch: Number.isFinite(Number(options?.pitch)) ? Number(options.pitch) : (map3dEnabled ? 60 : 0),
+                                    tilt: Number.isFinite(Number(options?.tilt)) ? Number(options.tilt) : (map3dEnabled ? Math.PI / 3 : 0)
                                 }
                             });
                         } catch (e) {}
@@ -6123,6 +6280,10 @@
         myMap.geoObjects.add(markersCollection);
         mapAdapter = createMapAdapter(activeMapEngine, myMap, markersCollection);
         updateMapEngineBadge();
+        updateMap3dToggleUi();
+        if (activeMapEngine === 'ymaps3-compat') {
+            try { applyMap3dMode({ animate: false }); } catch (e) {}
+        }
 
         if (activeMapEngine === 'ymaps3-compat') {
             console.info('🧭 ymaps3 active: running staged adapter mode with legacy-safe fallback.');
@@ -6249,6 +6410,8 @@
                                 if (Number.isFinite(lat) && Number.isFinite(lon)) {
                                     map.__ym3LastCenter = [lat, lon];
                                     if (Number.isFinite(zoom)) map.__ym3LastZoom = zoom;
+                                    if (Number.isFinite(Number(loc?.azimuth))) map.__ym3LastAzimuth = Number(loc.azimuth);
+                                    if (Number.isFinite(Number(loc?.tilt))) map.__ym3LastTilt = Number(loc.tilt);
                                     map.__ym3LastBounds = approximateBoundsFromCenterZoom([lat, lon], map.__ym3LastZoom || 16);
                                 }
                             } catch (e) {}
@@ -6728,6 +6891,7 @@
         btn.title = isV3 ? 'Тест движка: ymaps3 (нажмите для ymaps2)' : 'Тест движка: ymaps2 (нажмите для ymaps3)';
         const hint = document.getElementById('mapEngineSettingsHint');
         if (hint) hint.textContent = `Текущий режим: ${isV3 ? 'ymaps3' : 'ymaps2'}`;
+        updateMap3dToggleUi();
     }
 
     function toggleMapEngineFromUI() {
