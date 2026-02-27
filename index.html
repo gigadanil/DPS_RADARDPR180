@@ -7967,6 +7967,16 @@
         });
     }
 
+    function isStorageBucketMissingError(error) {
+        const msg = String(error?.message || error?.error || error?.details || '').toLowerCase();
+        const status = Number(error?.statusCode || error?.status || 0);
+        if (msg.includes('bucket not found')) return true;
+        if (msg.includes('bucket') && msg.includes('not found')) return true;
+        if (msg.includes('nosuchbucket')) return true;
+        if ((status === 400 || status === 404) && msg.includes('bucket')) return true;
+        return false;
+    }
+
     async function uploadAvatarBlobToStorage(blob, ext = 'jpg') {
         if (!_sb || !_sb.storage) throw new Error('Supabase Storage недоступен');
         if (!uid) throw new Error('Пользователь не авторизован');
@@ -7984,8 +7994,7 @@
                 throw new Error(`Не удалось получить публичную ссылку аватара (${bucket})`);
             }
 
-            const msg = String(error?.message || '');
-            const isBucketMissing = /bucket.*not\s*found|not\s*found/i.test(msg);
+            const isBucketMissing = isStorageBucketMissingError(error);
             if (!isBucketMissing) {
                 throw error;
             }
