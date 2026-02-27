@@ -6148,7 +6148,7 @@
             if (popup) return popup;
             popup = document.createElement('div');
             popup.id = 'ym3MarkerPopup';
-            popup.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(90px + env(safe-area-inset-bottom));z-index:4100;display:none;background:rgba(20,20,24,0.96);color:#fff;border-radius:14px;border:1px solid rgba(255,255,255,0.18);box-shadow:0 12px 26px rgba(0,0,0,0.35);max-height:46vh;overflow:auto;';
+            popup.style.cssText = 'position:fixed;left:12px;top:12px;z-index:4100;display:none;background:rgba(20,20,24,0.96);color:#fff;border-radius:14px;border:1px solid rgba(255,255,255,0.18);box-shadow:0 12px 26px rgba(0,0,0,0.35);max-height:46vh;overflow:auto;width:min(360px,calc(100vw - 24px));';
             popup.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,0.12);"><strong style="font-size:13px;">Метка</strong><button id="ym3MarkerPopupClose" style="background:none;border:none;color:#fff;font-size:22px;line-height:1;cursor:pointer;">×</button></div><div id="ym3MarkerPopupBody" style="padding:10px 12px;"></div>';
             document.body.appendChild(popup);
             const closeBtn = document.getElementById('ym3MarkerPopupClose');
@@ -6156,12 +6156,38 @@
             return popup;
         }
 
-        function showYmaps3Popup(html) {
+        function showYmaps3Popup(html, anchorRect = null) {
             try {
                 const popup = ensureYmaps3Popup();
                 const body = document.getElementById('ym3MarkerPopupBody');
                 if (body) body.innerHTML = String(html || '');
+
+                popup.style.visibility = 'hidden';
                 popup.style.display = 'block';
+
+                const viewportW = Math.max(320, window.innerWidth || 0);
+                const viewportH = Math.max(320, window.innerHeight || 0);
+                const popupW = Math.min(360, Math.max(220, viewportW - 24));
+                popup.style.width = `${popupW}px`;
+
+                const popupH = Math.min(popup.offsetHeight || 260, Math.floor(viewportH * 0.46));
+                let left = 12;
+                let top = Math.max(12, viewportH - popupH - 100);
+
+                if (anchorRect && Number.isFinite(Number(anchorRect.left)) && Number.isFinite(Number(anchorRect.top))) {
+                    const anchorCenterX = Number(anchorRect.left) + Number(anchorRect.width || 0) / 2;
+                    const preferLeft = Math.round(anchorCenterX - popupW / 2);
+                    left = Math.max(8, Math.min(preferLeft, viewportW - popupW - 8));
+
+                    const above = Math.round(Number(anchorRect.top) - popupH - 14);
+                    const below = Math.round(Number(anchorRect.bottom) + 14);
+                    if (above >= 8) top = above;
+                    else if (below + popupH <= viewportH - 8) top = below;
+                }
+
+                popup.style.left = `${left}px`;
+                popup.style.top = `${top}px`;
+                popup.style.visibility = 'visible';
             } catch (e) {}
         }
 
@@ -6223,7 +6249,8 @@
                 if (descriptor.balloonHtml) {
                     markerEl.addEventListener('click', () => {
                         try {
-                            showYmaps3Popup(String(descriptor.balloonHtml));
+                            const rect = markerEl.getBoundingClientRect ? markerEl.getBoundingClientRect() : null;
+                            showYmaps3Popup(String(descriptor.balloonHtml), rect);
                         } catch (e) {}
                     });
                 }
