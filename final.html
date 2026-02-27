@@ -2923,6 +2923,7 @@
     const MAP_ENGINE_LEGACY_FORCE_KEY = 'mapEngineLegacyForce';
     const MAP_ENGINE_YM3_FAIL_KEY = 'mapEngineYm3Failed';
     const MAP_3D_MODE_KEY = 'map3dModeEnabled';
+    const MAP_3D_MIN_ZOOM = 16.8;
     const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
     const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
@@ -6019,7 +6020,7 @@
         const hint = document.getElementById('map3dSettingsHint');
         if (hint) {
             hint.textContent = isYm3Active
-                ? `Режим карты: ${effectiveOn ? '3D (pitch 60)' : '2D (pitch 0)'}`
+                ? `Режим карты: ${effectiveOn ? '3D (наклон + здания)' : '2D (плоский режим)'}`
                 : '3D доступно только в ymaps3';
         }
     }
@@ -6056,12 +6057,12 @@
         }
 
         const center = Array.isArray(myMap.__ym3LastCenter) ? myMap.__ym3LastCenter : (typeof myMap.getCenter === 'function' ? myMap.getCenter() : [48.01, 37.8]);
-        const zoom = Number.isFinite(Number(myMap.__ym3LastZoom)) ? Number(myMap.__ym3LastZoom) : (typeof myMap.getZoom === 'function' ? Number(myMap.getZoom() || 16) : 16);
+        const currentZoom = Number.isFinite(Number(myMap.__ym3LastZoom)) ? Number(myMap.__ym3LastZoom) : (typeof myMap.getZoom === 'function' ? Number(myMap.getZoom() || 16) : 16);
+        const zoom = map3dEnabled ? Math.max(MAP_3D_MIN_ZOOM, currentZoom) : currentZoom;
         const lat = Number(center?.[0]);
         const lon = Number(center?.[1]);
         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
 
-        const pitch = map3dEnabled ? 60 : 0;
         const tilt = map3dEnabled ? Math.PI / 3 : 0;
         const azimuth = Number.isFinite(Number(myMap.__ym3LastAzimuth)) ? Number(myMap.__ym3LastAzimuth) : 0;
         ensureYm3BuildingsLayer(map3dEnabled);
@@ -6070,7 +6071,6 @@
             center: [lon, lat],
             zoom,
             azimuth,
-            pitch,
             tilt,
             duration: animate ? 650 : 0
         };
@@ -6080,6 +6080,7 @@
             else root.update({ location });
             myMap.__ym3LastTilt = tilt;
             myMap.__ym3LastAzimuth = azimuth;
+            myMap.__ym3LastZoom = zoom;
         } catch (e) {}
 
         updateMap3dToggleUi();
@@ -6187,7 +6188,7 @@
                 const MarkerCtor = ym3Markers?.YMapMarker || ymaps3?.YMapMarker;
                 if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
                     const root = new YMapCtor(visualMapHost, {
-                        location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, pitch: map3dEnabled ? 60 : 0, tilt: map3dEnabled ? Math.PI / 3 : 0 }
+                        location: { center: [37.80, 48.01], zoom: map3dEnabled ? Math.max(16, MAP_3D_MIN_ZOOM) : 16, azimuth: 0, tilt: map3dEnabled ? Math.PI / 3 : 0 }
                     });
                     const scheme = new SchemeCtor({});
                     root.addChild(scheme);
@@ -6241,7 +6242,6 @@
                                     center: [lon, lat],
                                     zoom: nextZoom,
                                     azimuth: Number(options?.azimuth || 0),
-                                    pitch: Number.isFinite(Number(options?.pitch)) ? Number(options.pitch) : (map3dEnabled ? 60 : 0),
                                     tilt: Number.isFinite(Number(options?.tilt)) ? Number(options.tilt) : (map3dEnabled ? Math.PI / 3 : 0)
                                 }
                             });
