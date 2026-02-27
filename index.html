@@ -7977,31 +7977,49 @@
         return false;
     }
 
-    async function uploadAvatarBlobToStorage(blob, ext = 'jpg') {
-        if (!_sb || !_sb.storage) throw new Error('Supabase Storage недоступен');
-        if (!uid) throw new Error('Пользователь не авторизован');
+    async function uploadAvatarViaEdgeFunction(blob) {
+        const dataUrl = await blobToDataUrl(blob);
+        const headers = {
+            'content-type': 'application/json',
+            apikey: SUPABASE_KEY
+        };
+        const token = String(currentSupabaseToken || '').trim();
+        if (token) headers['authorization'] = `Bearer ${token}`;
 
-        const path = `${String(uid)}/${Date.now()}.${ext}`;
-        const contentType = blob?.type || 'image/jpeg';
-        const bucketCandidates = ['avatars', 'media', 'uploads'];
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/avatar-upload`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ image_data_url: dataUrl })
+        });
 
-        for (const bucket of bucketCandidates) {
-            const { error } = await _sb.storage.from(bucket).upload(path, blob, { upsert: true, contentType });
-            if (!error) {
-                const publicData = _sb.storage.from(bucket).getPublicUrl(path);
-                const publicUrl = publicData?.data?.publicUrl || '';
-                if (publicUrl) return publicUrl;
-                throw new Error(`Не удалось получить публичную ссылку аватара (${bucket})`);
-            }
-
-            const isBucketMissing = isStorageBucketMissingError(error);
-            if (!isBucketMissing) {
-                throw error;
-            }
+        const payload = await resp.json().catch(() => ({}));
+        if (!resp.ok || !payload?.ok || !payload?.public_url) {
+            const err = new Error(String(payload?.error || `avatar-upload failed (${resp.status})`));
+            err.status = resp.status;
+            throw err;
         }
 
-        console.warn('Bucket для аватаров не найден, используем fallback data URL');
-        return await blobToDataUrl(blob);
+        return String(payload.public_url);
+    }
+
+    async function uploadAvatarBlobToStorage(blob, ext = 'jpg') {
+        if (!uid) throw new Error('Пользователь не авторизован');
+        try {
+            return await uploadAvatarViaEdgeFunction(blob);
+        } catch (error) {
+            const message = String(error?.message || '').toLowerCase();
+            const status = Number(error?.status || 0);
+            const isExpectedFallback =
+                message.includes('bucket') ||
+                message.includes('row-level security') ||
+                message.includes('rls') ||
+                message.includes('failed to fetch') ||
+                status === 400 || status === 401 || status === 404;
+            if (!isExpectedFallback) throw error;
+
+            console.warn('Edge upload недоступен, используем fallback data URL:', error?.message || error);
+            return await blobToDataUrl(blob);
+        }
     }
 
     async function ensureAvatarEditorReady() {
