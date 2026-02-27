@@ -1387,6 +1387,7 @@
     <div class="right-bar" id="rightBar" aria-label="Быстрые действия">
         <button class="action-btn" id="ccProfileBtn" onclick="openProfileModal()" title="Профиль" aria-label="Профиль">👤</button>
         <button class="action-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
+        <button class="action-btn" id="ccMapEngineBtn" onclick="toggleMapEngineFromUI()" title="Тест движка карты (админ)" aria-label="Тест движка карты" style="display:none;">🗺️</button>
         <button class="action-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
         <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс">🧭</button>
         <button class="action-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
@@ -6619,6 +6620,39 @@
         updateVoiceBtnUiState();
     }
 
+    function updateMapEngineBtnUiState() {
+        const btn = document.getElementById('ccMapEngineBtn');
+        if (!btn) return;
+        if (!isAdmin) {
+            btn.style.display = 'none';
+            return;
+        }
+        btn.style.display = '';
+        const isV3 = String(preferredMapEngine || '').toLowerCase() === 'ymaps3';
+        btn.classList.toggle('active', isV3);
+        btn.classList.toggle('off', !isV3);
+        btn.textContent = isV3 ? '🗺️3' : '🗺️2';
+        btn.title = isV3 ? 'Тест движка: ymaps3 (нажмите для ymaps2)' : 'Тест движка: ymaps2 (нажмите для ymaps3)';
+    }
+
+    function toggleMapEngineFromUI() {
+        if (!isAdmin) return;
+        const next = String(preferredMapEngine || '').toLowerCase() === 'ymaps3' ? 'ymaps2' : 'ymaps3';
+        try {
+            if (next === 'ymaps3') {
+                localStorage.removeItem(MAP_ENGINE_LEGACY_FORCE_KEY);
+                localStorage.removeItem(MAP_ENGINE_YM3_FAIL_KEY);
+            }
+        } catch (e) {}
+        setMapEnginePreference(next);
+        updateMapEngineBtnUiState();
+        const url = new URL(window.location.href);
+        url.searchParams.delete('map2');
+        url.searchParams.delete('map3');
+        url.searchParams.set('engine', next);
+        window.location.replace(url.toString());
+    }
+
     function updateLayersBtnUiState() {
         const btn = document.getElementById('ccLayersBtn');
         if (!btn) return;
@@ -6921,6 +6955,7 @@
         // Ergo UI: синхронизируем состояния кнопок
         try { updateFollowButton(); } catch (e) {}
         try { updateVoiceBtnUiState(); } catch (e) {}
+        try { updateMapEngineBtnUiState(); } catch (e) {}
         try { updateCourseBtnUiState(); } catch (e) {}
         try { updateLayersBtnUiState(); } catch (e) {}
         try { setRightActionsHidden(!!actionCardVisible); } catch (e) {}
