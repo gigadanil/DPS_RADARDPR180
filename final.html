@@ -6623,10 +6623,6 @@
     function updateMapEngineBtnUiState() {
         const btn = document.getElementById('ccMapEngineBtn');
         if (!btn) return;
-        if (!isAdmin) {
-            btn.style.display = 'none';
-            return;
-        }
         btn.style.display = '';
         const isV3 = String(preferredMapEngine || '').toLowerCase() === 'ymaps3';
         btn.classList.toggle('active', isV3);
@@ -6636,7 +6632,6 @@
     }
 
     function toggleMapEngineFromUI() {
-        if (!isAdmin) return;
         const next = String(preferredMapEngine || '').toLowerCase() === 'ymaps3' ? 'ymaps2' : 'ymaps3';
         try {
             if (next === 'ymaps3') {
