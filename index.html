@@ -5960,6 +5960,16 @@
 
     window.setMapEnginePreference = setMapEnginePreference;
 
+    function ensureLegacyMapHost() {
+        let host = document.getElementById('mapLegacyHost');
+        if (host) return host;
+        host = document.createElement('div');
+        host.id = 'mapLegacyHost';
+        host.style.cssText = 'position:fixed;left:-99999px;top:-99999px;width:1px;height:1px;opacity:0;pointer-events:none;';
+        document.body.appendChild(host);
+        return host;
+    }
+
     async function initPrimaryMapInstance() {
         loadMapEnginePreference();
         activeMapEngine = 'ymaps2';
@@ -5975,7 +5985,9 @@
             }
         }
 
-        myMap = new ymaps.Map("map", { center: [48.01, 37.80], zoom: 16, controls: [] });
+        const visualMapHost = document.getElementById('map');
+        const mapInitTarget = (activeMapEngine === 'ymaps3-compat') ? ensureLegacyMapHost() : "map";
+        myMap = new ymaps.Map(mapInitTarget, { center: [48.01, 37.80], zoom: 16, controls: [] });
         attachYandexCameraCompat(myMap);
         applyDynamicCourseBehaviors();
 
@@ -5986,7 +5998,7 @@
                 const FeaturesCtor = ymaps3?.YMapDefaultFeaturesLayer;
                 const MarkerCtor = ymaps3?.YMapMarker;
                 if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
-                    const root = new YMapCtor(document.getElementById('map'), {
+                    const root = new YMapCtor(visualMapHost, {
                         location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, tilt: 0.8 }
                     });
                     const scheme = new SchemeCtor({});
@@ -5995,6 +6007,65 @@
                     root.addChild(features);
                     myMap.__ym3Root = root;
                     myMap.__ym3MarkerLayer = features;
+                    myMap.__ym3LastCenter = [48.01, 37.80];
+                    myMap.__ym3LastZoom = 16;
+
+                    const approximateBoundsFromCenterZoom = (center, zoom) => {
+                        const lat = Number(center?.[0]);
+                        const lon = Number(center?.[1]);
+                        const z = Number(zoom);
+                        if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(z)) return null;
+                        const lonSpan = Math.max(0.01, 360 / Math.pow(2, z + 1));
+                        const latSpan = Math.max(0.01, 180 / Math.pow(2, z + 1));
+                        return [
+                            [lat - latSpan, lon - lonSpan],
+                            [lat + latSpan, lon + lonSpan]
+                        ];
+                    };
+                    myMap.__ym3LastBounds = approximateBoundsFromCenterZoom(myMap.__ym3LastCenter, myMap.__ym3LastZoom);
+
+                    const originalSetCenter = (typeof myMap.setCenter === 'function') ? myMap.setCenter.bind(myMap) : null;
+                    const originalGetCenter = (typeof myMap.getCenter === 'function') ? myMap.getCenter.bind(myMap) : null;
+                    const originalGetZoom = (typeof myMap.getZoom === 'function') ? myMap.getZoom.bind(myMap) : null;
+                    const originalGetBounds = (typeof myMap.getBounds === 'function') ? myMap.getBounds.bind(myMap) : null;
+
+                    myMap.setCenter = (center, zoom, options = {}) => {
+                        try { if (originalSetCenter) originalSetCenter(center, zoom, options); } catch (e) {}
+                        const lat = Number(center?.[0]);
+                        const lon = Number(center?.[1]);
+                        const nextZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : Number(myMap.__ym3LastZoom || 16);
+                        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return myMap;
+                        myMap.__ym3LastCenter = [lat, lon];
+                        myMap.__ym3LastZoom = nextZoom;
+                        myMap.__ym3LastBounds = approximateBoundsFromCenterZoom(myMap.__ym3LastCenter, myMap.__ym3LastZoom);
+                        try {
+                            root.update({
+                                location: {
+                                    center: [lon, lat],
+                                    zoom: nextZoom,
+                                    azimuth: Number(options?.azimuth || 0),
+                                    tilt: Number.isFinite(Number(options?.tilt)) ? Number(options.tilt) : 0.8
+                                }
+                            });
+                        } catch (e) {}
+                        return myMap;
+                    };
+
+                    myMap.getCenter = () => {
+                        if (Array.isArray(myMap.__ym3LastCenter) && myMap.__ym3LastCenter.length >= 2) return myMap.__ym3LastCenter;
+                        try { if (originalGetCenter) return originalGetCenter(); } catch (e) {}
+                        return [48.01, 37.80];
+                    };
+                    myMap.getZoom = () => {
+                        if (Number.isFinite(Number(myMap.__ym3LastZoom))) return Number(myMap.__ym3LastZoom);
+                        try { if (originalGetZoom) return Number(originalGetZoom()); } catch (e) {}
+                        return 16;
+                    };
+                    myMap.getBounds = () => {
+                        if (Array.isArray(myMap.__ym3LastBounds) && myMap.__ym3LastBounds.length >= 2) return myMap.__ym3LastBounds;
+                        try { if (originalGetBounds) return originalGetBounds(); } catch (e) {}
+                        return approximateBoundsFromCenterZoom(myMap.getCenter(), myMap.getZoom());
+                    };
                 } else {
                     activeMapEngine = 'ymaps2';
                 }
