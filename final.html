@@ -2936,6 +2936,7 @@
     let lastGpsAccuracyMeters = null;
     let gpsReliable = false;
     let gpsWarnedUnreliable = false;
+    let gpsTimeoutLastNotifyTs = 0;
     // ID отслеживания GPS (для остановки отслеживания)
     let gpsWatchId = null;
     // Маркер текущего местоположения на карте
@@ -5819,7 +5820,10 @@
                 },
                 (error) => {
                     // Ошибка получения координат
-                    console.warn('Ошибка GPS:', error.message);
+                    const isTimeoutError = Number(error?.code) === Number(error?.TIMEOUT || 3);
+                    if (!isTimeoutError) {
+                        console.warn('Ошибка GPS:', error?.message || error);
+                    }
                     switch(error.code) {
                         case error.PERMISSION_DENIED:
                             console.warn('Разрешение на доступ к GPS отклонено');
@@ -5847,7 +5851,15 @@
                             }, ()=>{}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
                             break;
                         case error.TIMEOUT:
-                            console.warn('Истекло время ожидания GPS — попробуйте ещё раз');
+                            // В Telegram WebView таймауты бывают часто: не спамим лог каждую попытку
+                            if ((Date.now() - Number(gpsTimeoutLastNotifyTs || 0)) > 30000) {
+                                gpsTimeoutLastNotifyTs = Date.now();
+                                console.warn('Истекло время ожидания GPS — продолжаю попытки, включите точную геолокацию/GPS и подождите 10–20 секунд');
+                            }
+                            if (!userLocation && Array.isArray(lastReliableUserLocation) && lastReliableUserLocation.length >= 2) {
+                                userLocation = [Number(lastReliableUserLocation[0]), Number(lastReliableUserLocation[1])];
+                                updateUserLocationMarker();
+                            }
                             break;
                     }
                 },
@@ -6245,7 +6257,7 @@
                     const root = new YMapCtor(visualMapHost, {
                         location: { center: [37.80, 48.01], zoom: map3dEnabled ? Math.max(16, MAP_3D_MIN_ZOOM) : 16, azimuth: 0, tilt: map3dEnabled ? MAP_3D_TILT_DEG : 0 }
                     });
-                    const scheme = new SchemeCtor({});
+                    const scheme = new SchemeCtor({ id: 'scheme' });
                     root.addChild(scheme);
                     const features = new ymaps3.YMapDefaultFeaturesLayer({});
                     root.addChild(features);
