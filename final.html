@@ -94,15 +94,15 @@
         .user-marker,
         .ym3-user-marker {
             position: absolute;
-            width: 30px !important;
-            height: 30px !important;
+            width: 32px !important;
+            height: 32px !important;
             pointer-events: none;
             z-index: 1000;
             will-change: transform;
             transform-origin: 50% 50%;
             transform-box: fill-box;
-            contain: layout style;
-            transition: transform 0.5s linear;
+            transform: translate(-50%, -50%) scale(calc(1 / var(--ymaps-viewport-scale, 1))) !important;
+            contain: layout;
         }
         .ym3-user-arrow {
             position: absolute;
@@ -6891,8 +6891,8 @@
                 ym3UserMarkerEl = document.createElement('div');
                                 ym3UserMarkerEl.className = 'user-marker ym3-user-marker';
                                 ym3UserMarkerEl.style.pointerEvents = 'none';
-                                ym3UserMarkerEl.style.width = '30px';
-                                ym3UserMarkerEl.style.height = '30px';
+                                ym3UserMarkerEl.style.width = '32px';
+                                ym3UserMarkerEl.style.height = '32px';
                 ym3UserMarkerEl.innerHTML = `
                   <div class="ym3-user-pulse"></div>
                   <div class="ym3-user-arrow"></div>
