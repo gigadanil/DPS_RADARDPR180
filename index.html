@@ -6012,10 +6012,21 @@
 
         if (activeMapEngine === 'ymaps3-compat') {
             try {
-                const YMapCtor = ymaps3?.YMap;
-                const SchemeCtor = ymaps3?.YMapDefaultSchemeLayer;
-                const FeaturesCtor = ymaps3?.YMapDefaultFeaturesLayer;
-                const MarkerCtor = ymaps3?.YMapMarker;
+                let ym3Core = null;
+                let ym3Markers = null;
+                let ym3DefaultUi = null;
+                try { ym3Core = await ymaps3.import('@yandex/ymaps3'); } catch (e) { ym3Core = null; }
+                try { ym3Markers = await ymaps3.import('@yandex/ymaps3-markers@0.0.1'); } catch (e) {
+                    try { ym3Markers = await ymaps3.import('@yandex/ymaps3-markers'); } catch (e2) { ym3Markers = null; }
+                }
+                try { ym3DefaultUi = await ymaps3.import('@yandex/ymaps3-default-ui-theme@0.0.1'); } catch (e) {
+                    try { ym3DefaultUi = await ymaps3.import('@yandex/ymaps3-default-ui-theme'); } catch (e2) { ym3DefaultUi = null; }
+                }
+
+                const YMapCtor = ym3Core?.YMap || ymaps3?.YMap;
+                const SchemeCtor = ym3Core?.YMapDefaultSchemeLayer || ymaps3?.YMapDefaultSchemeLayer;
+                const FeaturesCtor = ym3Core?.YMapDefaultFeaturesLayer || ymaps3?.YMapDefaultFeaturesLayer;
+                const MarkerCtor = ym3Markers?.YMapMarker || ymaps3?.YMapMarker;
                 if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
                     const root = new YMapCtor(visualMapHost, {
                         location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, tilt: 0.8 }
@@ -6024,6 +6035,10 @@
                     root.addChild(scheme);
                     const features = new ymaps3.YMapDefaultFeaturesLayer({});
                     root.addChild(features);
+                    try {
+                        const ZoomControlCtor = ym3DefaultUi?.YMapZoomControl;
+                        if (ZoomControlCtor) root.addChild(new ZoomControlCtor({}));
+                    } catch (e) {}
                     myMap.__ym3Root = root;
                     myMap.__ym3MarkerLayer = features;
                     myMap.__ym3LastCenter = [48.01, 37.80];
@@ -6249,11 +6264,31 @@
                 const lat = Number(coords[1]);
                 if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
 
+                const isAdminRole = String(descriptor.author_role || descriptor.authorRole || '').toLowerCase() === 'admin';
+                const safeAuthorName = String(descriptor.author_name || descriptor.authorName || 'ADMIN')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+
                 const markerEl = document.createElement('div');
-                markerEl.style.cssText = 'width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #0a84ff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.28);cursor:pointer;';
-                markerEl.innerHTML = `${String(descriptor.icon || '📍')}`;
+                if (isAdminRole) {
+                    markerEl.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:translate(-50%,-100%);cursor:pointer;user-select:none;pointer-events:auto;';
+                    markerEl.innerHTML = `<div style="font-size:16px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));margin-bottom:2px;">👑</div><div style="width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 30% 25%, #fff8d7 0%, #f5c64a 45%, #b57a10 100%);border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;color:#2d1a00;box-shadow:0 0 0 1px rgba(120,76,0,0.35),0 0 14px rgba(245,198,66,0.65),0 8px 20px rgba(0,0,0,0.28);animation:adminPulse 1.6s ease-out infinite;"><span style="position:relative;z-index:1;">${String(descriptor.icon || '📍')}</span></div><div style="margin-top:4px;padding:2px 8px;border-radius:999px;background:linear-gradient(135deg,#fff0b3 0%,#f5c64a 55%,#c68d00 100%);border:1px solid rgba(120,76,0,0.45);color:#2d1a00;font-size:10px;font-weight:900;line-height:1.2;box-shadow:0 3px 10px rgba(0,0,0,0.22);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${safeAuthorName}</div>`;
+                } else {
+                    markerEl.style.cssText = 'width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #0a84ff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.28);cursor:pointer;';
+                    markerEl.innerHTML = `${String(descriptor.icon || '📍')}`;
+                }
                 if (descriptor.hint) markerEl.title = String(descriptor.hint);
-                if (descriptor.balloonHtml) {
+                if (isAdminRole) {
+                    markerEl.addEventListener('click', (event) => {
+                        try { event?.preventDefault?.(); event?.stopPropagation?.(); } catch (e) {}
+                        try {
+                            if (typeof window.openBottomWidget === 'function') {
+                                window.openBottomWidget(descriptor.markerData || descriptor);
+                            }
+                        } catch (e) {}
+                    });
+                } else if (descriptor.balloonHtml) {
                     markerEl.addEventListener('click', () => {
                         try {
                             const rect = markerEl.getBoundingClientRect ? markerEl.getBoundingClientRect() : null;
@@ -12544,7 +12579,15 @@
                 coords: [Number(normalizedCoords.lon), Number(normalizedCoords.lat)],
                 icon: MAP_ICONS[m.type] || '📍',
                 hint: `${getMarkerLabel(m.type)}${m.comment ? ` • ${String(m.comment).slice(0, 48)}` : ''}`,
-                balloonHtml: bHtml
+                balloonHtml: bHtml,
+                author_role: showAdminStyle ? 'admin' : 'user',
+                author_name: authorInfo.name || 'Admin',
+                markerData: {
+                    ...m,
+                    author_role: showAdminStyle ? 'admin' : 'user',
+                    author_name: authorInfo.name || 'Admin',
+                    balloonHtml: bHtml
+                }
             };
             // Добавляем маркер в коллекцию
             if (mapAdapter && typeof mapAdapter.addMarker === 'function') mapAdapter.addMarker(p, markerDescriptor);
