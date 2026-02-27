@@ -4740,6 +4740,7 @@
     let monolithKeepAliveTimerId = null;
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
+    let monolithUserGestureUnlocked = false;
 
     // very small silent WAV (short) as data URI
     const MONOLITH_SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
@@ -4931,8 +4932,12 @@
         } catch (e) {}
     }
 
-    function monolithPrimeAudioOnce() {
+    function monolithPrimeAudioOnce(eventOrForce) {
+        const forced = eventOrForce === true;
+        const trustedGesture = !!(eventOrForce && eventOrForce.isTrusted === true);
+        if (!forced && !trustedGesture) return;
         if (monolithAudioPrimed) return;
+        monolithUserGestureUnlocked = true;
 
         // Android/WebView: часто нужно "разбудить" speechSynthesis после user gesture.
         try {
@@ -4957,6 +4962,7 @@
 
     function monolithEnsureAudioContext() {
         if (monolithAudioCtx) return monolithAudioCtx;
+        if (!monolithUserGestureUnlocked) return null;
         const Ctx = window.AudioContext || window.webkitAudioContext;
         if (!Ctx) return null;
         try {
@@ -4970,6 +4976,7 @@
 
     function monolithStartAudioContextKeepAlive() {
         if (!monolithIsVoiceSessionActive() || !monolithAudioPrimed) return;
+        if (!monolithUserGestureUnlocked) return;
         const ctx = monolithEnsureAudioContext();
         if (!ctx) return;
 
@@ -6087,7 +6094,7 @@
         const hint = document.getElementById('map3dSettingsHint');
         if (hint) {
             hint.textContent = isYm3Active
-                ? `Режим карты: ${effectiveOn ? '3D (наклон + здания)' : '2D (плоский режим)'}`
+                ? `Режим карты: ${effectiveOn ? '3D (наклон карты)' : '2D (плоский режим)'}`
                 : '3D доступно только в ymaps3';
         }
     }
@@ -6096,6 +6103,7 @@
         try {
             const root = myMap?.__ym3Root;
             if (!root) return false;
+            if (String(activeMapEngine || '') === 'ymaps3-compat') return false;
             const YMapLayerCtor = myMap?.__ym3Core?.YMapLayer || ymaps3?.YMapLayer;
             if (!YMapLayerCtor) return false;
 
@@ -6899,7 +6907,7 @@
             try { monolithStopKeepAliveAudio(); } catch (e) {}
             try { monolithReleaseWakeLock(); } catch (e) {}
         } else {
-            try { monolithPrimeAudioOnce(); } catch (e) {}
+            try { monolithPrimeAudioOnce(true); } catch (e) {}
             try { monolithSoftResumeSpeech(); } catch (e) {}
             try { monolithMaybeUpdateWakeLock(); } catch (e) {}
         }
