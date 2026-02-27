@@ -16,6 +16,7 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="avatar-editor.js?v=20260227"></script>
     <script src="https://api-maps.yandex.ru/v3/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <script src="https://api-maps.yandex.ru/2.1/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <style>
@@ -1079,9 +1080,9 @@
             50% { opacity: 0.90; transform: scale(1.12); border-color: rgba(0, 212, 255, 0.70); }
         }
         @keyframes adminPulse {
-            0% { transform: scale(0.85); opacity: 0.8; }
-            70% { transform: scale(1.2); opacity: 0; }
-            100% { transform: scale(1.2); opacity: 0; }
+            0% { transform: scale(0.92); box-shadow: 0 0 0 1px rgba(120,76,0,0.35), 0 0 10px rgba(245,198,66,0.55), 0 6px 14px rgba(0,0,0,0.24); }
+            70% { transform: scale(1.16); box-shadow: 0 0 0 1px rgba(120,76,0,0.28), 0 0 22px rgba(245,198,66,0.65), 0 10px 22px rgba(0,0,0,0.28); }
+            100% { transform: scale(0.92); box-shadow: 0 0 0 1px rgba(120,76,0,0.35), 0 0 10px rgba(245,198,66,0.55), 0 6px 14px rgba(0,0,0,0.24); }
         }
         @keyframes adminSiren {
             0%, 100% { opacity: 0.35; transform: scaleX(0.9); }
@@ -6269,11 +6270,17 @@
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;');
+                const iconText = String(descriptor.icon || '📍');
+                const safeIconText = iconText
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                const iconImgSrc = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-size="44">${safeIconText}</text></svg>`);
 
                 const markerEl = document.createElement('div');
                 if (isAdminRole) {
                     markerEl.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:translate(-50%,-100%);cursor:pointer;user-select:none;pointer-events:auto;';
-                    markerEl.innerHTML = `<div style="font-size:16px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));margin-bottom:2px;">👑</div><div style="width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 30% 25%, #fff8d7 0%, #f5c64a 45%, #b57a10 100%);border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;color:#2d1a00;box-shadow:0 0 0 1px rgba(120,76,0,0.35),0 0 14px rgba(245,198,66,0.65),0 8px 20px rgba(0,0,0,0.28);animation:adminPulse 1.6s ease-out infinite;"><span style="position:relative;z-index:1;">${String(descriptor.icon || '📍')}</span></div><div style="margin-top:4px;padding:2px 8px;border-radius:999px;background:linear-gradient(135deg,#fff0b3 0%,#f5c64a 55%,#c68d00 100%);border:1px solid rgba(120,76,0,0.45);color:#2d1a00;font-size:10px;font-weight:900;line-height:1.2;box-shadow:0 3px 10px rgba(0,0,0,0.22);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${safeAuthorName}</div>`;
+                    markerEl.innerHTML = `<div style="font-size:16px;line-height:1;margin-bottom:2px;">👑</div><div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;"><div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 30% 25%, #fff8d7 0%, #f5c64a 45%, #b57a10 100%);border:2px solid #fff;animation:adminPulse 1.6s ease-out infinite;"></div><img src="${iconImgSrc}" alt="event" style="position:relative;z-index:1;width:22px;height:22px;object-fit:contain;pointer-events:none;" /></div><div style="margin-top:4px;padding:2px 8px;border-radius:999px;background:#000;color:#f5c64a;font-size:10px;font-weight:900;line-height:1.2;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${safeAuthorName}</div>`;
                 } else {
                     markerEl.style.cssText = 'width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #0a84ff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.28);cursor:pointer;';
                     markerEl.innerHTML = `${String(descriptor.icon || '📍')}`;
@@ -7941,178 +7948,96 @@
         }
     }
 
-    // Функция изменения аватара (только фото, emoji не поддерживается без колонки avatar)
-    async function changeAvatar() {
-        // Открываем выбор фото
-        document.getElementById('profile-photo-input').click();
+    // Аватар: Croppie модуль + загрузка в Supabase Storage
+    let avatarEditorInstance = null;
+    let avatarEditorInitPromise = null;
+
+    async function uploadAvatarBlobToStorage(blob, ext = 'jpg') {
+        if (!_sb || !_sb.storage) throw new Error('Supabase Storage недоступен');
+        if (!uid) throw new Error('Пользователь не авторизован');
+
+        try { await ensureSupabaseAuth(); } catch (e) {}
+
+        const bucket = 'avatars';
+        const path = `${String(uid)}/${Date.now()}.${ext}`;
+        const contentType = blob?.type || 'image/jpeg';
+        const { error } = await _sb.storage.from(bucket).upload(path, blob, { upsert: true, contentType });
+        if (error) throw error;
+
+        const publicData = _sb.storage.from(bucket).getPublicUrl(path);
+        const publicUrl = publicData?.data?.publicUrl || '';
+        if (!publicUrl) throw new Error('Не удалось получить публичную ссылку аватара');
+        return publicUrl;
     }
 
-    // Переменные для редактора аватара
-    let avatarEditorState = {
-        fileBlob: null,
-        zoom: 1,
-        offsetX: 0,
-        offsetY: 0
-    };
+    async function ensureAvatarEditorReady() {
+        if (avatarEditorInstance) return avatarEditorInstance;
+        if (avatarEditorInitPromise) return avatarEditorInitPromise;
 
-    // Обработка загрузки фото аватара
-    document.addEventListener('change', async function(e) {
-        if (e.target.id === 'profile-photo-input') {
-            const file = e.target.files[0];
-            if (file) {
-                try {
-                    // Читаем файл как Data URL для предпросмотра
-                    const reader = new FileReader();
-                    reader.onload = function(event) {
-                        // Показываем редактор аватара
-                        const img = document.getElementById('avatarEditorImage');
-                        img.src = event.target.result;
-                        
-                        // Сохраняем blob файла
-                        avatarEditorState.fileBlob = file;
-                        avatarEditorState.zoom = 1;
-                        avatarEditorState.offsetX = 0;
-                        avatarEditorState.offsetY = 0;
-                        
-                        // Обновляем контролы
-                        document.getElementById('avatarZoom').value = 1;
-                        document.getElementById('avatarZoomValue').textContent = '100';
-                        document.getElementById('avatarOffsetX').value = 0;
-                        document.getElementById('avatarOffsetY').value = 0;
-                        
-                        // Открываем модальное окно редактора
-                        const target = document.querySelector('.target');
-                        if (target) target.style.visibility = 'hidden';
-                        document.getElementById('avatarEditorModal').classList.add('active');
-                    };
-                    reader.readAsDataURL(file);
-                } catch (err) {
-                    alert('Ошибка при открытии файла: ' + (err?.message || err));
-                }
-                e.target.value = ''; // очищаем input
-            }
-        }
-    });
-
-    // Обновление превью при изменении zoom
-    document.getElementById('avatarZoom')?.addEventListener('input', function(e) {
-        avatarEditorState.zoom = parseFloat(e.target.value);
-        document.getElementById('avatarZoomValue').textContent = Math.round(avatarEditorState.zoom * 100);
-        updateAvatarEditorPreview();
-    });
-
-    // Обновление превью при изменении offsetX
-    document.getElementById('avatarOffsetX')?.addEventListener('input', function(e) {
-        avatarEditorState.offsetX = parseFloat(e.target.value);
-        updateAvatarEditorPreview();
-    });
-
-    // Обновление превью при изменении offsetY
-    document.getElementById('avatarOffsetY')?.addEventListener('input', function(e) {
-        avatarEditorState.offsetY = parseFloat(e.target.value);
-        updateAvatarEditorPreview();
-    });
-
-    // Функция обновления превью в редакторе
-    function updateAvatarEditorPreview() {
-        const img = document.getElementById('avatarEditorImage');
-        if (img) {
-            // Применяем трансформацию к изображению
-            const scalePercent = avatarEditorState.zoom;
-            const offsetXPercent = avatarEditorState.offsetX;
-            const offsetYPercent = avatarEditorState.offsetY;
-            
-            img.style.transform = `scale(${scalePercent}) translate(${offsetXPercent}px, ${offsetYPercent}px)`;
-        }
-    }
-
-    // Функция закрытия редактора аватара
-    function closeAvatarEditor() {
-        const target = document.querySelector('.target');
-        if (target) target.style.visibility = 'visible';
-        document.getElementById('avatarEditorModal').classList.remove('active');
-        avatarEditorState = {
-            fileBlob: null,
-            zoom: 1,
-            offsetX: 0,
-            offsetY: 0
-        };
-    }
-
-    // Функция сохранения отредактированного аватара
-    async function saveAvatarEdit() {
-        try {
-            if (!avatarEditorState.fileBlob) {
-                alert('Ошибка: файл не загружен');
-                return;
+        avatarEditorInitPromise = (async () => {
+            if (typeof window.TelegramAvatarEditor !== 'function') {
+                throw new Error('Модуль редактора аватара не загружен');
             }
 
-            // Создаем canvas для вырезания круглого изображения
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 400;
-            canvas.height = 400;
+            const editor = new window.TelegramAvatarEditor({
+                fileInput: '#profile-photo-input',
+                cssPath: './avatar-editor.css',
+                title: 'Редактор аватара',
+                saveText: 'Обрезать и сохранить',
+                onSave: async (blob) => {
+                    const avatarUrl = await uploadAvatarBlobToStorage(blob, 'jpg');
+                    const safeAvatarUrl = sanitizeMediaUrl(avatarUrl);
+                    if (!safeAvatarUrl) throw new Error('Некорректный URL аватара');
 
-            // Загружаем изображение
-            const img = new Image();
-            img.onload = async function() {
-                // Очищаем canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Рисуем круглую маску
-                ctx.beginPath();
-                ctx.arc(200, 200, 200, 0, Math.PI * 2);
-                ctx.clip();
-
-                // Применяем масштабирование и смещение
-                const scaleFactor = avatarEditorState.zoom;
-                const offsetX = (canvas.width / 2) + (avatarEditorState.offsetX * 2);
-                const offsetY = (canvas.height / 2) + (avatarEditorState.offsetY * 2);
-
-                // Рисуем изображение с трансформацией
-                ctx.drawImage(
-                    img,
-                    offsetX - (img.width / 2) * scaleFactor,
-                    offsetY - (img.height / 2) * scaleFactor,
-                    img.width * scaleFactor,
-                    img.height * scaleFactor
-                );
-
-                // Получаем blob из canvas
-                canvas.toBlob((blob) => {
-                    try {
-                        // Преобразуем blob в Base64
-                        const reader = new FileReader();
-                        reader.onload = function(event) {
-                            const base64 = event.target.result; // data:image/jpeg;base64,...
-
-                            // Отображаем фото как аватар
-                            const avatarEl = document.getElementById('profile-avatar-display');
-                            avatarEl.style.backgroundImage = `url('${base64}')`;
-                            avatarEl.style.backgroundSize = 'cover';
-                            avatarEl.style.backgroundPosition = 'center';
-                            avatarEl.textContent = '';
-
-                            // Сохраняем Base64 в поле
-                            document.getElementById('profile-avatar-url').value = base64;
-                            document.getElementById('profile-avatar-value').value = '';
-
-                            // Закрываем редактор
-                            closeAvatarEditor();
-                            alert('✅ Аватар сохранен!');
-                        };
-                        reader.readAsDataURL(blob);
-                    } catch (err) {
-                        alert('Ошибка загрузки: ' + (err?.message || err));
+                    const avatarEl = document.getElementById('profile-avatar-display');
+                    if (avatarEl) {
+                        avatarEl.style.backgroundImage = `url('${safeAvatarUrl}')`;
+                        avatarEl.style.backgroundSize = 'cover';
+                        avatarEl.style.backgroundPosition = 'center';
+                        avatarEl.textContent = '';
                     }
-                }, 'image/jpeg', 0.9);
-            };
 
-            // Загружаем исходное изображение
-            img.src = document.getElementById('avatarEditorImage').src;
-        } catch (err) {
-            alert('Ошибка сохранения: ' + (err?.message || err));
+                    const avatarUrlEl = document.getElementById('profile-avatar-url');
+                    const avatarValueEl = document.getElementById('profile-avatar-value');
+                    if (avatarUrlEl) avatarUrlEl.value = safeAvatarUrl;
+                    if (avatarValueEl) avatarValueEl.value = '';
+                    if (currentDriver) currentDriver.avatar_url = safeAvatarUrl;
+
+                    alert('✅ Аватар сохранен');
+                },
+                onError: (error) => {
+                    const msg = error?.message || 'Ошибка редактора аватара';
+                    console.warn('Avatar editor error:', msg);
+                }
+            });
+
+            await editor.init();
+            avatarEditorInstance = editor;
+            return editor;
+        })();
+
+        try {
+            return await avatarEditorInitPromise;
+        } finally {
+            avatarEditorInitPromise = null;
         }
+    }
+
+    async function changeAvatar() {
+        try {
+            await ensureAvatarEditorReady();
+            document.getElementById('profile-photo-input')?.click();
+        } catch (e) {
+            alert('Ошибка загрузки редактора: ' + (e?.message || e));
+        }
+    }
+
+    function closeAvatarEditor() {
+        try { avatarEditorInstance?.close?.(); } catch (e) {}
+    }
+
+    async function saveAvatarEdit() {
+        try { await avatarEditorInstance?.save?.(); } catch (e) {}
     }
 
     // Функция сохранения изменений профиля
