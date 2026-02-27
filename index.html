@@ -91,16 +91,18 @@
         /* ============= ЭКРАН ПРИВЕТСТВИЯ ============= */
 
         /* --- YM3 кастомный маркер пользователя --- */
+        .user-marker,
         .ym3-user-marker {
-            position: relative;
-            width: 32px;
-            height: 32px;
+            position: absolute;
+            width: 32px !important;
+            height: 32px !important;
             pointer-events: none;
             z-index: 1000;
             will-change: transform;
             transform-origin: 50% 50%;
             transform-box: fill-box;
-            transition: transform 0.5s linear;
+            transform: translate(-50%, -50%) scale(calc(1 / var(--ymaps-viewport-scale, 1))) !important;
+            contain: layout;
         }
         .ym3-user-arrow {
             position: absolute;
@@ -108,14 +110,15 @@
             top: 50%;
             width: 0;
             height: 0;
-            transform: translate(-50%, -50%) rotate(0deg);
+            transform: translate(-50%, -50%) rotateX(65deg) rotateZ(0deg);
             transform-origin: 50% 68%;
             transform-box: fill-box;
+            transform-style: preserve-3d;
             transition: transform 0.3s linear;
             border-left: 6px solid transparent;
             border-right: 6px solid transparent;
             border-bottom: 18px solid #FFD700;
-            filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.75));
+            filter: drop-shadow(0 0 1px rgba(255, 215, 0, 0.65));
             z-index: 2;
         }
         .ym3-user-pulse {
@@ -128,7 +131,6 @@
             background: transparent;
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 8px rgba(255, 215, 0, 0.24);
             animation: ym3UserPulse 1.35s ease-out infinite;
             z-index: 1;
         }
@@ -1487,7 +1489,7 @@
         <button class="action-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
         <button class="action-btn" id="ccMapEngineBtn" onclick="toggleMapEngineFromUI()" title="Тест движка карты" aria-label="Тест движка карты">🗺️</button>
         <button class="action-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
-        <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс">🧭</button>
+        <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс" style="display:none;">🧭</button>
         <button class="action-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
         <button class="action-btn" id="ccChatBtn" onclick="openChatModal()" title="Чат" aria-label="Чат">💬</button>
         <button class="action-btn" id="ccActivityBtn" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС/Спецбат" aria-label="Активность ДПС/Спецбат">👮🛡️</button>
@@ -2952,7 +2954,7 @@
     let lastUserPositionTime = null; // ms
     let userSpeedKmh = 0; // скорость в км/ч
     let userHeadingDeg = 0; // курс (0..360)
-    let dynamicCourseEnabled = true;
+    let dynamicCourseEnabled = false;
     let dynamicCourseCompassDeg = null;
     let dynamicCourseGpsDeg = null;
     let dynamicCourseFusedDeg = null;
@@ -2960,6 +2962,9 @@
     let dynamicCourseLastCompassTs = 0;
     let dynamicCourseCameraTimerId = null;
     let dynamicCourseCompassInit = false;
+    let followCameraAzimuthDeg = 0;
+    const FOLLOW_CAMERA_PITCH_DEG = 65;
+    const FOLLOW_CAMERA_AZIMUTH_SPEED_MS = 2;
     const DYNAMIC_COURSE_TILT = 0.8;
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
     const DYNAMIC_COURSE_AHEAD_MAX_M = 2300;
@@ -5672,32 +5677,24 @@
     }
 
     function loadDynamicCourseEnabled() {
-        try {
-            const raw = localStorage.getItem(DYNAMIC_COURSE_ENABLED_KEY);
-            if (raw === 'true' || raw === 'false') dynamicCourseEnabled = (raw === 'true');
-        } catch (e) {}
+        dynamicCourseEnabled = false;
+        try { localStorage.removeItem(DYNAMIC_COURSE_ENABLED_KEY); } catch (e) {}
     }
 
     function saveDynamicCourseEnabled() {
-        try { localStorage.setItem(DYNAMIC_COURSE_ENABLED_KEY, dynamicCourseEnabled ? 'true' : 'false'); } catch (e) {}
+        dynamicCourseEnabled = false;
+        try { localStorage.removeItem(DYNAMIC_COURSE_ENABLED_KEY); } catch (e) {}
     }
 
     function updateCourseBtnUiState() {
         const btn = document.getElementById('ccCourseBtn');
         if (!btn) return;
-        btn.classList.toggle('active', !!dynamicCourseEnabled);
-        btn.classList.toggle('off', !dynamicCourseEnabled);
-        btn.textContent = dynamicCourseEnabled ? '🧭' : '🧱';
-        btn.title = dynamicCourseEnabled ? 'Динамический курс: ВКЛ' : 'Динамический курс: ВЫКЛ';
+        btn.style.display = 'none';
     }
 
     function toggleDynamicCourseFromUI() {
-        dynamicCourseEnabled = !dynamicCourseEnabled;
+        dynamicCourseEnabled = false;
         saveDynamicCourseEnabled();
-        if (dynamicCourseEnabled) {
-            requestDynamicCourseOrientationPermission().catch(()=>{});
-            try { updateDynamicCourseCamera(); } catch (e) {}
-        }
         updateCourseBtnUiState();
     }
 
@@ -5824,9 +5821,7 @@
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try { updateDynamicCourseCamera(); } catch (e) {
-                            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
-                        }
+                        try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
@@ -6780,18 +6775,19 @@
     }
 
     function updateDynamicCourseCamera() {
-        if (!dynamicCourseEnabled) return;
-        if (!myMap || !autoFollow || !userLocation) return;
+        return;
 
         const heading = getDynamicCourseHeadingDeg();
         if (!Number.isFinite(Number(heading))) return;
 
         const speed = Number(userSpeedKmh) || 0;
+        const speedMs = speed / 3.6;
         const targetZoom = getDynamicFollowZoomBySpeed(speed);
         const aheadMeters = Math.max(
             DYNAMIC_COURSE_AHEAD_MIN_M,
             Math.min(DYNAMIC_COURSE_AHEAD_MAX_M, 650 + speed * 10)
         );
+        // Смещение центра вперёд по курсу: игрок визуально оказывается в нижней части экрана
         const cameraTarget = destinationPointByBearing(userLocation[0], userLocation[1], heading, aheadMeters);
 
         const smoothedHeading = (dynamicCourseFusedDeg === null)
@@ -6800,60 +6796,76 @@
         dynamicCourseFusedDeg = smoothedHeading;
         userHeadingDeg = smoothedHeading;
 
+        if (!Number.isFinite(Number(followCameraAzimuthDeg))) {
+            followCameraAzimuthDeg = smoothedHeading;
+        }
+        if (speedMs > FOLLOW_CAMERA_AZIMUTH_SPEED_MS) {
+            followCameraAzimuthDeg = smoothedHeading;
+        }
+
         try {
+            const ym3Root = myMap?.__ym3Root;
+            if (ym3Root) {
+                const location = {
+                    center: [Number(cameraTarget[1]), Number(cameraTarget[0])],
+                    zoom: targetZoom,
+                    azimuth: followCameraAzimuthDeg,
+                    pitch: FOLLOW_CAMERA_PITCH_DEG,
+                    tilt: FOLLOW_CAMERA_PITCH_DEG,
+                    duration: 800,
+                    easing: 'linear'
+                };
+                if (typeof ym3Root.setLocation === 'function') ym3Root.setLocation(location);
+                else ym3Root.update({ location });
+
+                myMap.__ym3LastCenter = [Number(cameraTarget[0]), Number(cameraTarget[1])];
+                myMap.__ym3LastZoom = Number(targetZoom);
+                myMap.__ym3LastAzimuth = Number(followCameraAzimuthDeg);
+                myMap.__ym3LastTilt = Number(FOLLOW_CAMERA_PITCH_DEG);
+                return;
+            }
+
             const mapAny = myMap;
             if (typeof mapAny?.setCamera === 'function') {
                 mapAny.setCamera({
                     center: cameraTarget,
-                    azimuth: smoothedHeading,
-                    tilt: DYNAMIC_COURSE_TILT,
+                    azimuth: followCameraAzimuthDeg,
+                    tilt: FOLLOW_CAMERA_PITCH_DEG,
                     zoom: targetZoom,
-                    duration: 500
+                    duration: 800
                 });
             } else if (mapAny?.options?.set) {
-                mapAny.options.set('rotation', smoothedHeading);
-                mapAny.options.set('azimuth', smoothedHeading);
-                mapAny.options.set('tilt', DYNAMIC_COURSE_TILT);
+                mapAny.options.set('rotation', followCameraAzimuthDeg);
+                mapAny.options.set('azimuth', followCameraAzimuthDeg);
+                mapAny.options.set('tilt', FOLLOW_CAMERA_PITCH_DEG);
             }
         } catch (e) {}
 
         const canMove = !Number.isFinite(dynamicCourseLastCameraDeg)
-            || Math.abs(shortestAngleDeltaDeg(dynamicCourseLastCameraDeg, smoothedHeading)) >= 1.2
+            || Math.abs(shortestAngleDeltaDeg(dynamicCourseLastCameraDeg, followCameraAzimuthDeg)) >= 1.2
             || speed >= 12;
         if (!canMove) return;
 
-        dynamicCourseLastCameraDeg = smoothedHeading;
+        dynamicCourseLastCameraDeg = followCameraAzimuthDeg;
         try {
-            myMap.setCenter(cameraTarget, targetZoom, { duration: 500, timingFunction: 'ease-out' });
+            myMap.setCenter(cameraTarget, targetZoom, { duration: 800, timingFunction: 'linear' });
         } catch (e) {
             try { myMap.setCenter(cameraTarget, targetZoom); } catch (e2) {}
         }
     }
 
     function startDynamicCourseLoop() {
-        if (dynamicCourseCameraTimerId) return;
-        dynamicCourseCameraTimerId = setInterval(() => {
-            try { updateDynamicCourseCamera(); } catch (e) {}
-        }, DYNAMIC_COURSE_UPDATE_MS);
+        if (dynamicCourseCameraTimerId) {
+            clearInterval(dynamicCourseCameraTimerId);
+            dynamicCourseCameraTimerId = null;
+        }
+        return;
     }
 
     function initDynamicCourseSensors() {
-        if (dynamicCourseCompassInit) return;
-        dynamicCourseCompassInit = true;
-        const orientationAllowed = isFeatureAllowedByPolicy('accelerometer') && isFeatureAllowedByPolicy('gyroscope');
-        if (!orientationAllowed) {
-            if (!initDynamicCourseSensors.__policyWarned) {
-                initDynamicCourseSensors.__policyWarned = true;
-                console.info('Компасные сенсоры недоступны по policy — курс остаётся по GPS.');
-            }
-            startDynamicCourseLoop();
-            return;
-        }
-        try {
-            window.addEventListener('deviceorientationabsolute', onDynamicCourseOrientation, true);
-            window.addEventListener('deviceorientation', onDynamicCourseOrientation, true);
-        } catch (e) {}
+        dynamicCourseEnabled = false;
         startDynamicCourseLoop();
+        return;
     }
     
     // --- YM3: Плавный кастомный маркер пользователя ---
@@ -6877,7 +6889,10 @@
             if (!ym3UserMarker) {
                 // HTML структура маркера
                 ym3UserMarkerEl = document.createElement('div');
-                ym3UserMarkerEl.className = 'ym3-user-marker';
+                                ym3UserMarkerEl.className = 'user-marker ym3-user-marker';
+                                ym3UserMarkerEl.style.pointerEvents = 'none';
+                                ym3UserMarkerEl.style.width = '32px';
+                                ym3UserMarkerEl.style.height = '32px';
                 ym3UserMarkerEl.innerHTML = `
                   <div class="ym3-user-pulse"></div>
                   <div class="ym3-user-arrow"></div>
@@ -6896,9 +6911,9 @@
             // Плавный поворот стрелки
             if (ym3UserArrowEl) {
                 if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
-                    ym3UserArrowEl.style.transform = `rotate(${heading}deg)`;
+                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotateX(65deg) rotateZ(${heading}deg)`;
                 } else {
-                    ym3UserArrowEl.style.transform = `rotate(${lastUserHeading}deg)`;
+                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotateX(65deg) rotateZ(${lastUserHeading}deg)`;
                 }
                 lastUserHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
             }
@@ -6917,11 +6932,8 @@
         }
         autoFollow = true;
         updateFollowButton();
-        requestDynamicCourseOrientationPermission().catch(()=>{});
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
-        try { updateDynamicCourseCamera(); } catch (e) {
-            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
-        }
+        try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
     }
 
     // Переключатель автослежения GPS
@@ -6930,10 +6942,7 @@
         updateFollowButton();
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         if (autoFollow && userLocation && myMap) {
-            requestDynamicCourseOrientationPermission().catch(()=>{});
-            try { updateDynamicCourseCamera(); } catch(e) {
-                try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
-            }
+            try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
         }
     }
 
