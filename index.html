@@ -94,8 +94,8 @@
         .user-marker,
         .ym3-user-marker {
             position: absolute;
-            width: 32px !important;
-            height: 32px !important;
+            width: 44px !important;
+            height: 44px !important;
             pointer-events: none;
             z-index: 1000;
             will-change: transform;
@@ -115,19 +115,19 @@
             transform-box: fill-box;
             transform-style: preserve-3d;
             transition: transform 0.3s linear;
-            border-left: 6px solid transparent;
-            border-right: 6px solid transparent;
-            border-bottom: 18px solid #FFD700;
-            filter: drop-shadow(0 0 1px rgba(255, 215, 0, 0.65));
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 24px solid #FFD700;
+            filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.72));
             z-index: 2;
         }
         .ym3-user-pulse {
             position: absolute;
             left: 50%;
             top: 50%;
-            width: 14px;
-            height: 14px;
-            border: 1.5px solid rgba(255, 215, 0, 0.45);
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255, 215, 0, 0.45);
             background: transparent;
             border-radius: 50%;
             transform: translate(-50%, -50%);
@@ -6020,13 +6020,6 @@
                 const zoom = Number.isFinite(Number(camera.zoom)) ? Number(camera.zoom) : (map.getZoom ? map.getZoom() : 16);
                 const duration = Number.isFinite(Number(camera.duration)) ? Number(camera.duration) : 500;
 
-                try {
-                    if (map.options && typeof map.options.set === 'function') {
-                        if (Number.isFinite(Number(camera.azimuth))) map.options.set('azimuth', normalizeDeg(camera.azimuth));
-                        if (Number.isFinite(Number(camera.tilt))) map.options.set('tilt', Number(camera.tilt));
-                    }
-                } catch (e) {}
-
                 if (center && map.setCenter) {
                     try {
                         map.setCenter(center, zoom, { duration, timingFunction: 'ease-out' });
@@ -6066,113 +6059,50 @@
     }
 
     function loadMap3dPreference() {
-        try {
-            map3dEnabled = localStorage.getItem(MAP_3D_MODE_KEY) === '1';
-        } catch (e) {
-            map3dEnabled = false;
-        }
+        map3dEnabled = false;
+        try { localStorage.removeItem(MAP_3D_MODE_KEY); } catch (e) {}
     }
 
     function saveMap3dPreference() {
-        try { localStorage.setItem(MAP_3D_MODE_KEY, map3dEnabled ? '1' : '0'); } catch (e) {}
+        map3dEnabled = false;
+        try { localStorage.removeItem(MAP_3D_MODE_KEY); } catch (e) {}
     }
 
     function updateMap3dToggleUi() {
         const isYm3Active = String(activeMapEngine || preferredMapEngine || '').includes('ymaps3');
-        const effectiveOn = !!(map3dEnabled && isYm3Active);
 
         const floatingBtn = document.getElementById('map3dToggleFloating');
         if (floatingBtn) {
-            floatingBtn.classList.toggle('is-on', effectiveOn);
-            floatingBtn.textContent = effectiveOn ? '3D ON' : '3D OFF';
-            floatingBtn.title = isYm3Active ? (effectiveOn ? 'Отключить 3D режим карты' : 'Включить 3D режим карты') : '3D доступно только в ymaps3';
+            floatingBtn.classList.remove('is-on');
+            floatingBtn.textContent = '2D';
+            floatingBtn.title = '2D режим (наклон и 3D отключены)';
+            floatingBtn.style.display = 'none';
         }
 
         const settingsBtn = document.getElementById('map3dSettingsBtn');
         if (settingsBtn) {
-            settingsBtn.classList.toggle('active', effectiveOn);
-            settingsBtn.textContent = `3D: ${effectiveOn ? 'ВКЛ' : 'ВЫКЛ'}`;
+            settingsBtn.classList.remove('active');
+            settingsBtn.textContent = '2D: ВКЛ';
+            settingsBtn.style.display = 'none';
         }
 
         const hint = document.getElementById('map3dSettingsHint');
         if (hint) {
             hint.textContent = isYm3Active
-                ? `Режим карты: ${effectiveOn ? '3D (наклон карты)' : '2D (плоский режим)'}`
-                : '3D доступно только в ymaps3';
-        }
-    }
-
-    function ensureYm3BuildingsLayer(enabled) {
-        try {
-            const root = myMap?.__ym3Root;
-            if (!root) return false;
-            if (String(activeMapEngine || '') === 'ymaps3-compat') return false;
-            const YMapLayerCtor = myMap?.__ym3Core?.YMapLayer || ymaps3?.YMapLayer;
-            if (!YMapLayerCtor) return false;
-
-            if (enabled) {
-                if (!myMap.__ym3BuildingsLayer) {
-                    myMap.__ym3BuildingsLayer = new YMapLayerCtor({ source: 'scheme', type: 'buildings', zIndex: 1800 });
-                    root.addChild(myMap.__ym3BuildingsLayer);
-                }
-            } else if (myMap.__ym3BuildingsLayer) {
-                try { root.removeChild(myMap.__ym3BuildingsLayer); } catch (e) {}
-                myMap.__ym3BuildingsLayer = null;
-            }
-            return true;
-        } catch (e) {
-            return false;
+                ? 'Режим карты: 2D (плоский, стабильный)'
+                : 'Режим карты: 2D (legacy)';
         }
     }
 
     function applyMap3dMode(options = {}) {
-        const animate = options?.animate !== false;
-        const root = myMap?.__ym3Root;
-        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') && !!root;
-        if (!isYm3Active) {
-            updateMap3dToggleUi();
-            return false;
-        }
-
-        const center = Array.isArray(myMap.__ym3LastCenter) ? myMap.__ym3LastCenter : (typeof myMap.getCenter === 'function' ? myMap.getCenter() : [48.01, 37.8]);
-        const currentZoom = Number.isFinite(Number(myMap.__ym3LastZoom)) ? Number(myMap.__ym3LastZoom) : (typeof myMap.getZoom === 'function' ? Number(myMap.getZoom() || 16) : 16);
-        const zoom = map3dEnabled ? Math.max(MAP_3D_MIN_ZOOM, currentZoom) : currentZoom;
-        const lat = Number(center?.[0]);
-        const lon = Number(center?.[1]);
-        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
-
-        const tilt = map3dEnabled ? MAP_3D_TILT_DEG : 0;
-        const azimuth = Number.isFinite(Number(myMap.__ym3LastAzimuth)) ? Number(myMap.__ym3LastAzimuth) : 0;
-        ensureYm3BuildingsLayer(map3dEnabled);
-
-        const location = {
-            center: [lon, lat],
-            zoom,
-            azimuth,
-            tilt,
-            duration: animate ? 650 : 0
-        };
-
-        try {
-            if (typeof root.setLocation === 'function') root.setLocation(location);
-            else root.update({ location });
-            myMap.__ym3LastTilt = tilt;
-            myMap.__ym3LastAzimuth = azimuth;
-            myMap.__ym3LastZoom = zoom;
-        } catch (e) {}
-
         updateMap3dToggleUi();
-        return true;
+        return false;
     }
 
     function toggleMap3dFromUI() {
-        map3dEnabled = !map3dEnabled;
+        map3dEnabled = false;
         saveMap3dPreference();
-        const applied = applyMap3dMode({ animate: true });
-        if (!applied) {
-            updateMap3dToggleUi();
-            showInAppNotification({ title: '3D режим', body: '3D доступен только при активном ymaps3.', priority: 'low' });
-        }
+        updateMap3dToggleUi();
     }
 
     window.toggleMap3dFromUI = toggleMap3dFromUI;
@@ -6249,11 +6179,9 @@
 
         if (activeMapEngine === 'ymaps3-compat') {
             try {
-                const FORCED_3D_PITCH = 60;
                 let ym3Core = null;
                 let ym3Markers = null;
                 let ym3DefaultUi = null;
-                let ym3Controls = null;
                 try { ym3Core = await ymaps3.import('@yandex/ymaps3'); } catch (e) { ym3Core = null; }
                 try { ym3Markers = await ymaps3.import('@yandex/ymaps3-markers@0.0.1'); } catch (e) {
                     try { ym3Markers = await ymaps3.import('@yandex/ymaps3-markers'); } catch (e2) { ym3Markers = null; }
@@ -6261,62 +6189,30 @@
                 try { ym3DefaultUi = await ymaps3.import('@yandex/ymaps3-default-ui-theme@0.0.1'); } catch (e) {
                     try { ym3DefaultUi = await ymaps3.import('@yandex/ymaps3-default-ui-theme'); } catch (e2) { ym3DefaultUi = null; }
                 }
-                try { ym3Controls = await ymaps3.import('@yandex/ymaps3-controls@0.0.1'); } catch (e) {
-                    try { ym3Controls = await ymaps3.import('@yandex/ymaps3-controls'); } catch (e2) { ym3Controls = null; }
-                }
 
                 const YMapCtor = ym3Core?.YMap || ymaps3?.YMap;
                 const SchemeCtor = ym3Core?.YMapDefaultSchemeLayer || ymaps3?.YMapDefaultSchemeLayer;
                 const FeaturesCtor = ym3Core?.YMapDefaultFeaturesLayer || ymaps3?.YMapDefaultFeaturesLayer;
                 const MarkerCtor = ym3Markers?.YMapMarker || ymaps3?.YMapMarker;
                 if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
-                    map3dEnabled = true;
+                    map3dEnabled = false;
                     const root = new YMapCtor(visualMapHost, {
                         location: {
                             center: [37.80, 48.01],
                             zoom: 16,
-                            pitch: FORCED_3D_PITCH,
-                            tilt: FORCED_3D_PITCH,
-                            azimuth: 0
+                            pitch: 0,
+                            tilt: 0
                         }
                     });
                     try {
                         if (typeof root.setUpdateProps === 'function') {
-                            root.setUpdateProps({ location: { pitch: FORCED_3D_PITCH, tilt: FORCED_3D_PITCH } });
+                            root.setUpdateProps({ location: { pitch: 0, tilt: 0 } });
                         }
                     } catch (e) {}
                     const scheme = new SchemeCtor({ id: 'scheme' });
                     root.addChild(scheme);
                     const features = new ymaps3.YMapDefaultFeaturesLayer({});
                     root.addChild(features);
-                    try {
-                        const YMapControlsCtor = ym3Controls?.YMapControls || ym3Core?.YMapControls || ymaps3?.YMapControls;
-                        const YMapControlCtor = ym3Controls?.YMapControl || ym3Core?.YMapControl || ymaps3?.YMapControl;
-                        if (YMapControlsCtor && YMapControlCtor) {
-                            const cameraCtrlHost = document.createElement('button');
-                            cameraCtrlHost.type = 'button';
-                            cameraCtrlHost.textContent = '3D';
-                            cameraCtrlHost.style.cssText = 'background:rgba(0,0,0,.62);color:#fff;border:1px solid rgba(255,255,255,.24);border-radius:10px;padding:6px 10px;cursor:pointer;';
-                            cameraCtrlHost.addEventListener('click', () => {
-                                try {
-                                    if (typeof root.setLocation === 'function') {
-                                        root.setLocation({
-                                            center: [Number(myMap.__ym3LastCenter?.[1] || 37.80), Number(myMap.__ym3LastCenter?.[0] || 48.01)],
-                                            zoom: Math.max(16, Number(myMap.__ym3LastZoom || 16)),
-                                            pitch: FORCED_3D_PITCH,
-                                            tilt: FORCED_3D_PITCH,
-                                            azimuth: Number(myMap.__ym3LastAzimuth || 0),
-                                            duration: 1000
-                                        });
-                                    }
-                                } catch (e) {}
-                            });
-                            root.addChild(
-                                new YMapControlsCtor({ position: 'right' })
-                                    .addChild(new YMapControlCtor({ position: 'top right' }, cameraCtrlHost))
-                            );
-                        }
-                    } catch (e) {}
                     try {
                         const ZoomControlCtor = ym3DefaultUi?.YMapZoomControl;
                         if (ZoomControlCtor) root.addChild(new ZoomControlCtor({}));
@@ -6327,30 +6223,8 @@
                     myMap.__ym3BuildingsLayer = null;
                     myMap.__ym3LastCenter = [48.01, 37.80];
                     myMap.__ym3LastZoom = 16;
-                    myMap.__ym3LastTilt = FORCED_3D_PITCH;
+                    myMap.__ym3LastTilt = 0;
                     myMap.__ym3LastAzimuth = 0;
-
-                    setTimeout(() => {
-                        try {
-                            if (!myMap?.__ym3Root) return;
-                            const centerNow = Array.isArray(myMap.__ym3LastCenter) ? myMap.__ym3LastCenter : [48.01, 37.80];
-                            const zoomNow = Math.max(16, Number(myMap.__ym3LastZoom || 16));
-                            const azNow = Number(myMap.__ym3LastAzimuth || 0);
-                            const loc = {
-                                center: [Number(centerNow[1]), Number(centerNow[0])],
-                                zoom: zoomNow,
-                                pitch: FORCED_3D_PITCH,
-                                tilt: FORCED_3D_PITCH,
-                                azimuth: azNow,
-                                duration: 1000
-                            };
-                            if (typeof root.setLocation === 'function') root.setLocation(loc);
-                            else root.update({ location: loc });
-                            myMap.__ym3LastTilt = FORCED_3D_PITCH;
-                            myMap.__ym3LastZoom = zoomNow;
-                            myMap.__ym3LastAzimuth = azNow;
-                        } catch (e) {}
-                    }, 500);
 
                     const approximateBoundsFromCenterZoom = (center, zoom) => {
                         const lat = Number(center?.[0]);
@@ -6379,15 +6253,16 @@
                         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return myMap;
                         myMap.__ym3LastCenter = [lat, lon];
                         myMap.__ym3LastZoom = nextZoom;
-                        myMap.__ym3LastAzimuth = Number.isFinite(Number(options?.azimuth)) ? Number(options.azimuth) : Number(myMap.__ym3LastAzimuth || 0);
+                        myMap.__ym3LastAzimuth = 0;
+                        myMap.__ym3LastTilt = 0;
                         myMap.__ym3LastBounds = approximateBoundsFromCenterZoom(myMap.__ym3LastCenter, myMap.__ym3LastZoom);
                         try {
                             root.update({
                                 location: {
                                     center: [lon, lat],
                                     zoom: nextZoom,
-                                    azimuth: Number(options?.azimuth || 0),
-                                    tilt: Number.isFinite(Number(options?.tilt)) ? Number(options.tilt) : (map3dEnabled ? MAP_3D_TILT_DEG : 0)
+                                    pitch: 0,
+                                    tilt: 0
                                 }
                             });
                         } catch (e) {}
@@ -6426,9 +6301,6 @@
         mapAdapter = createMapAdapter(activeMapEngine, myMap, markersCollection);
         updateMapEngineBadge();
         updateMap3dToggleUi();
-        if (activeMapEngine === 'ymaps3-compat') {
-            try { applyMap3dMode({ animate: false }); } catch (e) {}
-        }
 
         if (activeMapEngine === 'ymaps3-compat') {
             console.info('🧭 ymaps3 active: running staged adapter mode with legacy-safe fallback.');
@@ -6555,8 +6427,8 @@
                                 if (Number.isFinite(lat) && Number.isFinite(lon)) {
                                     map.__ym3LastCenter = [lat, lon];
                                     if (Number.isFinite(zoom)) map.__ym3LastZoom = zoom;
-                                    if (Number.isFinite(Number(loc?.azimuth))) map.__ym3LastAzimuth = Number(loc.azimuth);
-                                    if (Number.isFinite(Number(loc?.tilt))) map.__ym3LastTilt = Number(loc.tilt);
+                                    map.__ym3LastAzimuth = 0;
+                                    map.__ym3LastTilt = 0;
                                     map.__ym3LastBounds = approximateBoundsFromCenterZoom([lat, lon], map.__ym3LastZoom || 16);
                                 }
                             } catch (e) {}
@@ -6763,94 +6635,22 @@
         attachYandexCameraCompat(myMap);
         try {
             if (typeof myMap.setBehaviors === 'function') {
-                myMap.setBehaviors(['drag', 'scrollZoom', 'tilt', 'rotate']);
+                myMap.setBehaviors(['drag', 'scrollZoom']);
                 return;
             }
         } catch (e) {}
         try {
             if (myMap.behaviors && typeof myMap.behaviors.enable === 'function') {
-                myMap.behaviors.enable(['drag', 'scrollZoom', 'tilt', 'rotate']);
+                myMap.behaviors.enable(['drag', 'scrollZoom']);
             }
         } catch (e) {}
     }
 
     function updateDynamicCourseCamera() {
-        return;
-
-        const heading = getDynamicCourseHeadingDeg();
-        if (!Number.isFinite(Number(heading))) return;
-
-        const speed = Number(userSpeedKmh) || 0;
-        const speedMs = speed / 3.6;
-        const targetZoom = getDynamicFollowZoomBySpeed(speed);
-        const aheadMeters = Math.max(
-            DYNAMIC_COURSE_AHEAD_MIN_M,
-            Math.min(DYNAMIC_COURSE_AHEAD_MAX_M, 650 + speed * 10)
-        );
-        // Смещение центра вперёд по курсу: игрок визуально оказывается в нижней части экрана
-        const cameraTarget = destinationPointByBearing(userLocation[0], userLocation[1], heading, aheadMeters);
-
-        const smoothedHeading = (dynamicCourseFusedDeg === null)
-            ? normalizeDeg(heading)
-            : smoothAngleDeg(dynamicCourseFusedDeg, heading, 0.22);
-        dynamicCourseFusedDeg = smoothedHeading;
-        userHeadingDeg = smoothedHeading;
-
-        if (!Number.isFinite(Number(followCameraAzimuthDeg))) {
-            followCameraAzimuthDeg = smoothedHeading;
-        }
-        if (speedMs > FOLLOW_CAMERA_AZIMUTH_SPEED_MS) {
-            followCameraAzimuthDeg = smoothedHeading;
-        }
-
-        try {
-            const ym3Root = myMap?.__ym3Root;
-            if (ym3Root) {
-                const location = {
-                    center: [Number(cameraTarget[1]), Number(cameraTarget[0])],
-                    zoom: targetZoom,
-                    azimuth: followCameraAzimuthDeg,
-                    pitch: FOLLOW_CAMERA_PITCH_DEG,
-                    tilt: FOLLOW_CAMERA_PITCH_DEG,
-                    duration: 800,
-                    easing: 'linear'
-                };
-                if (typeof ym3Root.setLocation === 'function') ym3Root.setLocation(location);
-                else ym3Root.update({ location });
-
-                myMap.__ym3LastCenter = [Number(cameraTarget[0]), Number(cameraTarget[1])];
-                myMap.__ym3LastZoom = Number(targetZoom);
-                myMap.__ym3LastAzimuth = Number(followCameraAzimuthDeg);
-                myMap.__ym3LastTilt = Number(FOLLOW_CAMERA_PITCH_DEG);
-                return;
-            }
-
-            const mapAny = myMap;
-            if (typeof mapAny?.setCamera === 'function') {
-                mapAny.setCamera({
-                    center: cameraTarget,
-                    azimuth: followCameraAzimuthDeg,
-                    tilt: FOLLOW_CAMERA_PITCH_DEG,
-                    zoom: targetZoom,
-                    duration: 800
-                });
-            } else if (mapAny?.options?.set) {
-                mapAny.options.set('rotation', followCameraAzimuthDeg);
-                mapAny.options.set('azimuth', followCameraAzimuthDeg);
-                mapAny.options.set('tilt', FOLLOW_CAMERA_PITCH_DEG);
-            }
-        } catch (e) {}
-
-        const canMove = !Number.isFinite(dynamicCourseLastCameraDeg)
-            || Math.abs(shortestAngleDeltaDeg(dynamicCourseLastCameraDeg, followCameraAzimuthDeg)) >= 1.2
-            || speed >= 12;
-        if (!canMove) return;
-
-        dynamicCourseLastCameraDeg = followCameraAzimuthDeg;
-        try {
-            myMap.setCenter(cameraTarget, targetZoom, { duration: 800, timingFunction: 'linear' });
-        } catch (e) {
-            try { myMap.setCenter(cameraTarget, targetZoom); } catch (e2) {}
+        if (!myMap || !autoFollow || !userLocation) return;
+        try { myMap.setCenter(userLocation, 17, { duration: 450, timingFunction: 'ease-out' }); }
+        catch (e) {
+            try { myMap.setCenter(userLocation, 17); } catch (e2) {}
         }
     }
 
@@ -6891,8 +6691,8 @@
                 ym3UserMarkerEl = document.createElement('div');
                                 ym3UserMarkerEl.className = 'user-marker ym3-user-marker';
                                 ym3UserMarkerEl.style.pointerEvents = 'none';
-                                ym3UserMarkerEl.style.width = '32px';
-                                ym3UserMarkerEl.style.height = '32px';
+                                ym3UserMarkerEl.style.width = '44px';
+                                ym3UserMarkerEl.style.height = '44px';
                 ym3UserMarkerEl.innerHTML = `
                   <div class="ym3-user-pulse"></div>
                   <div class="ym3-user-arrow"></div>
