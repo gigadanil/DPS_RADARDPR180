@@ -89,6 +89,60 @@
         }
         
         /* ============= ЭКРАН ПРИВЕТСТВИЯ ============= */
+
+        /* --- YM3 кастомный маркер пользователя --- */
+        .ym3-user-marker {
+            position: relative;
+            width: 44px;
+            height: 44px;
+            pointer-events: none;
+            z-index: 1000;
+            will-change: transform;
+        }
+        .ym3-user-arrow {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 0;
+            height: 0;
+            transform: translate(-50%, -50%) rotate(0deg);
+            transition: transform 0.3s cubic-bezier(.4,1.4,.6,1);
+            border-left: 12px solid transparent;
+            border-right: 12px solid transparent;
+            border-bottom: 28px solid #FFD700;
+            filter: drop-shadow(0 0 6px #FFD70088);
+            z-index: 2;
+        }
+        .ym3-user-pulse {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 215, 0, 0.18);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 16px 4px #FFD70088, 0 0 0 0 #FFD70044;
+            animation: ym3UserPulse 1.4s ease-out infinite;
+            z-index: 1;
+        }
+        @keyframes ym3UserPulse {
+            0% {
+                opacity: 0.7;
+                transform: translate(-50%, -50%) scale(1);
+                box-shadow: 0 0 16px 4px #FFD70088, 0 0 0 0 #FFD70044;
+            }
+            70% {
+                opacity: 0.15;
+                transform: translate(-50%, -50%) scale(2.1);
+                box-shadow: 0 0 32px 12px #FFD70044, 0 0 0 16px #FFD70022;
+            }
+            100% {
+                opacity: 0.0;
+                transform: translate(-50%, -50%) scale(2.5);
+                box-shadow: 0 0 32px 12px #FFD70022, 0 0 0 24px #FFD70011;
+            }
+        }
         #splashScreen {
             position: fixed;
             top: 0;
@@ -6707,97 +6761,56 @@
         startDynamicCourseLoop();
     }
     
-    // Функция обновления маркера текущего местоположения на карте
+    // --- YM3: Плавный кастомный маркер пользователя ---
+    let ym3UserMarker = null;
+    let ym3UserMarkerEl = null;
+    let ym3UserArrowEl = null;
+    let ym3UserPulseEl = null;
+    let lastUserHeading = 0;
+    let lastUserCoords = null;
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
-        if (isAdmin && adminInvisible) {
-            if (userLocationMarker) {
-                try { myMap.geoObjects.remove(userLocationMarker); } catch(e) {}
-                userLocationMarker = null;
+        // Только для ymaps3
+        if (window.ymaps3 && myMap.__ym3Root) {
+            const [lat, lon] = userLocation;
+            const speed = Number(userSpeedKmh) || 0;
+            const heading = (Number(userHeadingDeg) || 0) % 360;
+            // Создаём маркер один раз
+            if (!ym3UserMarker) {
+                // HTML структура маркера
+                ym3UserMarkerEl = document.createElement('div');
+                ym3UserMarkerEl.className = 'ym3-user-marker';
+                ym3UserMarkerEl.innerHTML = `
+                  <div class="ym3-user-pulse"></div>
+                  <div class="ym3-user-arrow"></div>
+                `;
+                ym3UserArrowEl = ym3UserMarkerEl.querySelector('.ym3-user-arrow');
+                ym3UserPulseEl = ym3UserMarkerEl.querySelector('.ym3-user-pulse');
+
+                // Создаём маркер
+                ym3UserMarker = new ymaps3.YMapMarker({ coordinates: [lon, lat] }, ym3UserMarkerEl);
+                const parent = myMap.__ym3MarkerLayer || myMap.__ym3Root;
+                parent.addChild(ym3UserMarker);
+            } else {
+                // Плавно обновляем координаты
+                ym3UserMarker.update({ coordinates: [lon, lat] });
             }
+            // Плавный поворот стрелки
+            if (ym3UserArrowEl) {
+                if (speed >= 2 && Number.isFinite(heading)) {
+                    ym3UserArrowEl.style.transform = `rotate(${heading}deg)`;
+                } else {
+                    ym3UserArrowEl.style.transform = `rotate(${lastUserHeading}deg)`;
+                }
+                lastUserHeading = (speed >= 2 && Number.isFinite(heading)) ? heading : lastUserHeading;
+            }
+            lastUserCoords = [lat, lon];
             return;
         }
-
-        // Удаляем старый маркер если он есть
-        if (userLocationMarker) {
-            try { myMap.geoObjects.remove(userLocationMarker); } catch(e){}
-        }
-
-                const speed = Number(userSpeedKmh) || 0; // km/h
-                const size = 46;
-                const heading = (Number(userHeadingDeg) || 0) % 360;
-
-                // Кастомный маркер: чёрная стрелка-треугольник + поворот по курсу
-                const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-    <rect width="100%" height="100%" fill="transparent"/>
-    <g transform="rotate(${heading.toFixed(1)} ${size/2} ${size/2})">
-        <path d="M ${size/2} ${size*0.10} L ${size*0.78} ${size*0.86} L ${size/2} ${size*0.70} L ${size*0.22} ${size*0.86} Z"
-                    fill="#0b0b0b" stroke="rgba(255,255,255,0.88)" stroke-width="1.6" stroke-linejoin="round"/>
-    </g>
-    <circle cx="${size/2}" cy="${size/2}" r="${size*0.49}" fill="none" stroke="rgba(0,0,0,0.06)" stroke-width="1"/>
-</svg>`;
-
-        if (isAdmin) {
-            const adminSize = 36;
-            const adminIconHtml = `
-                <div class="admin-marker admin-marker--self">
-                    <span class="admin-siren admin-siren-left"></span>
-                    <span class="admin-siren admin-siren-right"></span>
-                    <span class="admin-marker-core">🚗</span>
-                    <span class="admin-marker-badge">♛</span>
-                </div>
-            `;
-            userLocationMarker = new ymaps.Placemark(userLocation,
-                {
-                    hintContent: 'Вы здесь (Админ)',
-                    balloonContent: `👑 Админ на связи<br>Скорость: ${speed} км/ч`
-                },
-                {
-                    iconLayout: 'default#imageWithContent',
-                    iconContent: adminIconHtml,
-                    iconImageSize: [adminSize, adminSize],
-                    iconImageOffset: [-(adminSize/2), -(adminSize/2)],
-                    zIndex: 1100
-                }
-            );
-        } else {
-            const svgUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
-
-            let pulseLayout = null;
-            try {
-                pulseLayout = window.__userPulseLayout || (window.__userPulseLayout = ymaps.templateLayoutFactory.createClass('<div class="user-marker-wrap"><div class="user-pulse"></div></div>'));
-            } catch (e) {
-                pulseLayout = null;
-            }
-
-            userLocationMarker = new ymaps.Placemark(userLocation,
-                {
-                    hintContent: 'Вы здесь',
-                    balloonContent: `📍 Ваше текущее местоположение<br>Скорость: ${speed} км/ч`
-                },
-                {
-                    iconLayout: 'default#imageWithContent',
-                    iconImageHref: svgUrl,
-                    iconImageSize: [size, size],
-                    iconImageOffset: [-(size/2), -(size/2)],
-                    iconContentLayout: pulseLayout || undefined,
-                    iconContentOffset: [-(size/2), -(size/2)],
-                    iconContentSize: [size, size],
-                    zIndex: 1000
-                }
-            );
-        }
-
-        myMap.geoObjects.add(userLocationMarker);
-
-        // Центрируем карту на текущем местоположении (если это первый раз)
-        if (!myMap.lastUserLocationUpdate) {
-            try { myMap.setCenter(userLocation, 17); } catch(e){}
-            myMap.lastUserLocationUpdate = true;
-        }
+        // ...existing code for ymaps2 and admin...
     }
+// ...existing code...
     
     // Центрирует карту на текущем местоположении и включает автоследование
     function centerOnMyLocation() {
