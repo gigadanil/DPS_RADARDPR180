@@ -7958,22 +7958,41 @@
     let avatarEditorInstance = null;
     let avatarEditorInitPromise = null;
 
+    async function blobToDataUrl(blob) {
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error('Не удалось преобразовать изображение'));
+            reader.readAsDataURL(blob);
+        });
+    }
+
     async function uploadAvatarBlobToStorage(blob, ext = 'jpg') {
         if (!_sb || !_sb.storage) throw new Error('Supabase Storage недоступен');
         if (!uid) throw new Error('Пользователь не авторизован');
 
-        try { await ensureSupabaseAuth(); } catch (e) {}
-
-        const bucket = 'avatars';
         const path = `${String(uid)}/${Date.now()}.${ext}`;
         const contentType = blob?.type || 'image/jpeg';
-        const { error } = await _sb.storage.from(bucket).upload(path, blob, { upsert: true, contentType });
-        if (error) throw error;
+        const bucketCandidates = ['avatars', 'media', 'uploads'];
 
-        const publicData = _sb.storage.from(bucket).getPublicUrl(path);
-        const publicUrl = publicData?.data?.publicUrl || '';
-        if (!publicUrl) throw new Error('Не удалось получить публичную ссылку аватара');
-        return publicUrl;
+        for (const bucket of bucketCandidates) {
+            const { error } = await _sb.storage.from(bucket).upload(path, blob, { upsert: true, contentType });
+            if (!error) {
+                const publicData = _sb.storage.from(bucket).getPublicUrl(path);
+                const publicUrl = publicData?.data?.publicUrl || '';
+                if (publicUrl) return publicUrl;
+                throw new Error(`Не удалось получить публичную ссылку аватара (${bucket})`);
+            }
+
+            const msg = String(error?.message || '');
+            const isBucketMissing = /bucket.*not\s*found|not\s*found/i.test(msg);
+            if (!isBucketMissing) {
+                throw error;
+            }
+        }
+
+        console.warn('Bucket для аватаров не найден, используем fallback data URL');
+        return await blobToDataUrl(blob);
     }
 
     async function ensureAvatarEditorReady() {
