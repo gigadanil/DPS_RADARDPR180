@@ -1387,7 +1387,7 @@
     <div class="right-bar" id="rightBar" aria-label="Быстрые действия">
         <button class="action-btn" id="ccProfileBtn" onclick="openProfileModal()" title="Профиль" aria-label="Профиль">👤</button>
         <button class="action-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
-        <button class="action-btn" id="ccMapEngineBtn" onclick="toggleMapEngineFromUI()" title="Тест движка карты (админ)" aria-label="Тест движка карты" style="display:none;">🗺️</button>
+        <button class="action-btn" id="ccMapEngineBtn" onclick="toggleMapEngineFromUI()" title="Тест движка карты" aria-label="Тест движка карты">🗺️</button>
         <button class="action-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
         <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс">🧭</button>
         <button class="action-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
@@ -2093,6 +2093,16 @@
                 </label>
                 <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
                     Работает через системный синтез речи. В фоне зависит от Android/WebView.
+                </div>
+            </div>
+
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">🗺️ Движок карты</div>
+                <button onclick="toggleMapEngineFromUI()" id="mapEngineSettingsBtn" class="main-btn" style="width:100%; background:#007aff; padding:10px; font-size:12px; border-radius:8px;">
+                    Переключить ymaps2 / ymaps3
+                </button>
+                <div id="mapEngineSettingsHint" style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
+                    Текущий режим: —
                 </div>
             </div>
 
@@ -6629,6 +6639,8 @@
         btn.classList.toggle('off', !isV3);
         btn.textContent = isV3 ? '🗺️3' : '🗺️2';
         btn.title = isV3 ? 'Тест движка: ymaps3 (нажмите для ymaps2)' : 'Тест движка: ymaps2 (нажмите для ymaps3)';
+        const hint = document.getElementById('mapEngineSettingsHint');
+        if (hint) hint.textContent = `Текущий режим: ${isV3 ? 'ymaps3' : 'ymaps2'}`;
     }
 
     function toggleMapEngineFromUI() {
