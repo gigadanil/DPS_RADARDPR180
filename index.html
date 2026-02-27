@@ -3068,6 +3068,13 @@
         if (!myMap) return [48.01, 37.80];
 
         const fallback = myMap.getCenter();
+        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
+        if (isYm3Active) {
+            if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
+                return [Number(fallback[0]), Number(fallback[1])];
+            }
+            return [48.01, 37.80];
+        }
         try {
             const target = document.querySelector('.target');
             const projection = myMap.options?.get?.('projection');
