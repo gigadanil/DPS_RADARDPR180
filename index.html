@@ -1609,6 +1609,9 @@
         <button class="locate-btn" id="locateBtn" onclick="centerOnMyLocation()" title="Центрирование" aria-label="Центрирование">
             <span class="locate-icon">➤</span>
         </button>
+        <button class="locate-btn" id="followBottomBtn" onclick="toggleFollow()" title="Автослежение" aria-label="Автослежение">
+            <span class="locate-icon">👁️</span>
+        </button>
         <button class="ptt-btn ptt-fab" id="pttFabBtn" title="Рация (зажми и говори)" aria-label="Рация">🎙️</button>
     </div>
 
@@ -3106,6 +3109,13 @@
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
     let isAdmin = false;
+    let nextGenAccessCache = {
+        checkedAt: 0,
+        allowed: false,
+        isTester: false,
+        isAdmin: false
+    };
+    const NEXT_GEN_ACCESS_CACHE_MS = 60 * 1000;
     // Флаг режима невидимости админа (глобально для всех клиентов)
     let adminInvisible = false;
     // Realtime-канал для админ-уведомлений и статусов
@@ -3259,6 +3269,7 @@
         if (!target) return;
 
         target.style.transform = 'translate(-50%, -50%)';
+        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
 
         // Базируемся на реальной видимой области карты (а не на window.innerHeight),
         // чтобы нижний виджет не перекрывал прицел.
@@ -3272,6 +3283,13 @@
         const baseBottom = mapRect ? mapRect.bottom : window.innerHeight;
         const tgBottom = (tgViewportHeightPx && tgViewportHeightPx > 0) ? (mapTop + tgViewportHeightPx) : 0;
         const mapBottom = tgBottom ? Math.min(baseBottom, tgBottom) : baseBottom;
+
+        // Для ymaps3 прицел всегда должен совпадать с реальным центром карты.
+        if (isYm3Active) {
+            const mid = mapTop + (mapBottom - mapTop) * 0.5;
+            target.style.top = `${Math.round(mid)}px`;
+            return;
+        }
 
         const card = document.getElementById('actionCard');
         if (!actionCardVisible || !card || card.classList.contains('hidden')) {
@@ -6254,6 +6272,54 @@
 
     window.setMapEnginePreference = setMapEnginePreference;
 
+
+    async function getNextGenAccess(force = false) {
+        const now = Date.now();
+        if (!force && (now - Number(nextGenAccessCache.checkedAt || 0)) < NEXT_GEN_ACCESS_CACHE_MS) {
+            return { ...nextGenAccessCache };
+        }
+
+        const adminById = !!uid && String(uid) === String(ADMIN_ID);
+        let allowed = adminById;
+        let testerFlag = false;
+        let adminFlag = adminById;
+
+        if (uid && _sb && typeof _sb.from === 'function') {
+            try {
+                const { data, error } = await _sb
+                    .from('drivers')
+                    .select('is_tester,is_admin')
+                    .eq('user_id', uid)
+                    .maybeSingle();
+
+                if (!error && data) {
+                    testerFlag = !!data.is_tester;
+                    adminFlag = adminById || !!data.is_admin;
+                    allowed = testerFlag || adminFlag;
+                }
+            } catch (e) {}
+        }
+
+        nextGenAccessCache = {
+            checkedAt: now,
+            allowed: !!allowed,
+            isTester: !!testerFlag,
+            isAdmin: !!adminFlag
+        };
+        return { ...nextGenAccessCache };
+    }
+
+    function notifyNextGenDenied() {
+        try {
+            showInAppNotification({
+                title: '🧪 Next-Gen v3.0 (ЗБТ)',
+                body: 'Доступ к движку v3.0 открыт только для участников ЗБТ и администраторов. Если хотите доступ — напишите в поддержку.',
+                priority: 'high'
+            });
+        } catch (e) {
+            alert('🧪 Доступ к v3.0 только для участников ЗБТ и администраторов.');
+        }
+    }
     function ensureLegacyMapHost() {
         let host = document.getElementById('mapLegacyHost');
         if (host) return host;
@@ -6888,6 +6954,17 @@
     let lastUserHeading = 0;
     let lastUserCoords = null;
     const MIN_ROTATE_SPEED_MS = 1.5;
+    function buildUserMarkerHtmlForMap(headingDeg) {
+        const safeHeading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
+        return `
+            <div class="user-marker ym3-user-marker" style="pointer-events:none; width:36px; height:36px;">
+                <div class="ym3-user-halo"></div>
+                <div class="ym3-user-pulse"></div>
+                <div class="ym3-user-arrow" style="transform:translate(-50%, -50%) rotate(${safeHeading}deg)"></div>
+            </div>
+        `;
+    }
+
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
@@ -6933,9 +7010,44 @@
             lastUserCoords = [lat, lon];
             return;
         }
-        // ...existing code for ymaps2 and admin...
+
+        if (!window.ymaps || typeof ymaps.Placemark !== 'function') return;
+        const [lat, lon] = userLocation;
+        const speed = Number(userSpeedKmh) || 0;
+        const speedMs = speed / 3.6;
+        const heading = (Number(userHeadingDeg) || 0) % 360;
+        const visualHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
+        if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
+            lastUserHeading = heading;
+        }
+
+        const iconContent = buildUserMarkerHtmlForMap(visualHeading);
+        try {
+            if (!userLocationMarker) {
+                userLocationMarker = new ymaps.Placemark(
+                    [lat, lon],
+                    { iconContent },
+                    {
+                        iconLayout: 'default#imageWithContent',
+                        iconImageHref: '',
+                        iconImageSize: [36, 36],
+                        iconImageOffset: [-18, -18]
+                    }
+                );
+                if (myMap?.geoObjects?.add) myMap.geoObjects.add(userLocationMarker);
+            } else {
+                if (typeof userLocationMarker.geometry?.setCoordinates === 'function') {
+                    userLocationMarker.geometry.setCoordinates([lat, lon]);
+                }
+                if (typeof userLocationMarker.properties?.set === 'function') {
+                    userLocationMarker.properties.set('iconContent', iconContent);
+                }
+            }
+            lastUserCoords = [lat, lon];
+        } catch (e) {
+            console.warn('Не удалось обновить маркер пользователя (ymaps2):', e?.message || e);
+        }
     }
-// ...existing code...
     
     // Центрирует карту на текущем местоположении и включает автоследование
     function centerOnMyLocation() {
@@ -6965,6 +7077,17 @@
 
     function updateFollowButton() {
         const btn = document.getElementById('followToggleBtn');
+        const bottomBtn = document.getElementById('followBottomBtn');
+        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
+
+        if (bottomBtn) {
+            bottomBtn.style.display = isYm3Active ? 'none' : 'flex';
+            bottomBtn.classList.toggle('active', !!autoFollow);
+            bottomBtn.title = autoFollow ? 'Автослежение: ВКЛ' : 'Автослежение: ВЫКЛ';
+            const iconEl = bottomBtn.querySelector('.locate-icon');
+            if (iconEl) iconEl.textContent = autoFollow ? '👁️' : '🚫';
+        }
+
         if (!btn) {
             try { updateLocateBtnUiState(); } catch(e) {}
             return;
@@ -7031,8 +7154,24 @@
         updateMap3dToggleUi();
     }
 
-    function toggleMapEngineFromUI() {
+    async function toggleMapEngineFromUI() {
         const next = String(preferredMapEngine || '').toLowerCase() === 'ymaps3' ? 'ymaps2' : 'ymaps3';
+
+        if (next === 'ymaps3') {
+            const access = await getNextGenAccess(true);
+            if (!access.allowed) {
+                notifyNextGenDenied();
+                return;
+            }
+            try {
+                showInAppNotification({
+                    title: access.isAdmin ? '🛡️ Admin Next-Gen' : '🚀 Next-Gen v3.0',
+                    body: access.isAdmin ? 'Доступ администратора подтверждён. Магия v3.0 активируется…' : 'Статус ЗБТ подтверждён. Next-Gen v3.0 активируется…',
+                    priority: 'low'
+                });
+            } catch (e) {}
+        }
+
         try {
             if (next === 'ymaps3') {
                 localStorage.removeItem(MAP_ENGINE_LEGACY_FORCE_KEY);
