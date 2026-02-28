@@ -102,6 +102,11 @@
             transform-origin: 50% 50%;
             transform-box: fill-box;
             transform: translate(-50%, -50%) !important;
+            background: transparent !important;
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            backface-visibility: hidden;
             contain: layout;
         }
         .ym3-user-arrow {
@@ -114,6 +119,10 @@
             transform-origin: 50% 74%;
             filter: drop-shadow(0px 4px 2px rgba(0,0,0,0.4));
             transition: transform 0.4s ease-in-out;
+            background: transparent;
+            border: none;
+            will-change: transform;
+            backface-visibility: hidden;
             z-index: 2;
         }
         .ym3-user-arrow::before,
@@ -6939,6 +6948,7 @@
     let legacyUserIconContentLayout = null;
     const LEGACY_USER_MARKER_SIZE = 36;
     const LEGACY_USER_MARKER_HALF = Math.round(LEGACY_USER_MARKER_SIZE / 2);
+    const USER_MARKER_ICON_SVG_HREF = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2236%22 viewBox=%220 0 36 36%22%3E%3Crect width=%2236%22 height=%2236%22 fill=%22none%22/%3E%3C/svg%3E';
     const LEGACY_USER_SMOOTH_WINDOW = 4;
     const legacyUserPathBuffer = [];
     const USER_MARKER_ANIM_DURATION_MS = 500;
@@ -6990,6 +7000,11 @@
                 ym3UserMarkerEl.style.pointerEvents = 'none';
                 ym3UserMarkerEl.style.width = '36px';
                 ym3UserMarkerEl.style.height = '36px';
+                ym3UserMarkerEl.style.background = 'transparent';
+                ym3UserMarkerEl.style.border = 'none';
+                ym3UserMarkerEl.style.outline = 'none';
+                ym3UserMarkerEl.style.boxShadow = 'none';
+                ym3UserMarkerEl.style.willChange = 'transform';
                 ym3UserMarkerEl.innerHTML = `
                     <div class="ym3-user-halo"></div>
                     <div class="ym3-user-pulse"></div>
@@ -7034,7 +7049,7 @@
                     { iconContent },
                     {
                         iconLayout: 'default#imageWithContent',
-                        iconImageHref: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+                        iconImageHref: USER_MARKER_ICON_SVG_HREF,
                         iconImageSize: [LEGACY_USER_MARKER_SIZE, LEGACY_USER_MARKER_SIZE],
                         iconImageOffset: [-LEGACY_USER_MARKER_HALF, -LEGACY_USER_MARKER_HALF],
                         iconContentLayout
@@ -7107,7 +7122,7 @@
     function buildUserMarkerHtmlForMap(headingDeg) {
         const heading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
         return `
-            <div class="user-marker ym3-user-marker" style="width:36px;height:36px;pointer-events:none;position:relative;transform:translate(-50%,-50%);">
+            <div class="user-marker ym3-user-marker" style="width:36px;height:36px;pointer-events:none;position:relative;transform:translate(-50%,-50%);background:transparent;border:none;outline:none;box-shadow:none;will-change:transform;">
                 <div class="ym3-user-halo"></div>
                 <div class="ym3-user-pulse"></div>
                 <div class="ym3-user-arrow" style="transform:translate(-50%, -50%) rotate(${heading}deg);"></div>
