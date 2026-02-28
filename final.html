@@ -5930,7 +5930,7 @@
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
+                        try { updateDynamicCourseCamera(); } catch (e2) { console.warn(e2); }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
