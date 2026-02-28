@@ -3257,9 +3257,13 @@
             const panel = document.querySelector('.action-panel');
             if (panel) panel.classList.toggle('open', !!actionCardVisible);
         } catch (e) {}
-        try { applyActionCardCenterOffset(); } catch (e) {}
-        setTimeout(() => { try { applyActionCardCenterOffset(); } catch (e) {} }, 240);
         updateTargetAnchorPosition();
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                updateTargetAnchorPosition();
+            });
+        });
+        setTimeout(() => { try { updateTargetAnchorPosition(); } catch (e) {} }, 320);
     }
 
     function setRightActionsHidden(hidden) {
@@ -3298,15 +3302,7 @@
     }
 
     function applyActionCardCenterOffset() {
-        const occlusion = getActionCardOcclusionPx();
-        const targetOffsetPx = actionCardVisible ? Math.round(occlusion * 0.5) : 0;
-        const delta = targetOffsetPx - Number(currentActionCardCenterOffsetPx || 0);
-        if (Math.abs(delta) < 1) {
-            currentActionCardCenterOffsetPx = targetOffsetPx;
-            return;
-        }
-        shiftMapCenterByPixels(delta);
-        currentActionCardCenterOffsetPx = targetOffsetPx;
+        return;
     }
 
     function updateTargetAnchorPosition() {
@@ -3328,9 +3324,26 @@
         const tgBottom = (tgViewportHeightPx && tgViewportHeightPx > 0) ? (mapTop + tgViewportHeightPx) : 0;
         const mapBottom = tgBottom ? Math.min(baseBottom, tgBottom) : baseBottom;
 
-        // Для всех движков прицел жёстко в реальном центре карты.
-        const mid = mapTop + (mapBottom - mapTop) * 0.5;
-        target.style.top = `${Math.round(mid)}px`;
+        const card = document.getElementById('actionCard');
+        if (!actionCardVisible || !card || card.classList.contains('hidden')) {
+            const mid = mapTop + (mapBottom - mapTop) * 0.5;
+            target.style.top = `${Math.round(mid)}px`;
+            return;
+        }
+
+        const cardRect = card.getBoundingClientRect();
+        let cardTop = Number(cardRect?.top);
+        const cardHeight = Math.max(Number(card?.offsetHeight || 0), Number(cardRect?.height || 0));
+        const cardIsOutOfScreen = !Number.isFinite(cardTop) || cardTop >= (mapBottom - 4);
+
+        if (cardIsOutOfScreen && cardHeight > 0) {
+            cardTop = mapBottom - cardHeight;
+        }
+
+        const safeCardTop = Number.isFinite(cardTop) ? cardTop : mapBottom;
+        const visibleBottom = Math.max(mapTop + 80, Math.min(mapBottom, safeCardTop - TARGET_CARD_GAP_PX));
+        const desiredTop = Math.max(TARGET_MIN_TOP_PX, mapTop + (visibleBottom - mapTop) * 0.5);
+        target.style.top = `${Math.round(desiredTop)}px`;
     }
 
     function getTargetPlacementCoords() {
