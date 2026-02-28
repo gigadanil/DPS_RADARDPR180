@@ -3211,6 +3211,7 @@
     let drivingModeEnabled = false;
     let drivingNearestDpsDistanceMeters = null;
     let drivingDpsCoordsCache = [];
+    const DRIVING_DPS_HUD_MIN_VALID_METERS = 20;
     // Анти-спам для меток
     const MARKER_RATE_LIMIT_MS = 120000;
     // Переменная для хранения выбранной фотографии
@@ -3951,16 +3952,25 @@
         }
 
         let minDistance = Infinity;
+        let minDistanceAboveGuard = Infinity;
         drivingDpsCoordsCache.forEach(p => {
             if (!Array.isArray(p) || p.length < 2) return;
             const lat = Number(p[0]);
             const lon = Number(p[1]);
             if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
             const dist = calculateDistance(userLat, userLon, lat, lon);
-            if (Number.isFinite(dist) && dist < minDistance) minDistance = dist;
+            if (!Number.isFinite(dist)) return;
+            if (dist < minDistance) minDistance = dist;
+            if (dist >= DRIVING_DPS_HUD_MIN_VALID_METERS && dist < minDistanceAboveGuard) {
+                minDistanceAboveGuard = dist;
+            }
         });
 
-        drivingNearestDpsDistanceMeters = Number.isFinite(minDistance) ? minDistance : null;
+        const bestDistance = Number.isFinite(minDistanceAboveGuard)
+            ? minDistanceAboveGuard
+            : (Number.isFinite(minDistance) && minDistance >= DRIVING_DPS_HUD_MIN_VALID_METERS ? minDistance : null);
+
+        drivingNearestDpsDistanceMeters = Number.isFinite(bestDistance) ? bestDistance : null;
         updateDrivingHudDpsAlert();
     }
 
@@ -12827,7 +12837,10 @@
             .map(m => {
                 const c = extractMarkerCoordsForNotif(m);
                 if (!c) return null;
-                return [Number(c.lat), Number(c.lon)];
+                const lat = Number(c.lat);
+                const lon = Number(c.lon);
+                if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+                return [lat, lon];
             })
             .filter(Boolean);
         refreshDrivingNearestDpsDistanceFromCache();
