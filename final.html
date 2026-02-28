@@ -7081,6 +7081,9 @@
 
         // Если токен есть — определяем админа по Telegram ID (и в Mini App, и в Web/PWA)
         isAdmin = !!uid && String(uid) === String(ADMIN_ID);
+        if (isAdmin) {
+            try { hideReleaseWaitScreen(); } catch (e) {}
+        }
 
         // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
         try {
@@ -13138,13 +13141,35 @@
             }
         }
 
+        function shouldBypassReleaseWaitForAdmin() {
+            try {
+                if (isAdmin === true) return true;
+                const currentUid = String(uid || '').trim();
+                if (currentUid && currentUid === String(ADMIN_ID)) return true;
+                const tgUid = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || '').trim();
+                if (tgUid && tgUid === String(ADMIN_ID)) return true;
+                const storedUid = String(localStorage.getItem('site_uid') || '').trim();
+                if (storedUid && storedUid === String(ADMIN_ID)) return true;
+            } catch (e) {}
+            return false;
+        }
+
         function initReleaseWaitScreen() {
             const gate = document.getElementById('releaseWaitScreen');
             const countdown = document.getElementById('releaseCountdown');
             if (!gate || !countdown) return;
 
+            if (shouldBypassReleaseWaitForAdmin()) {
+                hideReleaseWaitScreen();
+                return;
+            }
+
             const target = getReleaseTargetDate();
             const update = () => {
+                if (shouldBypassReleaseWaitForAdmin()) {
+                    hideReleaseWaitScreen();
+                    return;
+                }
                 const nowTs = Date.now();
                 const left = target.getTime() - nowTs;
                 if (left <= 0) {
