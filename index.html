@@ -1823,6 +1823,15 @@
                     <div class="value" id="admin-markers-count">0</div>
                 </div>
             </div>
+
+            <div id="testerGrantSection" style="display:none; margin-top:14px; padding:12px; border-radius:10px; background:#f0f0f5; border:1px solid #d7d7de;">
+                <div style="font-size:13px; font-weight:700; color:#111; margin-bottom:8px;">🔒 Выдать доступ</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                    <input type="text" id="grantTesterUserId" placeholder="Введите user_id" style="flex:1; min-width:170px; padding:8px; border-radius:8px; border:1px solid #ddd; font-size:13px;">
+                    <button onclick="grantTesterAccessFromAdmin()" style="padding:8px 12px; border:none; border-radius:8px; background:#007aff; color:#fff; font-weight:700; cursor:pointer;">Выдать доступ</button>
+                </div>
+                <div id="grantTesterStatus" style="margin-top:8px; font-size:12px; color:#666; min-height:16px;"></div>
+            </div>
             
             <h3 style="margin-top: 20px; margin-bottom: 10px; font-size: 14px;">Список водителей</h3>
             <div style="display: flex; gap: 8px; margin-bottom: 12px;">
@@ -1888,60 +1897,6 @@
                 </table>
             </div>
             
-            <!-- ============= СЕКЦИЯ УПРАВЛЕНИЯ ЗБТ КОДАМИ ============= -->
-            <div id="betaInvitesSection" style="margin-top: 30px; padding: 20px; background: #f0f7ff; border-radius: 12px; border: 2px solid #007aff;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">🎉 Управление ЗБТ кодами</h3>
-                    <button onclick="refreshBetaCodes()" style="background: var(--blue); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                        🔄 Обновить
-                    </button>
-                </div>
-
-                <!-- Генерирование нового кода -->
-                <div style="background: white; padding: 15px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #e0e0e0;">
-                    <h4 style="margin: 0 0 12px 0; font-size: 14px; font-weight: 700;">Создать новый код:</h4>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                        <input type="number" id="betaCodeCountInput" placeholder="Кол-во использований (1-100)" min="1" max="100" value="1" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; width: 200px; font-size: 14px;">
-                        <input type="text" id="betaCodeDescInput" placeholder="Описание (опционально)" style="padding: 10px; border: 1px solid #ddd; border-radius: 8px; flex: 1; min-width: 200px; font-size: 14px;">
-                        <button onclick="generateBetaCode()" style="background: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 700; white-space: nowrap;">
-                            ✨ Создать код
-                        </button>
-                    </div>
-                    <div id="betaCodeStatus" style="margin-top: 10px; display: none; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: 500;"></div>
-                </div>
-
-                <!-- Список кодов -->
-                <div style="max-height: 250px; overflow-y: auto;">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                        <thead style="background: #007aff; color: white; font-weight: 700; position: sticky; top: 0;">
-                            <tr>
-                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Код</th>
-                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Макс. исп.</th>
-                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Текущ. исп.</th>
-                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Итого</th>
-                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Статус</th>
-                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Действие</th>
-                            </tr>
-                        </thead>
-                        <tbody id="betaCodesTableBody">
-                            <tr style="background: #f9f9f9;">
-                                <td colspan="6" style="padding: 20px; text-align: center; color: #888;">Загрузка...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- ============= МАССОВАЯ ВЫДАЧА АЧИВОК (АДМИН) ============= -->
-            <div style="margin-top: 20px; padding: 16px; background: #fff; border-radius: 12px; border: 1px solid #e8e8e8;">
-                <h4 style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700;">🏷️ Массовая выдача ачивки `beta_tester`</h4>
-                <div style="display:flex; gap:8px; margin-bottom:8px;">
-                    <input id="bulkBetaIds" placeholder="Введите user_id через запятую или пробел" style="flex:1; padding:8px; border:1px solid #ddd; border-radius:8px; font-size:13px;">
-                    <button onclick="grantBetaFromInput()" style="padding:8px 12px; background:#ff9500; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:700;">🎖️ Выдать</button>
-                </div>
-                <div id="bulkBetaStatus" style="font-size:13px; color:#666; min-height:18px;"></div>
-            </div>
-
             <!-- ============= Загрузка MP3 озвучки для предупреждений ============= -->
             <div style="margin-top:20px; padding:16px; background:#fff8e6; border-radius:12px; border:1px solid #ffe0a3;">
                 <h4 style="margin:0 0 8px 0; font-size:14px; font-weight:700;">🎤 Загрузка своей озвучки (MP3)</h4>
@@ -3056,6 +3011,11 @@
     let uid = rawTgId ? String(rawTgId) : null;
     let siteTelegramUser = null; // Telegram Login Widget user (для входа через сайт)
     try { window.__siteTelegramUser = siteTelegramUser; } catch(e) {}
+    let currentProfileRole = null;
+    let currentProfileIsTester = false;
+    let canUseV3Engine = false;
+    let roleWelcomeSpoken = false;
+    const V3_ACCESS_DENIED_TEXT = 'Режим Next-Gen v3.0 (ZBT). Доступ ограничен. Чтобы подать заявку на участие в тесте, свяжитесь с @Админом в канале MONOLITH.';
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
     let myMap, selectedType = 'dps';
     let preferredMapEngine = 'ymaps3';
@@ -3147,6 +3107,91 @@
     let distanceNotifications = new Map(); // { markerId: 'far'|'near' }
     // Тренд расстояния до маркера (marker_id -> { lastDistance, lastTrend, lastUpdate })
     let markerDistanceState = new Map();
+
+    function normalizeProfileRole(roleValue) {
+        const role = String(roleValue || '').trim().toLowerCase();
+        return role || null;
+    }
+
+    function recomputeV3Access() {
+        canUseV3Engine = !!(isAdmin || currentProfileRole === 'admin' || currentProfileIsTester === true);
+        return canUseV3Engine;
+    }
+
+    async function refreshCurrentProfileRbac(force = false) {
+        if (!_sb || !uid) {
+            currentProfileRole = null;
+            currentProfileIsTester = false;
+            return recomputeV3Access();
+        }
+
+        if (!force && (currentProfileRole !== null || currentProfileIsTester === true)) {
+            return recomputeV3Access();
+        }
+
+        let profile = null;
+        try {
+            let query = await _sb
+                .from('profiles')
+                .select('user_id,id,role,is_tester')
+                .eq('user_id', String(uid))
+                .maybeSingle();
+
+            if (query?.error && String(query.error.message || '').toLowerCase().includes('column') && String(query.error.message || '').includes('user_id')) {
+                query = await _sb
+                    .from('profiles')
+                    .select('id,role,is_tester')
+                    .eq('id', String(uid))
+                    .maybeSingle();
+            }
+
+            if (!query?.error) {
+                profile = query?.data || null;
+            } else {
+                console.warn('profiles RBAC read failed:', query.error?.message || query.error);
+            }
+        } catch (e) {
+            console.warn('refreshCurrentProfileRbac failed:', e?.message || e);
+        }
+
+        currentProfileRole = normalizeProfileRole(profile?.role);
+        currentProfileIsTester = profile?.is_tester === true;
+        return recomputeV3Access();
+    }
+
+    function showV3AccessDeniedToast() {
+        if (typeof showInAppNotification === 'function') {
+            showInAppNotification({
+                title: '🔒 Доступ к v3.0',
+                body: V3_ACCESS_DENIED_TEXT,
+                priority: 'high'
+            });
+            return;
+        }
+        alert(V3_ACCESS_DENIED_TEXT);
+    }
+
+    function buildRoleWelcomeText() {
+        if (isAdmin || currentProfileRole === 'admin') {
+            return 'Добро пожаловать, создатель. Протокол v3.0 активен, все системы в твоем распоряжении.';
+        }
+        if (currentProfileIsTester === true) {
+            return 'Доступ к ЗБТ подтвержден. Ядро v3.0 запущено. Удачных тестов.';
+        }
+        return '';
+    }
+
+    function maybeSpeakRoleWelcome() {
+        if (roleWelcomeSpoken) return;
+        const text = buildRoleWelcomeText();
+        if (!text) return;
+        roleWelcomeSpoken = true;
+        setTimeout(() => {
+            try {
+                if (typeof aiSpeak === 'function') aiSpeak(text);
+            } catch (e) {}
+        }, 400);
+    }
     const MONOLITH_WARNING_OPTIONS = [300, 500, 1000, 2000];
     const MONOLITH_SOS_PRIORITY_RADIUS_METERS = 5000;
     const MONOLITH_POST_PASS_ASK_METERS = 200;
@@ -6949,8 +6994,8 @@
     const LEGACY_USER_MARKER_SIZE = 36;
     const LEGACY_USER_MARKER_HALF = Math.round(LEGACY_USER_MARKER_SIZE / 2);
     const USER_MARKER_ICON_SVG_HREF = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2236%22 height=%2236%22 viewBox=%220 0 36 36%22%3E%3Crect width=%2236%22 height=%2236%22 fill=%22none%22/%3E%3C/svg%3E';
-    const LEGACY_USER_SMOOTH_WINDOW = 4;
-    const legacyUserPathBuffer = [];
+    const LEGACY_MOVING_AVG_WINDOW = 5;
+    let legacyUserCoordsHistory = [];
     const USER_MARKER_ANIM_DURATION_MS = 500;
     const USER_MARKER_DEAD_RECKONING_AFTER_MS = 1200;
     const USER_MARKER_DEAD_RECKONING_MAX_MS = 2500;
@@ -6986,6 +7031,48 @@
         const predictSec = Math.min(2, staleMs / 1000);
         const predictMeters = speedMs * predictSec;
         return destinationPointByBearing(base[0], base[1], heading, predictMeters);
+    }
+
+    function applyLegacyMovingAverage(lat, lon) {
+        const latNum = Number(lat);
+        const lonNum = Number(lon);
+        if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return [latNum, lonNum];
+
+        legacyUserCoordsHistory.push([latNum, lonNum]);
+        while (legacyUserCoordsHistory.length > LEGACY_MOVING_AVG_WINDOW) {
+            legacyUserCoordsHistory.shift();
+        }
+
+        const sums = legacyUserCoordsHistory.reduce((acc, pair) => {
+            acc[0] += Number(pair[0]) || 0;
+            acc[1] += Number(pair[1]) || 0;
+            return acc;
+        }, [0, 0]);
+
+        const count = Math.max(1, legacyUserCoordsHistory.length);
+        return [sums[0] / count, sums[1] / count];
+    }
+
+    function buildUserMarkerHtmlForMap(headingDeg) {
+        const heading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
+        return `
+            <div class="user-marker ym3-user-marker" style="width:36px;height:36px;pointer-events:none;position:relative;transform:translate(-50%,-50%);background:transparent;border:none;outline:none;box-shadow:none;will-change:transform;">
+                <div class="ym3-user-halo"></div>
+                <div class="ym3-user-pulse"></div>
+                <div class="ym3-user-arrow" style="transform:translate(-50%, -50%) rotate(${heading}deg);"></div>
+            </div>
+        `;
+    }
+
+    function getLegacyUserIconContentLayout() {
+        if (legacyUserIconContentLayout) return legacyUserIconContentLayout;
+        if (!window.ymaps || !ymaps.templateLayoutFactory) return null;
+        try {
+            legacyUserIconContentLayout = ymaps.templateLayoutFactory.createClass('$[properties.iconContent]');
+        } catch (e) {
+            legacyUserIconContentLayout = null;
+        }
+        return legacyUserIconContentLayout;
     }
 
     function renderAnimatedUserMarkerAt(lat, lon) {
@@ -7099,48 +7186,6 @@
         userMarkerAnimFrameId = requestAnimationFrame(tickUserMarkerAnimation);
     }
 
-    function applyLegacyMovingAverage(lat, lon) {
-        const latNum = Number(lat);
-        const lonNum = Number(lon);
-        if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return [latNum, lonNum];
-
-        legacyUserPathBuffer.push([latNum, lonNum]);
-        while (legacyUserPathBuffer.length > LEGACY_USER_SMOOTH_WINDOW) {
-            legacyUserPathBuffer.shift();
-        }
-
-        const sum = legacyUserPathBuffer.reduce((acc, pair) => {
-            acc[0] += Number(pair[0]) || 0;
-            acc[1] += Number(pair[1]) || 0;
-            return acc;
-        }, [0, 0]);
-
-        const count = Math.max(1, legacyUserPathBuffer.length);
-        return [sum[0] / count, sum[1] / count];
-    }
-
-    function buildUserMarkerHtmlForMap(headingDeg) {
-        const heading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
-        return `
-            <div class="user-marker ym3-user-marker" style="width:36px;height:36px;pointer-events:none;position:relative;transform:translate(-50%,-50%);background:transparent;border:none;outline:none;box-shadow:none;will-change:transform;">
-                <div class="ym3-user-halo"></div>
-                <div class="ym3-user-pulse"></div>
-                <div class="ym3-user-arrow" style="transform:translate(-50%, -50%) rotate(${heading}deg);"></div>
-            </div>
-        `;
-    }
-
-    function getLegacyUserIconContentLayout() {
-        if (legacyUserIconContentLayout) return legacyUserIconContentLayout;
-        if (!window.ymaps || !ymaps.templateLayoutFactory) return null;
-        try {
-            legacyUserIconContentLayout = ymaps.templateLayoutFactory.createClass('$[properties.iconContent]');
-        } catch (e) {
-            legacyUserIconContentLayout = null;
-        }
-        return legacyUserIconContentLayout;
-    }
-
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
@@ -7207,7 +7252,7 @@
     function updateTargetAutoVisibility() {
         const target = document.querySelector('.target');
         if (!target) return;
-        target.classList.remove('target-autofollow-hidden');
+        target.classList.toggle('target-autofollow-hidden', !!autoFollow);
     }
 
     function updateLocateBtnUiState() {
@@ -7246,17 +7291,44 @@
         if (!btn) return;
         btn.style.display = '';
         const isV3 = String(preferredMapEngine || '').toLowerCase() === 'ymaps3';
+        const v3Locked = !canUseV3Engine;
         btn.classList.toggle('active', isV3);
         btn.classList.toggle('off', !isV3);
-        btn.textContent = isV3 ? '🗺️3' : '🗺️2';
-        btn.title = isV3 ? 'Тест движка: ymaps3 (нажмите для ymaps2)' : 'Тест движка: ymaps2 (нажмите для ymaps3)';
+        btn.style.opacity = v3Locked ? '0.6' : '1';
+        btn.textContent = isV3 ? '🗺️3' : (v3Locked ? '🗺️2 🔒' : '🗺️2');
+        btn.title = isV3
+            ? 'Тест движка: ymaps3 (нажмите для ymaps2)'
+            : (v3Locked ? 'Тест движка: ymaps2 (v3.0 заблокирован) 🔒' : 'Тест движка: ymaps2 (нажмите для ymaps3)');
+
+        const settingsBtn = document.getElementById('mapEngineSettingsBtn');
+        if (settingsBtn) {
+            settingsBtn.style.opacity = v3Locked ? '0.6' : '1';
+            settingsBtn.textContent = isV3
+                ? 'Переключить на ymaps2'
+                : (v3Locked ? 'ymaps3.0 (ZBT) 🔒' : 'Переключить на ymaps3');
+        }
+
         const hint = document.getElementById('mapEngineSettingsHint');
-        if (hint) hint.textContent = `Текущий режим: ${isV3 ? 'ymaps3' : 'ymaps2'}`;
+        if (hint) {
+            hint.textContent = v3Locked
+                ? `Текущий режим: ${isV3 ? 'ymaps3' : 'ymaps2'} · Доступ к v3.0 ограничен`
+                : `Текущий режим: ${isV3 ? 'ymaps3' : 'ymaps2'}`;
+        }
         updateMap3dToggleUi();
     }
 
-    function toggleMapEngineFromUI() {
+    async function toggleMapEngineFromUI() {
         const next = String(preferredMapEngine || '').toLowerCase() === 'ymaps3' ? 'ymaps2' : 'ymaps3';
+
+        if (next === 'ymaps3') {
+            await refreshCurrentProfileRbac(true);
+            if (!canUseV3Engine) {
+                updateMapEngineBtnUiState();
+                showV3AccessDeniedToast();
+                return;
+            }
+        }
+
         try {
             if (next === 'ymaps3') {
                 localStorage.removeItem(MAP_ENGINE_LEGACY_FORCE_KEY);
@@ -7436,16 +7508,10 @@
 
         // Если токен есть — определяем админа по Telegram ID (и в Mini App, и в Web/PWA)
         isAdmin = !!uid && String(uid) === String(ADMIN_ID);
+        await refreshCurrentProfileRbac(true);
         if (isAdmin) {
             try { hideReleaseWaitScreen(); } catch (e) {}
         }
-
-        // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
-        try {
-            if (localStorage.getItem('beta_access_granted') === 'true') {
-                await ensureUserAchievement(uid, 'beta_tester');
-            }
-        } catch(e) {}
 
         if (authedToken) {
             try {
@@ -7544,6 +7610,7 @@
         // Загружаем сохраненный стиль озвучки
         loadVoiceStyle();
         try { initMonolithVoiceToggle(); } catch(e) {}
+        try { maybeSpeakRoleWelcome(); } catch(e) {}
         loadProximityMode();
         loadMarkerRenderMode();
         loadDynamicCourseEnabled();
@@ -7710,9 +7777,6 @@
             localStorage.setItem('beta_access_granted', 'true');
             localStorage.setItem('beta_code_used', code);
             localStorage.setItem('beta_access_date', new Date().toISOString());
-
-            // Ачивка за вход в ЗБТ
-            try { await ensureUserAchievement(uid, 'beta_tester'); } catch(e) {}
 
             status.textContent = '✅ Доступ предоставлен! Загрузка...';
             status.style.color = '#28a745';
@@ -8685,6 +8749,9 @@
             return;
         }
 
+        const testerGrantSection = document.getElementById('testerGrantSection');
+        if (testerGrantSection) testerGrantSection.style.display = 'block';
+
         // Загружаем список водителей
         try {
             const { data: drivers } = await _sb.from('drivers').select('user_id,name,car_model,car_plate');
@@ -8768,6 +8835,54 @@
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
         document.getElementById('adminModal').classList.add('active');
+    }
+
+    async function grantTesterAccessFromAdmin() {
+        if (!isAdmin) {
+            alert('У вас нет доступа к этой операции');
+            return;
+        }
+
+        const input = document.getElementById('grantTesterUserId');
+        const status = document.getElementById('grantTesterStatus');
+        const targetUserId = String(input?.value || '').trim();
+
+        if (status) status.textContent = '';
+
+        if (!targetUserId) {
+            if (status) status.textContent = 'Введите user_id пользователя.';
+            return;
+        }
+
+        try {
+            let updateResult = await _sb
+                .from('profiles')
+                .update({ is_tester: true })
+                .eq('user_id', targetUserId);
+
+            if (updateResult?.error && String(updateResult.error.message || '').toLowerCase().includes('column') && String(updateResult.error.message || '').includes('user_id')) {
+                updateResult = await _sb
+                    .from('profiles')
+                    .update({ is_tester: true })
+                    .eq('id', targetUserId);
+            }
+
+            if (updateResult?.error) {
+                throw updateResult.error;
+            }
+
+            if (status) status.textContent = `✅ Доступ выдан пользователю ${targetUserId}`;
+            if (input) input.value = '';
+
+            showInAppNotification({
+                title: '✅ Доступ выдан',
+                body: `Пользователь ${targetUserId} добавлен в тестеры v3.0.`
+            });
+        } catch (e) {
+            const msg = e?.message || String(e);
+            if (status) status.textContent = `❌ Ошибка: ${msg}`;
+            alert('Ошибка выдачи доступа: ' + msg);
+        }
     }
 
     // Функция рендеринга таблицы водителей
@@ -8996,162 +9111,6 @@
             throw new Error(errMsg || `Edge Function ${functionName} error`);
         }
         return data;
-    }
-
-    async function generateBetaCode() {
-        const countInput = document.getElementById('betaCodeCountInput');
-        const descInput = document.getElementById('betaCodeDescInput');
-        const status = document.getElementById('betaCodeStatus');
-        
-        const count = Math.max(1, Math.min(100, parseInt(countInput.value) || 1));
-        const desc = descInput.value.trim() || null;
-
-        status.textContent = '⏳ Генерирование...';
-        status.style.color = '#007aff';
-        status.style.display = 'block';
-
-        try {
-            if (!isAdmin) {
-                throw new Error('Недостаточно прав: только админ может создавать коды');
-            }
-
-            let code = '';
-            let inserted = false;
-            let lastError = null;
-            let createdResponse = null;
-            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-
-            // Делаем несколько попыток, чтобы не падать на редкой коллизии уникального code
-            for (let attempt = 1; attempt <= 7; attempt++) {
-                code = Array.from({ length: 6 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-
-                try {
-                    createdResponse = await invokeAdminFunction('beta-invite', {
-                        code,
-                        maxUses: count,
-                        description: desc
-                    });
-                    inserted = true;
-                    break;
-                } catch (fnError) {
-                    lastError = fnError;
-                    const msg = String(fnError?.message || '');
-                    const isDuplicate = /duplicate key|unique constraint|already exists|409/.test(msg);
-                    if (!isDuplicate) {
-                        throw fnError;
-                    }
-                }
-            }
-
-            if (!inserted) {
-                throw lastError || new Error('Не удалось создать уникальный код');
-            }
-
-            const createdCode = createdResponse?.code || code;
-            status.textContent = `✅ Код создан: ${createdCode}`;
-            status.style.color = '#28a745';
-            
-            countInput.value = '1';
-            descInput.value = '';
-
-            // Обновляем таблицу
-            await refreshBetaCodes();
-
-        } catch (err) {
-            console.error('Ошибка при создании кода:', err);
-            const msg = String(err?.message || 'Ошибка сервера');
-            if (/admin|доступ|permission denied|forbidden|Access denied/i.test(msg)) {
-                status.textContent = '❌ Edge Function beta-invite отклонила запрос (нет прав)';
-            } else {
-                status.textContent = '❌ ' + msg;
-            }
-            status.style.color = '#dc3545';
-        }
-    }
-
-    async function refreshBetaCodes() {
-        try {
-            if (!isAdmin) throw new Error('Только для администратора');
-
-            const response = await invokeAdminFunction('beta-invite', { action: 'list' });
-            const data = Array.isArray(response?.data) ? response.data : [];
-
-            const tbody = document.getElementById('betaCodesTableBody');
-            if (!data || data.length === 0) {
-                tbody.innerHTML = `
-                    <tr style="background: #f9f9f9;">
-                        <td colspan="6" style="padding: 20px; text-align: center; color: #888;">
-                            Нет созданных кодов
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-
-            tbody.innerHTML = data.map(invite => {
-                const isUsed = invite.current_uses >= invite.max_uses;
-                const isActive = invite.is_active && !isUsed;
-                
-                return `
-                    <tr style="background: ${isUsed ? '#fff3cd' : 'white'}; border-bottom: 1px solid #ddd;">
-                        <td style="padding: 10px; border: 1px solid #ddd; font-weight: 700; font-family: monospace;">${invite.code}</td>
-                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${invite.max_uses}</td>
-                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">${invite.current_uses}</td>
-                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
-                            ${invite.current_uses}/${invite.max_uses}
-                        </td>
-                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
-                            <span style="display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 700; background: ${isActive ? '#d4edda' : '#f8d7da'}; color: ${isActive ? '#28a745' : '#dc3545'};">
-                                ${isActive ? '✓ Активен' : '✕ Использован'}
-                            </span>
-                        </td>
-                        <td style="padding: 10px; text-align: center; border: 1px solid #ddd;">
-                            <button onclick="copyBetaCode('${invite.code}')" style="background: #007aff; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; margin-right: 5px;">
-                                📋 Скопир.
-                            </button>
-                            <button onclick="deactivateBetaCode(${invite.id})" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">
-                                ✕ Отклю.
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-
-        } catch (err) {
-            console.error('Ошибка загрузки кодов:', err);
-            document.getElementById('betaCodesTableBody').innerHTML = `
-                <tr style="background: #fff3cd;">
-                    <td colspan="6" style="padding: 20px; text-align: center; color: #dc3545;">
-                        ❌ Ошибка загрузки кодов
-                    </td>
-                </tr>
-            `;
-        }
-    }
-
-    function copyBetaCode(code) {
-        navigator.clipboard.writeText(code).then(() => {
-            alert('✅ Код скопирован: ' + code);
-        }).catch(() => {
-            alert('❌ Ошибка копирования');
-        });
-    }
-
-    async function deactivateBetaCode(inviteId) {
-        if (!confirm('Деактивировать этот код?')) return;
-
-        try {
-            if (!isAdmin) throw new Error('Только для администратора');
-
-            await invokeAdminFunction('beta-invite', {
-                action: 'deactivate',
-                inviteId
-            });
-
-            await refreshBetaCodes();
-        } catch (err) {
-            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
-        }
     }
 
     // ============= ФУНКЦИИ ДЛЯ ПРОСМОТРА ОТЧЕТОВ О БАГАХ =============
@@ -12259,29 +12218,6 @@
         } catch (e) {
             console.warn('grantAchievementToUsers error:', e?.message || e);
             throw e; // Пробрасываем ошибку для обработки в UI
-        }
-    }
-
-    // Удобная обёртка для присвоения beta_tester через консоль или админку
-    window.grantBetaToIds = function(ids) { return grantAchievementToUsers('beta_tester', ids); };
-
-    // UI: массовая выдача из поля в админ-панели
-    async function grantBetaFromInput() {
-        const el = document.getElementById('bulkBetaIds');
-        const status = document.getElementById('bulkBetaStatus');
-        if (!el) return;
-        let raw = (el.value || '').trim();
-        if (!raw) { status.textContent = 'Введите хотя бы один user_id.'; return; }
-        // Разделители: запятая или пробел или перенос
-        const ids = raw.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
-        if (ids.length === 0) { status.textContent = 'Неверный формат ID.'; return; }
-        status.textContent = `⏳ Выдаём ачивку ${ids.length} пользователям...`;
-        try {
-            await grantAchievementToUsers('beta_tester', ids);
-            status.textContent = `✅ Ачивка выдана ${ids.length} пользователям.`;
-        } catch (e) {
-            console.warn(e);
-            status.textContent = '❌ Ошибка при выдаче (см. консоль).';
         }
     }
 
