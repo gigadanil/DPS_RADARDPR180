@@ -108,15 +108,41 @@
             position: absolute;
             left: 50%;
             top: 50%;
-            width: 20px;
-            height: 28px;
+            width: 22px;
+            height: 30px;
             transform: translate(-50%, -50%) rotate(0deg);
             transform-origin: 50% 74%;
-            background: linear-gradient(160deg, #fff1a8 0%, #ffd700 46%, #f1ab00 100%);
-            clip-path: polygon(50% 0%, 100% 100%, 52% 82%, 0% 100%);
             filter: drop-shadow(0px 4px 2px rgba(0,0,0,0.4));
             transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 2;
+        }
+        .ym3-user-arrow::before,
+        .ym3-user-arrow::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 0;
+        }
+        .ym3-user-arrow::before {
+            background: linear-gradient(180deg, #fff2a4 0%, #ffd94a 58%, #f4be25 100%);
+            clip-path: polygon(50% 0%, 0% 100%, 50% 83%);
+        }
+        .ym3-user-arrow::after {
+            background: linear-gradient(180deg, #f5c33a 0%, #e2a507 60%, #b37a00 100%);
+            clip-path: polygon(50% 0%, 100% 100%, 50% 83%);
+        }
+        .ym3-user-halo {
+            position: absolute;
+            left: 50%;
+            top: 57%;
+            width: 26px;
+            height: 18px;
+            border-radius: 50%;
+            background: radial-gradient(ellipse at center, rgba(255,215,0,0.42) 0%, rgba(255,215,0,0.16) 48%, rgba(255,215,0,0) 100%);
+            filter: blur(3.5px);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 1;
         }
         .ym3-user-pulse {
             position: absolute;
@@ -3046,7 +3072,7 @@
     let dynamicCourseCameraTimerId = null;
     let dynamicCourseCompassInit = false;
     let followCameraAzimuthDeg = 0;
-    const FOLLOW_CAMERA_PITCH_DEG = 65;
+    const FOLLOW_CAMERA_PITCH_DEG = 50;
     const FOLLOW_CAMERA_AZIMUTH_SPEED_MS = 2;
     const DYNAMIC_COURSE_TILT = 0.8;
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
@@ -6279,20 +6305,33 @@
                 const MarkerCtor = ym3Markers?.YMapMarker || ymaps3?.YMapMarker;
                 if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
                     map3dEnabled = false;
+                    const YM3_SCHEME_CUSTOMIZATION = [
+                        { tags: { any: ['road'] }, elements: 'geometry.fill', stylers: { color: '#2f3136' } },
+                        { tags: { any: ['road'] }, elements: 'geometry.stroke', stylers: { color: '#3b3f45', width: 1 } },
+                        { tags: { any: ['building'] }, elements: 'geometry.fill', stylers: { color: '#44484e' } },
+                        { tags: { any: ['building'] }, elements: 'geometry.stroke', stylers: { color: '#34383d', width: 1 } },
+                        { tags: { any: ['label', 'street'] }, elements: 'label.text.fill', stylers: { color: '#ffffff' } },
+                        { tags: { any: ['label', 'street'] }, elements: 'label.text.outline', stylers: { color: '#111111', width: 1 } }
+                    ];
                     const root = new YMapCtor(visualMapHost, {
                         location: {
                             center: [37.80, 48.01],
                             zoom: 16,
-                            pitch: 0,
-                            tilt: 0
+                            pitch: FOLLOW_CAMERA_PITCH_DEG,
+                            tilt: FOLLOW_CAMERA_PITCH_DEG
                         }
                     });
                     try {
                         if (typeof root.setUpdateProps === 'function') {
-                            root.setUpdateProps({ location: { pitch: 0, tilt: 0 } });
+                            root.setUpdateProps({ location: { pitch: FOLLOW_CAMERA_PITCH_DEG, tilt: FOLLOW_CAMERA_PITCH_DEG } });
                         }
                     } catch (e) {}
-                    const scheme = new SchemeCtor({ id: 'scheme' });
+                    let scheme = null;
+                    try {
+                        scheme = new SchemeCtor({ id: 'scheme', customization: YM3_SCHEME_CUSTOMIZATION });
+                    } catch (e) {
+                        scheme = new SchemeCtor({ id: 'scheme' });
+                    }
                     root.addChild(scheme);
                     const features = new ymaps3.YMapDefaultFeaturesLayer({});
                     root.addChild(features);
@@ -6306,7 +6345,7 @@
                     myMap.__ym3BuildingsLayer = null;
                     myMap.__ym3LastCenter = [48.01, 37.80];
                     myMap.__ym3LastZoom = 16;
-                    myMap.__ym3LastTilt = 0;
+                    myMap.__ym3LastTilt = FOLLOW_CAMERA_PITCH_DEG;
                     myMap.__ym3LastAzimuth = 0;
 
                     const approximateBoundsFromCenterZoom = (center, zoom) => {
@@ -6337,15 +6376,15 @@
                         myMap.__ym3LastCenter = [lat, lon];
                         myMap.__ym3LastZoom = nextZoom;
                         myMap.__ym3LastAzimuth = 0;
-                        myMap.__ym3LastTilt = 0;
+                        myMap.__ym3LastTilt = FOLLOW_CAMERA_PITCH_DEG;
                         myMap.__ym3LastBounds = approximateBoundsFromCenterZoom(myMap.__ym3LastCenter, myMap.__ym3LastZoom);
                         try {
                             root.update({
                                 location: {
                                     center: [lon, lat],
                                     zoom: nextZoom,
-                                    pitch: 0,
-                                    tilt: 0
+                                    pitch: FOLLOW_CAMERA_PITCH_DEG,
+                                    tilt: FOLLOW_CAMERA_PITCH_DEG
                                 }
                             });
                         } catch (e) {}
@@ -6759,8 +6798,8 @@
                     center: [Number(cameraTarget[1]), Number(cameraTarget[0])],
                     zoom: 17,
                     azimuth: followCameraAzimuthDeg,
-                    pitch: 0,
-                    tilt: 0,
+                    pitch: FOLLOW_CAMERA_PITCH_DEG,
+                    tilt: FOLLOW_CAMERA_PITCH_DEG,
                     duration: 800,
                     easing: 'linear'
                 };
@@ -6770,7 +6809,7 @@
                 myMap.__ym3LastCenter = [Number(cameraTarget[0]), Number(cameraTarget[1])];
                 myMap.__ym3LastZoom = 17;
                 myMap.__ym3LastAzimuth = Number(followCameraAzimuthDeg || 0);
-                myMap.__ym3LastTilt = 0;
+                myMap.__ym3LastTilt = Number(FOLLOW_CAMERA_PITCH_DEG);
                 return;
             }
         } catch (e) {}
@@ -6826,6 +6865,7 @@
                                 ym3UserMarkerEl.style.width = '36px';
                                 ym3UserMarkerEl.style.height = '36px';
                 ym3UserMarkerEl.innerHTML = `
+                                    <div class="ym3-user-halo"></div>
                   <div class="ym3-user-pulse"></div>
                   <div class="ym3-user-arrow"></div>
                 `;
