@@ -436,32 +436,36 @@
             transform: translate(-50%, -50%);
             z-index: 9999;
             pointer-events: none;
-            width: 30px;
-            height: 30px;
+            width: 22px;
+            height: 22px;
             transition: visibility 0.2s, opacity 0.2s;
             visibility: visible;
             opacity: 1;
         }
+        .target.target-autofollow-hidden {
+            visibility: hidden !important;
+            opacity: 0 !important;
+        }
         .target::before {
             content: '';
             position: absolute;
-            inset: 0;
+            inset: 2px;
             border-radius: 50%;
-            border: 2px solid var(--blue);
-            background: rgba(255,255,255,0.92);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+            border: 2px solid rgba(255,255,255,0.95);
+            background: rgba(0, 122, 255, 0.62);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.22);
         }
         .target::after {
             content: '';
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 8px;
-            height: 8px;
+            width: 5px;
+            height: 5px;
             border-radius: 50%;
-            background: #ff3b30;
+            background: rgba(255,255,255,0.96);
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 0 2px rgba(255,255,255,0.95);
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.10);
         }
         .bottom-ui, .action-panel {
             position: fixed;
@@ -7179,6 +7183,7 @@
     }
 
     function updateFollowButton() {
+        try { updateTargetAutoVisibility(); } catch(e) {}
         const btn = document.getElementById('followToggleBtn');
         if (!btn) {
             try { updateLocateBtnUiState(); } catch(e) {}
@@ -7199,6 +7204,12 @@
         btn.innerHTML = `<span class="follow-icon">${icon}</span>${badge}`;
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         try { updateLocateBtnUiState(); } catch(e) {}
+    }
+
+    function updateTargetAutoVisibility() {
+        const target = document.querySelector('.target');
+        if (!target) return;
+        target.classList.toggle('target-autofollow-hidden', !!autoFollow);
     }
 
     function updateLocateBtnUiState() {
