@@ -3072,7 +3072,7 @@
     let dynamicCourseCameraTimerId = null;
     let dynamicCourseCompassInit = false;
     let followCameraAzimuthDeg = 0;
-    const FOLLOW_CAMERA_PITCH_DEG = 50;
+    const FOLLOW_CAMERA_PITCH_DEG = 65;
     const FOLLOW_CAMERA_AZIMUTH_SPEED_MS = 2;
     const DYNAMIC_COURSE_TILT = 0.8;
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
@@ -6318,7 +6318,12 @@
                             center: [37.80, 48.01],
                             zoom: 16,
                             pitch: FOLLOW_CAMERA_PITCH_DEG,
-                            tilt: FOLLOW_CAMERA_PITCH_DEG
+                            tilt: FOLLOW_CAMERA_PITCH_DEG,
+                            azimuth: 0
+                        },
+                        camera: {
+                            maxTilt: 80,
+                            minTilt: 0
                         }
                     });
                     try {
@@ -6375,7 +6380,9 @@
                         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return myMap;
                         myMap.__ym3LastCenter = [lat, lon];
                         myMap.__ym3LastZoom = nextZoom;
-                        myMap.__ym3LastAzimuth = 0;
+                        myMap.__ym3LastAzimuth = Number.isFinite(Number(options?.azimuth))
+                            ? normalizeDeg(Number(options.azimuth))
+                            : Number(myMap.__ym3LastAzimuth || 0);
                         myMap.__ym3LastTilt = FOLLOW_CAMERA_PITCH_DEG;
                         myMap.__ym3LastBounds = approximateBoundsFromCenterZoom(myMap.__ym3LastCenter, myMap.__ym3LastZoom);
                         try {
@@ -6383,6 +6390,7 @@
                                 location: {
                                     center: [lon, lat],
                                     zoom: nextZoom,
+                                    azimuth: Number(myMap.__ym3LastAzimuth || 0),
                                     pitch: FOLLOW_CAMERA_PITCH_DEG,
                                     tilt: FOLLOW_CAMERA_PITCH_DEG
                                 }
@@ -6824,6 +6832,39 @@
             try { myMap.setCenter(cameraTarget, 17); } catch (e2) {}
         }
     }
+
+    window.updateCourse = (heading) => {
+        const nextHeading = normalizeDeg(Number(heading) || 0);
+        followCameraAzimuthDeg = nextHeading;
+        try {
+            const ym3Root = myMap?.__ym3Root;
+            const center = Array.isArray(myMap?.__ym3LastCenter) && myMap.__ym3LastCenter.length >= 2
+                ? myMap.__ym3LastCenter
+                : (Array.isArray(userLocation) && userLocation.length >= 2 ? userLocation : [48.0159, 37.8041]);
+            const zoom = Number.isFinite(Number(myMap?.__ym3LastZoom)) ? Number(myMap.__ym3LastZoom) : 17;
+
+            if (ym3Root) {
+                const loc = {
+                    center: [Number(center[1]), Number(center[0])],
+                    zoom,
+                    tilt: FOLLOW_CAMERA_PITCH_DEG,
+                    pitch: FOLLOW_CAMERA_PITCH_DEG,
+                    azimuth: nextHeading,
+                    duration: 1000,
+                    easing: 'linear'
+                };
+                if (typeof ym3Root.setLocation === 'function') ym3Root.setLocation(loc);
+                else ym3Root.update({ location: loc });
+                myMap.__ym3LastAzimuth = nextHeading;
+                myMap.__ym3LastTilt = FOLLOW_CAMERA_PITCH_DEG;
+                return;
+            }
+            if (myMap?.options?.set) {
+                myMap.options.set('rotation', nextHeading);
+                myMap.options.set('azimuth', nextHeading);
+            }
+        } catch (e) {}
+    };
 
     function startDynamicCourseLoop() {
         if (dynamicCourseCameraTimerId) {
