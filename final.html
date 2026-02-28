@@ -3381,6 +3381,60 @@
         const fallback = myMap.getCenter();
         const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
         if (isYm3Active) {
+            try {
+                const target = document.querySelector('.target');
+                const mapEl = document.getElementById('map');
+                const targetRect = target?.getBoundingClientRect?.();
+                const mapRect = mapEl?.getBoundingClientRect?.();
+                const center = (mapAdapter && typeof mapAdapter.getCenter === 'function')
+                    ? mapAdapter.getCenter()
+                    : fallback;
+                const zoom = (mapAdapter && typeof mapAdapter.getZoom === 'function')
+                    ? Number(mapAdapter.getZoom())
+                    : Number(myMap?.getZoom?.() || myMap?.__ym3LastZoom || 16);
+
+                if (
+                    targetRect && mapRect && Array.isArray(center) && center.length >= 2 &&
+                    Number.isFinite(Number(center[0])) && Number.isFinite(Number(center[1])) &&
+                    Number.isFinite(zoom)
+                ) {
+                    const latCenter = Number(center[0]);
+                    const lonCenter = Number(center[1]);
+                    const latRad = latCenter * Math.PI / 180;
+                    const metersPerPixel = (Math.cos(latRad) * 2 * Math.PI * 6378137) / (256 * Math.pow(2, zoom));
+
+                    const anchorX = targetRect.left + targetRect.width * 0.5;
+                    const anchorY = targetRect.top + targetRect.height * 0.68;
+                    const mapCenterX = mapRect.left + mapRect.width * 0.5;
+                    const mapCenterY = mapRect.top + mapRect.height * 0.5;
+
+                    const dxPx = anchorX - mapCenterX;
+                    const dyPx = anchorY - mapCenterY;
+
+                    const tiltDeg = Number(myMap?.__ym3LastTilt || FOLLOW_CAMERA_PITCH_DEG || 0);
+                    const tiltRad = tiltDeg * Math.PI / 180;
+                    const verticalScale = 1 / Math.max(0.25, Math.cos(tiltRad));
+
+                    const screenEastM = dxPx * metersPerPixel;
+                    const screenNorthM = -dyPx * metersPerPixel * verticalScale;
+
+                    const azimuthDeg = Number(myMap?.__ym3LastAzimuth || 0);
+                    const azimuthRad = azimuthDeg * Math.PI / 180;
+
+                    const eastM = (screenEastM * Math.cos(azimuthRad)) + (screenNorthM * Math.sin(azimuthRad));
+                    const northM = (-screenEastM * Math.sin(azimuthRad)) + (screenNorthM * Math.cos(azimuthRad));
+
+                    const dLat = northM / 111320;
+                    const dLon = eastM / Math.max(1e-6, 111320 * Math.cos(latRad));
+
+                    const resultLat = latCenter + dLat;
+                    const resultLon = lonCenter + dLon;
+                    if (Number.isFinite(resultLat) && Number.isFinite(resultLon)) {
+                        return [resultLat, resultLon];
+                    }
+                }
+            } catch (e) {}
+
             if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
                 return [Number(fallback[0]), Number(fallback[1])];
             }
