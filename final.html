@@ -442,6 +442,10 @@
             visibility: visible;
             opacity: 1;
         }
+        .target.target-autofollow-hidden {
+            visibility: hidden !important;
+            opacity: 0 !important;
+        }
         .target::before {
             content: '';
             position: absolute;
@@ -740,22 +744,6 @@
             opacity: 0;
             transform: translateX(100px);
             pointer-events: none;
-        }
-
-        body.autofollow-ui-hidden #onlineCountBadge,
-        body.autofollow-ui-hidden #mapEngineBadge,
-        body.autofollow-ui-hidden #map3dToggleFloating,
-        body.autofollow-ui-hidden #rightBar,
-        body.autofollow-ui-hidden #bottomControls,
-        body.autofollow-ui-hidden .action-panel,
-        body.autofollow-ui-hidden #openActionBtn,
-        body.autofollow-ui-hidden .speedometer,
-        body.autofollow-ui-hidden #speedometerOpenBtn,
-        body.autofollow-ui-hidden #inAppNotifWrap,
-        body.autofollow-ui-hidden .broadcast-banner,
-        body.autofollow-ui-hidden .proximity-banner,
-        body.autofollow-ui-hidden .crowd-confirm {
-            display: none !important;
         }
 
         .right-bar .action-btn {
@@ -1624,9 +1612,6 @@
     <div class="bottom-controls" id="bottomControls" aria-label="Нижние кнопки">
         <button class="locate-btn" id="locateBtn" onclick="centerOnMyLocation()" title="Центрирование" aria-label="Центрирование">
             <span class="locate-icon">➤</span>
-        </button>
-        <button class="locate-btn" id="followBottomBtn" onclick="toggleFollow()" title="Автослежение" aria-label="Автослежение">
-            <span class="locate-icon">👁️</span>
         </button>
         <button class="ptt-btn ptt-fab" id="pttFabBtn" title="Рация (зажми и говори)" aria-label="Рация">🎙️</button>
     </div>
@@ -3091,7 +3076,7 @@
     let dynamicCourseCameraTimerId = null;
     let dynamicCourseCompassInit = false;
     let followCameraAzimuthDeg = 0;
-    const FOLLOW_CAMERA_PITCH_DEG = 0;
+    const FOLLOW_CAMERA_PITCH_DEG = 65;
     const FOLLOW_CAMERA_AZIMUTH_SPEED_MS = 2;
     const DYNAMIC_COURSE_TILT = 0.8;
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
@@ -3118,20 +3103,13 @@
     const MAP_ENGINE_YM3_FAIL_KEY = 'mapEngineYm3Failed';
     const MAP_3D_MODE_KEY = 'map3dModeEnabled';
     const MAP_3D_MIN_ZOOM = 17.5;
-    const MAP_3D_TILT_DEG = 0;
+    const MAP_3D_TILT_DEG = 65;
     const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
     const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
     let isAdmin = false;
-    let nextGenAccessCache = {
-        checkedAt: 0,
-        allowed: false,
-        isTester: false,
-        isAdmin: false
-    };
-    const NEXT_GEN_ACCESS_CACHE_MS = 60 * 1000;
     // Флаг режима невидимости админа (глобально для всех клиентов)
     let adminInvisible = false;
     // Realtime-канал для админ-уведомлений и статусов
@@ -3228,7 +3206,6 @@
     let markerRenderMode = 'nearby'; // 'nearby' | 'all'
     // Флаг видимости нижнего виджета
     let actionCardVisible = false;
-    let currentActionCardCenterOffsetPx = 0;
     // Флаг для отключения автосцентрирования GPS после размещения метки
     let disableAutoFollowOnce = false;
     // Кэш данных авторов для оптимизации запросов к БД
@@ -3274,51 +3251,11 @@
             if (panel) panel.classList.toggle('open', !!actionCardVisible);
         } catch (e) {}
         updateTargetAnchorPosition();
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                updateTargetAnchorPosition();
-            });
-        });
-        setTimeout(() => { try { updateTargetAnchorPosition(); } catch (e) {} }, 320);
     }
 
     function setRightActionsHidden(hidden) {
         const bar = document.getElementById('rightBar');
         if (bar) bar.classList.toggle('hidden', !!hidden);
-    }
-
-    function getActionCardOcclusionPx() {
-        if (!actionCardVisible) return 0;
-        const card = document.getElementById('actionCard');
-        const mapEl = document.getElementById('map');
-        if (!card || !mapEl || card.classList.contains('hidden')) return 0;
-        const cardRect = card.getBoundingClientRect();
-        const mapRect = mapEl.getBoundingClientRect();
-        const overlap = Math.max(0, Number(mapRect.bottom || 0) - Number(cardRect.top || 0));
-        return Math.round(overlap);
-    }
-
-    function shiftMapCenterByPixels(offsetY) {
-        const dy = Number(offsetY) || 0;
-        if (!myMap || !Number.isFinite(dy) || Math.abs(dy) < 1) return;
-        const center = myMap.getCenter?.();
-        const zoom = Number(myMap.getZoom?.());
-        const projection = myMap.options?.get?.('projection');
-        if (!Array.isArray(center) || center.length < 2 || !Number.isFinite(zoom) || !projection) return;
-        if (typeof projection.toGlobalPixels !== 'function' || typeof projection.fromGlobalPixels !== 'function') return;
-
-        try {
-            const global = projection.toGlobalPixels([Number(center[0]), Number(center[1])], zoom);
-            if (!Array.isArray(global) || global.length < 2) return;
-            const shifted = [Number(global[0]), Number(global[1]) + dy];
-            const nextCenter = projection.fromGlobalPixels(shifted, zoom);
-            if (!Array.isArray(nextCenter) || nextCenter.length < 2) return;
-            myMap.setCenter([Number(nextCenter[0]), Number(nextCenter[1])], zoom, { duration: 220, timingFunction: 'ease-out' });
-        } catch (e) {}
-    }
-
-    function applyActionCardCenterOffset() {
-        return;
     }
 
     function updateTargetAnchorPosition() {
@@ -3348,16 +3285,7 @@
         }
 
         const cardRect = card.getBoundingClientRect();
-        let cardTop = Number(cardRect?.top);
-        const cardHeight = Math.max(Number(card?.offsetHeight || 0), Number(cardRect?.height || 0));
-        const cardIsOutOfScreen = !Number.isFinite(cardTop) || cardTop >= (mapBottom - 4);
-
-        if (cardIsOutOfScreen && cardHeight > 0) {
-            cardTop = mapBottom - cardHeight;
-        }
-
-        const safeCardTop = Number.isFinite(cardTop) ? cardTop : mapBottom;
-        const visibleBottom = Math.max(mapTop + 80, Math.min(mapBottom, safeCardTop - TARGET_CARD_GAP_PX));
+        const visibleBottom = Math.max(mapTop + 80, Math.min(mapBottom, cardRect.top - TARGET_CARD_GAP_PX));
         const desiredTop = Math.max(TARGET_MIN_TOP_PX, mapTop + (visibleBottom - mapTop) * 0.5);
         target.style.top = `${Math.round(desiredTop)}px`;
     }
@@ -3366,10 +3294,34 @@
         if (!myMap) return [48.01, 37.80];
 
         const fallback = myMap.getCenter();
-        if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
-            return [Number(fallback[0]), Number(fallback[1])];
+        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
+        if (isYm3Active) {
+            if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
+                return [Number(fallback[0]), Number(fallback[1])];
+            }
+            return [48.01, 37.80];
         }
-        return [48.01, 37.80];
+        try {
+            const target = document.querySelector('.target');
+            const projection = myMap.options?.get?.('projection');
+            if (!target || !projection || !myMap.converter?.pageToGlobal) return fallback;
+
+            const rect = target.getBoundingClientRect();
+            const pixelPoint = [
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2
+            ];
+
+            const globalPixels = myMap.converter.pageToGlobal(pixelPoint);
+            const coords = projection.fromGlobalPixels(globalPixels, myMap.getZoom());
+
+            if (Array.isArray(coords) && coords.length >= 2 && Number.isFinite(Number(coords[0])) && Number.isFinite(Number(coords[1]))) {
+                return [Number(coords[0]), Number(coords[1])];
+            }
+        } catch (e) {
+            console.warn('Не удалось вычислить координаты по центральной метке:', e?.message || e);
+        }
+        return fallback;
     }
 
     function setDtpHeatmapUiState(enabled) {
@@ -3850,6 +3802,42 @@
         const valueEl = document.getElementById('speedValue');
         if (!valueEl) return;
         valueEl.textContent = Math.max(0, Math.round(speedKmh || 0));
+    }
+
+    function updateDrivingFollowCenter() {
+        if (!myMap || !Array.isArray(userLocation) || userLocation.length < 2) return;
+        const lat = Number(userLocation[0]);
+        const lon = Number(userLocation[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+        try {
+            if (typeof myMap.update === 'function') {
+                myMap.update({
+                    location: {
+                        center: [lon, lat],
+                        duration: 500
+                    }
+                });
+                myMap.__ym3LastCenter = [lat, lon];
+                return;
+            }
+        } catch (e) {}
+
+        try {
+            const ym3Root = myMap?.__ym3Root;
+            if (ym3Root && typeof ym3Root.update === 'function') {
+                ym3Root.update({
+                    location: {
+                        center: [lon, lat],
+                        duration: 500
+                    }
+                });
+                myMap.__ym3LastCenter = [lat, lon];
+                return;
+            }
+        } catch (e) {}
+
+        try { myMap.setCenter([lat, lon], 17, { duration: 500 }); } catch (e) {}
     }
 
     function registerServiceWorker() {
@@ -4913,26 +4901,6 @@
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
     let monolithUserGestureUnlocked = false;
-    let monolithPwaUnlockHintShown = false;
-    let monolithStartupVoiceAnnounced = false;
-    let monolithStartupVoiceTimerId = null;
-    let monolithLastResumeRecoveryTs = 0;
-    const GPS_STALE_RECOVERY_MS = 45000;
-
-    const MONOLITH_STARTUP_DELAY_MS = 1500;
-    const MONOLITH_V2_STARTUP_LINES = [
-        'Система MONOLITH активирована. Карта загружена, база данных обновлена. Хорошей дороги!',
-        'Связь со спутниками установлена. Я слежу за обстановкой. В добрый путь.',
-        'MONOLITH на связи. Все посты и камеры нанесены на карту. Поехали.'
-    ];
-    const MONOLITH_V3_STARTUP_LINES = [
-        'Добро пожаловать в будущее, тестер. Ядро v3.0 запущено в режиме максимальной точности. Начинаю сканирование горизонта.',
-        'MONOLITH Next-Gen приветствует вас. Протокол ЗБТ активен. Удачных тестов на дорогах.',
-        'Система версии три-ноль готова. Визуализация в 3D активирована. Штурман на связи.'
-    ];
-    const MONOLITH_WARN_GPS_LINE = 'Внимание! Низкая точность GPS. Синяя метка может быть смещена. Пожалуйста, откалибруйте прицел.';
-    const MONOLITH_WARN_DB_LINE = 'Связь с базой нестабильна. Возможны задержки в обновлении меток.';
-    const MONOLITH_WARN_BATTERY_LINE = 'Внимание! Низкий заряд аккумулятора. Рекомендуется подключить устройство к питанию.';
 
     // very small silent WAV (short) as data URI
     const MONOLITH_SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
@@ -5000,12 +4968,6 @@
         monolithSelectedRuVoice = monolithPickRussianVoice();
     }
 
-    function monolithPickRandomLine(lines) {
-        if (!Array.isArray(lines) || !lines.length) return '';
-        const idx = Math.floor(Math.random() * lines.length);
-        return String(lines[idx] || '').trim();
-    }
-
     function monolithSpeakNextFromQueue() {
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
@@ -5015,26 +4977,11 @@
         const next = monolithTtsQueue.shift();
         if (!next) return;
 
-        const payload = (typeof next === 'object' && next !== null)
-            ? next
-            : { text: next };
-        const text = String(payload.text || '').trim();
-        if (!text) {
-            monolithTtsIsSpeaking = false;
-            monolithSpeakNextFromQueue();
-            return;
-        }
-
-        const pitchValue = Number(payload.pitch);
-        const pitch = Number.isFinite(pitchValue)
-            ? Math.max(0.5, Math.min(2.0, pitchValue))
-            : 1.0;
-
         monolithTtsIsSpeaking = true;
-        const utterance = new SpeechSynthesisUtterance(text);
+        const utterance = new SpeechSynthesisUtterance(String(next));
         utterance.lang = 'ru-RU';
         utterance.rate = 1.0;
-        utterance.pitch = pitch;
+        utterance.pitch = 1.0;
         utterance.volume = 1.0;
         if (!monolithSelectedRuVoice) monolithSelectedRuVoice = monolithPickRussianVoice();
         if (monolithSelectedRuVoice) utterance.voice = monolithSelectedRuVoice;
@@ -5064,87 +5011,21 @@
     }
 
     // Требование: если синтез уже говорит — новые фразы в очередь, не прерывать.
-    function aiSpeak(text, options = {}) {
+    function aiSpeak(text) {
         const t = String(text || '').trim();
         if (!t) return;
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
 
-        const payload = {
-            text: t,
-            pitch: Number.isFinite(Number(options?.pitch)) ? Number(options.pitch) : 1.0
-        };
-
-        if (!monolithUserGestureUnlocked) {
-            monolithTtsQueue.push(payload);
-            if (!monolithPwaUnlockHintShown) {
-                monolithPwaUnlockHintShown = true;
-                try {
-                    showInAppNotification({
-                        title: '🔊 Активация звука',
-                        body: 'Для PWA нажмите один раз по экрану, чтобы включить голос ИИ в этом режиме.',
-                        priority: 'high'
-                    });
-                } catch (e) {}
-            }
-            return;
-        }
-
         monolithSoftResumeSpeech();
         monolithEnsureVoicesReady();
-        monolithTtsQueue.push(payload);
+        monolithTtsQueue.push(t);
 
         // при старте озвучки пытаемся удержать процесс живым (в пределах возможностей браузера)
         try { monolithMaybeUpdateWakeLock(); } catch (e) {}
         try { monolithMaybeStartKeepAliveAudio(); } catch (e) {}
 
         monolithSpeakNextFromQueue();
-    }
-
-    async function monolithAnnounceStartupStatus() {
-        if (monolithStartupVoiceAnnounced) return;
-        monolithStartupVoiceAnnounced = true;
-
-        if (monolithStartupVoiceTimerId) {
-            clearTimeout(monolithStartupVoiceTimerId);
-            monolithStartupVoiceTimerId = null;
-        }
-
-        monolithStartupVoiceTimerId = setTimeout(async () => {
-            if (!isMonolithVoiceEnabled()) return;
-
-            const engine = String(activeMapEngine || preferredMapEngine || '').toLowerCase();
-            const isV3Engine = engine.includes('ymaps3');
-
-            let access = null;
-            try { access = await getNextGenAccess(false); } catch (e) { access = null; }
-            const isV3Tester = !!(isV3Engine && (access?.isTester || access?.isAdmin));
-            const startupLine = monolithPickRandomLine(isV3Tester ? MONOLITH_V3_STARTUP_LINES : MONOLITH_V2_STARTUP_LINES);
-
-            if (startupLine) {
-                try { aiSpeak(startupLine, { pitch: isV3Tester ? 1.08 : 1.0 }); } catch (e) {}
-            }
-
-            const poorGps = !gpsReliable || (Number.isFinite(Number(lastGpsAccuracyMeters)) && Number(lastGpsAccuracyMeters) > 80);
-            if (poorGps) {
-                try { aiSpeak(MONOLITH_WARN_GPS_LINE, { pitch: isV3Tester ? 1.05 : 1.0 }); } catch (e) {}
-            }
-
-            const connectionUnstable = (typeof navigator !== 'undefined' && navigator.onLine === false);
-            if (connectionUnstable) {
-                try { aiSpeak(MONOLITH_WARN_DB_LINE, { pitch: isV3Tester ? 1.05 : 1.0 }); } catch (e) {}
-            }
-
-            try {
-                if (typeof navigator !== 'undefined' && typeof navigator.getBattery === 'function') {
-                    const battery = await navigator.getBattery();
-                    const isLowBattery = !!battery && battery.charging === false && Number(battery.level) <= 0.20;
-                    if (isLowBattery) {
-                        try { aiSpeak(MONOLITH_WARN_BATTERY_LINE, { pitch: isV3Tester ? 1.03 : 1.0 }); } catch (e) {}
-                    }
-                }
-            } catch (e) {}
-        }, MONOLITH_STARTUP_DELAY_MS);
     }
 
     async function monolithRequestWakeLock() {
@@ -5237,30 +5118,6 @@
 
         monolithAudioPrimed = true;
         try { monolithStartAudioContextKeepAlive(); } catch (e) {}
-        try { monolithSoftResumeSpeech(); } catch (e) {}
-        try { monolithSpeakNextFromQueue(); } catch (e) {}
-    }
-
-    function monolithRecoverAfterResume() {
-        const now = Date.now();
-        if ((now - Number(monolithLastResumeRecoveryTs || 0)) < 1500) return;
-        monolithLastResumeRecoveryTs = now;
-
-        try { monolithPrimeAudioOnce(true); } catch (e) {}
-        try { monolithSoftResumeSpeech(); } catch (e) {}
-        try { monolithMaybeUpdateWakeLock(); } catch (e) {}
-
-        if (!navigator.geolocation || document.hidden) return;
-        const gpsStale = !lastUserPositionTime || ((now - Number(lastUserPositionTime || 0)) > GPS_STALE_RECOVERY_MS);
-        if (!gpsStale) return;
-
-        try {
-            if (gpsWatchId !== null && typeof gpsWatchId !== 'undefined') {
-                navigator.geolocation.clearWatch(gpsWatchId);
-            }
-        } catch (e) {}
-        gpsWatchId = null;
-        try { initGPS(); } catch (e) {}
     }
 
     function monolithEnsureAudioContext() {
@@ -5399,12 +5256,9 @@
                 if (window.speechSynthesis) {
                     try { window.speechSynthesis.resume(); } catch(e) {}
                 }
-                monolithRecoverAfterResume();
             }
         } catch (e) {}
     });
-    window.addEventListener('pageshow', () => { try { monolithRecoverAfterResume(); } catch (e) {} });
-    window.addEventListener('focus', () => { try { monolithRecoverAfterResume(); } catch (e) {} });
 
     function speakSmartHintText(text) {
         const t = String(text || '').trim();
@@ -6117,8 +5971,12 @@
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
                         try {
-                            myMap.setCenter(userLocation, 17);
-                            applyActionCardCenterOffset();
+                            const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
+                            if (isYm3Active) {
+                                updateDynamicCourseCamera();
+                            } else {
+                                updateDrivingFollowCenter();
+                            }
                         } catch (e2) { console.warn(e2); }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
@@ -6443,54 +6301,6 @@
 
     window.setMapEnginePreference = setMapEnginePreference;
 
-
-    async function getNextGenAccess(force = false) {
-        const now = Date.now();
-        if (!force && (now - Number(nextGenAccessCache.checkedAt || 0)) < NEXT_GEN_ACCESS_CACHE_MS) {
-            return { ...nextGenAccessCache };
-        }
-
-        const adminById = !!uid && String(uid) === String(ADMIN_ID);
-        let allowed = adminById;
-        let testerFlag = false;
-        let adminFlag = adminById;
-
-        if (uid && _sb && typeof _sb.from === 'function') {
-            try {
-                const { data, error } = await _sb
-                    .from('drivers')
-                    .select('is_tester,is_admin')
-                    .eq('user_id', uid)
-                    .maybeSingle();
-
-                if (!error && data) {
-                    testerFlag = !!data.is_tester;
-                    adminFlag = adminById || !!data.is_admin;
-                    allowed = testerFlag || adminFlag;
-                }
-            } catch (e) {}
-        }
-
-        nextGenAccessCache = {
-            checkedAt: now,
-            allowed: !!allowed,
-            isTester: !!testerFlag,
-            isAdmin: !!adminFlag
-        };
-        return { ...nextGenAccessCache };
-    }
-
-    function notifyNextGenDenied() {
-        try {
-            showInAppNotification({
-                title: '🧪 Next-Gen v3.0 (ЗБТ)',
-                body: 'Доступ к движку v3.0 открыт только для участников ЗБТ и администраторов. Если хотите доступ — напишите в поддержку.',
-                priority: 'high'
-            });
-        } catch (e) {
-            alert('🧪 Доступ к v3.0 только для участников ЗБТ и администраторов.');
-        }
-    }
     function ensureLegacyMapHost() {
         let host = document.getElementById('mapLegacyHost');
         if (host) return host;
@@ -7065,12 +6875,8 @@
                 myMap.options.set('azimuth', followCameraAzimuthDeg);
             }
             myMap.setCenter(cameraTarget, 17, { duration: 800, timingFunction: 'linear' });
-            applyActionCardCenterOffset();
         } catch (e) {
-            try {
-                myMap.setCenter(cameraTarget, 17);
-                applyActionCardCenterOffset();
-            } catch (e2) {}
+            try { myMap.setCenter(cameraTarget, 17); } catch (e2) {}
         }
     }
 
@@ -7126,83 +6932,55 @@
     let ym3UserMarkerEl = null;
     let ym3UserArrowEl = null;
     let ym3UserPulseEl = null;
-    let legacyUserIconContentLayout = null;
     let lastUserHeading = 0;
     let lastUserCoords = null;
     const MIN_ROTATE_SPEED_MS = 1.5;
+    let legacyUserIconContentLayout = null;
     const LEGACY_USER_MARKER_SIZE = 36;
     const LEGACY_USER_MARKER_HALF = Math.round(LEGACY_USER_MARKER_SIZE / 2);
-    const LEGACY_MOVING_AVG_WINDOW = 5;
-    let legacyUserCoordsHistory = [];
+    const LEGACY_USER_SMOOTH_WINDOW = 4;
+    const legacyUserPathBuffer = [];
 
     function applyLegacyMovingAverage(lat, lon) {
         const latNum = Number(lat);
         const lonNum = Number(lon);
-        if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
-            if (Array.isArray(lastUserCoords) && lastUserCoords.length >= 2) return [Number(lastUserCoords[0]), Number(lastUserCoords[1])];
-            return [48.01, 37.80];
+        if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) return [latNum, lonNum];
+
+        legacyUserPathBuffer.push([latNum, lonNum]);
+        while (legacyUserPathBuffer.length > LEGACY_USER_SMOOTH_WINDOW) {
+            legacyUserPathBuffer.shift();
         }
 
-        const usePoint = !gpsReliable && legacyUserCoordsHistory.length > 0
-            ? legacyUserCoordsHistory[legacyUserCoordsHistory.length - 1]
-            : [latNum, lonNum];
+        const sum = legacyUserPathBuffer.reduce((acc, pair) => {
+            acc[0] += Number(pair[0]) || 0;
+            acc[1] += Number(pair[1]) || 0;
+            return acc;
+        }, [0, 0]);
 
-        legacyUserCoordsHistory.push(usePoint);
-        if (legacyUserCoordsHistory.length > LEGACY_MOVING_AVG_WINDOW) {
-            legacyUserCoordsHistory = legacyUserCoordsHistory.slice(-LEGACY_MOVING_AVG_WINDOW);
-        }
-
-        let sumLat = 0;
-        let sumLon = 0;
-        legacyUserCoordsHistory.forEach(p => {
-            sumLat += Number(p[0]) || 0;
-            sumLon += Number(p[1]) || 0;
-        });
-
-        const denom = legacyUserCoordsHistory.length || 1;
-        return [sumLat / denom, sumLon / denom];
+        const count = Math.max(1, legacyUserPathBuffer.length);
+        return [sum[0] / count, sum[1] / count];
     }
 
     function buildUserMarkerHtmlForMap(headingDeg) {
-        const safeHeading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
+        const heading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
         return `
-            <div class="user-marker ym3-user-marker" style="pointer-events:none; width:36px; height:36px;">
+            <div class="user-marker ym3-user-marker" style="width:36px;height:36px;pointer-events:none;position:relative;transform:translate(-50%,-50%);">
                 <div class="ym3-user-halo"></div>
                 <div class="ym3-user-pulse"></div>
-                <div class="ym3-user-arrow" style="transform:translate(-50%, -50%) rotate(${safeHeading}deg)"></div>
+                <div class="ym3-user-arrow" style="transform:translate(-50%, -50%) rotate(${heading}deg);"></div>
             </div>
         `;
     }
 
     function getLegacyUserIconContentLayout() {
         if (legacyUserIconContentLayout) return legacyUserIconContentLayout;
-        if (!window.ymaps?.templateLayoutFactory?.createClass) return null;
+        if (!window.ymaps || !ymaps.templateLayoutFactory) return null;
         try {
             legacyUserIconContentLayout = ymaps.templateLayoutFactory.createClass('$[properties.iconContent]');
         } catch (e) {
             legacyUserIconContentLayout = null;
         }
         return legacyUserIconContentLayout;
-    }
-
-    function applyAutoFollowInterfaceMode() {
-        const hideUi = !!autoFollow;
-        try {
-            document.body.classList.toggle('autofollow-ui-hidden', hideUi);
-        } catch (e) {}
-
-        const card = document.getElementById('actionCard');
-        const openBtn = document.getElementById('openActionBtn');
-        if (hideUi) {
-            actionCardVisible = false;
-            if (card) card.classList.add('hidden');
-            if (openBtn) openBtn.classList.remove('visible');
-        } else {
-            if (card) card.classList.toggle('hidden', !actionCardVisible);
-            if (openBtn) openBtn.classList.toggle('visible', !actionCardVisible);
-        }
-
-        try { setRightActionsHidden(hideUi || !!actionCardVisible); } catch (e) {}
     }
 
     function updateUserLocationMarker() {
@@ -7250,7 +7028,6 @@
             lastUserCoords = [lat, lon];
             return;
         }
-
         if (!window.ymaps || typeof ymaps.Placemark !== 'function') return;
         const [lat, lon] = userLocation;
         const [smoothLat, smoothLon] = applyLegacyMovingAverage(lat, lon);
@@ -7291,6 +7068,7 @@
             console.warn('Не удалось обновить маркер пользователя (ymaps2):', e?.message || e);
         }
     }
+// ...existing code...
     
     // Центрирует карту на текущем местоположении и включает автоследование
     function centerOnMyLocation() {
@@ -7302,10 +7080,7 @@
         updateFollowButton();
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         try { updateDynamicCourseCamera(); } catch (e) {
-            try {
-                myMap.setCenter(userLocation, 17);
-                applyActionCardCenterOffset();
-            } catch (e2) { console.warn(e2); }
+            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
         }
     }
 
@@ -7316,29 +7091,14 @@
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         if (autoFollow && userLocation && myMap) {
             try { updateDynamicCourseCamera(); } catch(e) {
-                try {
-                    myMap.setCenter(userLocation, 17);
-                    applyActionCardCenterOffset();
-                } catch(e2) { console.warn(e2); }
+                try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
             }
         }
     }
 
     function updateFollowButton() {
+        try { updateTargetAutoVisibility(); } catch(e) {}
         const btn = document.getElementById('followToggleBtn');
-        const bottomBtn = document.getElementById('followBottomBtn');
-        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
-
-        try { applyAutoFollowInterfaceMode(); } catch(e) {}
-
-        if (bottomBtn) {
-            bottomBtn.style.display = isYm3Active ? 'none' : 'flex';
-            bottomBtn.classList.toggle('active', !!autoFollow);
-            bottomBtn.title = autoFollow ? 'Автослежение: ВКЛ' : 'Автослежение: ВЫКЛ';
-            const iconEl = bottomBtn.querySelector('.locate-icon');
-            if (iconEl) iconEl.textContent = autoFollow ? '👁️' : '🚫';
-        }
-
         if (!btn) {
             try { updateLocateBtnUiState(); } catch(e) {}
             return;
@@ -7358,6 +7118,12 @@
         btn.innerHTML = `<span class="follow-icon">${icon}</span>${badge}`;
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         try { updateLocateBtnUiState(); } catch(e) {}
+    }
+
+    function updateTargetAutoVisibility() {
+        const target = document.querySelector('.target');
+        if (!target) return;
+        target.classList.toggle('target-autofollow-hidden', !!autoFollow);
     }
 
     function updateLocateBtnUiState() {
@@ -7405,24 +7171,8 @@
         updateMap3dToggleUi();
     }
 
-    async function toggleMapEngineFromUI() {
+    function toggleMapEngineFromUI() {
         const next = String(preferredMapEngine || '').toLowerCase() === 'ymaps3' ? 'ymaps2' : 'ymaps3';
-
-        if (next === 'ymaps3') {
-            const access = await getNextGenAccess(true);
-            if (!access.allowed) {
-                notifyNextGenDenied();
-                return;
-            }
-            try {
-                showInAppNotification({
-                    title: access.isAdmin ? '🛡️ Admin Next-Gen' : '🚀 Next-Gen v3.0',
-                    body: access.isAdmin ? 'Доступ администратора подтверждён. Магия v3.0 активируется…' : 'Статус ЗБТ подтверждён. Next-Gen v3.0 активируется…',
-                    priority: 'low'
-                });
-            } catch (e) {}
-        }
-
         try {
             if (next === 'ymaps3') {
                 localStorage.removeItem(MAP_ENGINE_LEGACY_FORCE_KEY);
@@ -12741,10 +12491,7 @@
             appInitialized = true;
             initApp();
             updateTargetAnchorPosition();
-            window.addEventListener('resize', () => {
-                try { updateTargetAnchorPosition(); } catch(e) {}
-                try { applyActionCardCenterOffset(); } catch(e) {}
-            });
+            window.addEventListener('resize', updateTargetAnchorPosition);
             setDtpHeatmapUiState(false);
             
             // Инициализируем GPS отслеживание
@@ -12754,7 +12501,6 @@
             try { updateFollowButton(); } catch(e) { /* ignore */ }
             // Загружаем маркеры с сервера
             loadMarkers();
-            try { monolithAnnounceStartupStatus(); } catch(e) {}
             // Fallback-поллинг на случай потери realtime
             setInterval(loadMarkersDebounced, 10000);
 
@@ -12770,15 +12516,9 @@
                 const card = document.getElementById('actionCard');
                 if (card && !card.__targetObserverBound) {
                     card.__targetObserverBound = true;
-                    card.addEventListener('transitionend', () => {
-                        try { updateTargetAnchorPosition(); } catch(e) {}
-                        try { applyActionCardCenterOffset(); } catch(e) {}
-                    });
+                    card.addEventListener('transitionend', () => { try { updateTargetAnchorPosition(); } catch(e) {} });
                     if ('ResizeObserver' in window) {
-                        const ro = new ResizeObserver(() => {
-                            try { updateTargetAnchorPosition(); } catch(e) {}
-                            try { applyActionCardCenterOffset(); } catch(e) {}
-                        });
+                        const ro = new ResizeObserver(() => { try { updateTargetAnchorPosition(); } catch(e) {} });
                         ro.observe(card);
                         card.__targetRO = ro;
                     }
@@ -12802,7 +12542,6 @@
                 initGPS();
                 try { updateFollowButton(); } catch(e) { /* ignore */ }
                 loadMarkers();
-                try { monolithAnnounceStartupStatus(); } catch(e) {}
                 setInterval(loadMarkersDebounced, 10000);
                 
                 const openBtn = document.getElementById('openActionBtn');
