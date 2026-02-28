@@ -3995,6 +3995,7 @@
                         duration: 500
                     }
                 });
+                myMap.__ym3LastCenter = [lat, lon];
                 return;
             }
         } catch (e) {}
@@ -4008,6 +4009,7 @@
                         duration: 500
                     }
                 });
+                myMap.__ym3LastCenter = [lat, lon];
                 return;
             }
         } catch (e) {}
@@ -12821,7 +12823,7 @@
             return !isNaN(parsed) ? parsed > now : true;
         });
         drivingDpsCoordsCache = activeMarkers
-            .filter(m => String(m?.type) === 'dps')
+            .filter(m => String(m?.type) === 'dps' && String(m?.author_id || '') !== String(uid || ''))
             .map(m => {
                 const c = extractMarkerCoordsForNotif(m);
                 if (!c) return null;
