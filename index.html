@@ -113,7 +113,7 @@
             transform: translate(-50%, -50%) rotate(0deg);
             transform-origin: 50% 74%;
             filter: drop-shadow(0px 4px 2px rgba(0,0,0,0.4));
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: transform 0.4s ease-in-out;
             z-index: 2;
         }
         .ym3-user-arrow::before,
@@ -6941,6 +6941,148 @@
     const LEGACY_USER_MARKER_HALF = Math.round(LEGACY_USER_MARKER_SIZE / 2);
     const LEGACY_USER_SMOOTH_WINDOW = 4;
     const legacyUserPathBuffer = [];
+    const USER_MARKER_ANIM_DURATION_MS = 500;
+    const USER_MARKER_DEAD_RECKONING_AFTER_MS = 1200;
+    const USER_MARKER_DEAD_RECKONING_MAX_MS = 2500;
+    let animatedUserCoords = null;
+    let targetUserCoords = null;
+    let userMarkerAnimFrameId = null;
+    let userMarkerLastFrameTs = 0;
+    let userMarkerLastGpsTs = 0;
+
+    function interpolateCoords(fromCoords, toCoords, t) {
+        const tt = Math.max(0, Math.min(1, Number(t) || 0));
+        return [
+            Number(fromCoords[0]) + (Number(toCoords[0]) - Number(fromCoords[0])) * tt,
+            Number(fromCoords[1]) + (Number(toCoords[1]) - Number(fromCoords[1])) * tt
+        ];
+    }
+
+    function getEffectiveTargetUserCoords(nowTs) {
+        if (!Array.isArray(targetUserCoords) || targetUserCoords.length < 2) return null;
+        const base = [Number(targetUserCoords[0]), Number(targetUserCoords[1])];
+        if (!Number.isFinite(base[0]) || !Number.isFinite(base[1])) return null;
+
+        const speedMs = Math.max(0, (Number(userSpeedKmh) || 0) / 3.6);
+        const heading = Number(userHeadingDeg);
+        const staleMs = Math.max(0, Number(nowTs) - Number(userMarkerLastGpsTs || 0));
+        const canPredict = staleMs > USER_MARKER_DEAD_RECKONING_AFTER_MS
+            && staleMs < USER_MARKER_DEAD_RECKONING_MAX_MS
+            && speedMs > 0.8
+            && Number.isFinite(heading);
+
+        if (!canPredict) return base;
+
+        const predictSec = Math.min(2, staleMs / 1000);
+        const predictMeters = speedMs * predictSec;
+        return destinationPointByBearing(base[0], base[1], heading, predictMeters);
+    }
+
+    function renderAnimatedUserMarkerAt(lat, lon) {
+        const speed = Number(userSpeedKmh) || 0;
+        const speedMs = speed / 3.6;
+        const heading = (Number(userHeadingDeg) || 0) % 360;
+
+        if (window.ymaps3 && myMap.__ym3Root) {
+            if (!ym3UserMarker) {
+                ym3UserMarkerEl = document.createElement('div');
+                ym3UserMarkerEl.className = 'user-marker ym3-user-marker';
+                ym3UserMarkerEl.style.pointerEvents = 'none';
+                ym3UserMarkerEl.style.width = '36px';
+                ym3UserMarkerEl.style.height = '36px';
+                ym3UserMarkerEl.innerHTML = `
+                    <div class="ym3-user-halo"></div>
+                    <div class="ym3-user-pulse"></div>
+                    <div class="ym3-user-arrow"></div>
+                `;
+                ym3UserArrowEl = ym3UserMarkerEl.querySelector('.ym3-user-arrow');
+                ym3UserPulseEl = ym3UserMarkerEl.querySelector('.ym3-user-pulse');
+
+                ym3UserMarker = new ymaps3.YMapMarker({ coordinates: [lon, lat] }, ym3UserMarkerEl);
+                const parent = myMap.__ym3MarkerLayer || myMap.__ym3Root;
+                parent.addChild(ym3UserMarker);
+            } else {
+                ym3UserMarker.update({ coordinates: [lon, lat] });
+            }
+
+            if (ym3UserArrowEl) {
+                if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
+                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotate(${heading}deg)`;
+                } else {
+                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotate(${lastUserHeading}deg)`;
+                }
+                lastUserHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
+            }
+
+            lastUserCoords = [lat, lon];
+            return;
+        }
+
+        if (!window.ymaps || typeof ymaps.Placemark !== 'function') return;
+        const [smoothLat, smoothLon] = applyLegacyMovingAverage(lat, lon);
+        const visualHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
+        if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
+            lastUserHeading = heading;
+        }
+
+        const iconContent = buildUserMarkerHtmlForMap(visualHeading);
+        try {
+            if (!userLocationMarker) {
+                const iconContentLayout = getLegacyUserIconContentLayout();
+                userLocationMarker = new ymaps.Placemark(
+                    [smoothLat, smoothLon],
+                    { iconContent },
+                    {
+                        iconLayout: 'default#imageWithContent',
+                        iconImageHref: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+                        iconImageSize: [LEGACY_USER_MARKER_SIZE, LEGACY_USER_MARKER_SIZE],
+                        iconImageOffset: [-LEGACY_USER_MARKER_HALF, -LEGACY_USER_MARKER_HALF],
+                        iconContentLayout
+                    }
+                );
+                if (myMap?.geoObjects?.add) myMap.geoObjects.add(userLocationMarker);
+            } else {
+                if (typeof userLocationMarker.geometry?.setCoordinates === 'function') {
+                    userLocationMarker.geometry.setCoordinates([smoothLat, smoothLon]);
+                }
+                if (typeof userLocationMarker.properties?.set === 'function') {
+                    userLocationMarker.properties.set('iconContent', iconContent);
+                }
+            }
+            lastUserCoords = [smoothLat, smoothLon];
+        } catch (e) {
+            console.warn('Не удалось обновить маркер пользователя (ymaps2):', e?.message || e);
+        }
+    }
+
+    function tickUserMarkerAnimation(ts) {
+        if (!myMap || !Array.isArray(targetUserCoords) || targetUserCoords.length < 2) {
+            userMarkerAnimFrameId = null;
+            return;
+        }
+
+        const now = Number(ts) || performance.now();
+        const dt = Math.max(0, now - Number(userMarkerLastFrameTs || now));
+        userMarkerLastFrameTs = now;
+
+        if (!Array.isArray(animatedUserCoords) || animatedUserCoords.length < 2) {
+            animatedUserCoords = [Number(targetUserCoords[0]), Number(targetUserCoords[1])];
+        }
+
+        const effectiveTarget = getEffectiveTargetUserCoords(now) || targetUserCoords;
+        const lerpT = Math.max(0.08, Math.min(1, dt / USER_MARKER_ANIM_DURATION_MS));
+        const nextCoords = interpolateCoords(animatedUserCoords, effectiveTarget, lerpT);
+        animatedUserCoords = [Number(nextCoords[0]), Number(nextCoords[1])];
+
+        renderAnimatedUserMarkerAt(animatedUserCoords[0], animatedUserCoords[1]);
+        userMarkerAnimFrameId = requestAnimationFrame(tickUserMarkerAnimation);
+    }
+
+    function ensureUserMarkerAnimationLoop() {
+        if (userMarkerAnimFrameId !== null) return;
+        userMarkerLastFrameTs = performance.now();
+        userMarkerAnimFrameId = requestAnimationFrame(tickUserMarkerAnimation);
+    }
 
     function applyLegacyMovingAverage(lat, lon) {
         const latNum = Number(lat);
@@ -6987,87 +7129,13 @@
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
-        // Только для ymaps3
-        if (window.ymaps3 && myMap.__ym3Root) {
-            const [lat, lon] = userLocation;
-            const speed = Number(userSpeedKmh) || 0;
-            const speedMs = speed / 3.6;
-            const heading = (Number(userHeadingDeg) || 0) % 360;
-            // Создаём маркер один раз
-            if (!ym3UserMarker) {
-                // HTML структура маркера
-                ym3UserMarkerEl = document.createElement('div');
-                                ym3UserMarkerEl.className = 'user-marker ym3-user-marker';
-                                ym3UserMarkerEl.style.pointerEvents = 'none';
-                                ym3UserMarkerEl.style.width = '36px';
-                                ym3UserMarkerEl.style.height = '36px';
-                ym3UserMarkerEl.innerHTML = `
-                                    <div class="ym3-user-halo"></div>
-                  <div class="ym3-user-pulse"></div>
-                  <div class="ym3-user-arrow"></div>
-                `;
-                ym3UserArrowEl = ym3UserMarkerEl.querySelector('.ym3-user-arrow');
-                ym3UserPulseEl = ym3UserMarkerEl.querySelector('.ym3-user-pulse');
-
-                // Создаём маркер
-                ym3UserMarker = new ymaps3.YMapMarker({ coordinates: [lon, lat] }, ym3UserMarkerEl);
-                const parent = myMap.__ym3MarkerLayer || myMap.__ym3Root;
-                parent.addChild(ym3UserMarker);
-            } else {
-                // Плавно обновляем координаты
-                ym3UserMarker.update({ coordinates: [lon, lat] });
-            }
-            // Плавный поворот стрелки
-            if (ym3UserArrowEl) {
-                if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
-                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotate(${heading}deg)`;
-                } else {
-                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotate(${lastUserHeading}deg)`;
-                }
-                lastUserHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
-            }
-            lastUserCoords = [lat, lon];
-            return;
+        targetUserCoords = [Number(userLocation[0]), Number(userLocation[1])];
+        userMarkerLastGpsTs = Date.now();
+        if (!Array.isArray(animatedUserCoords) || animatedUserCoords.length < 2) {
+            animatedUserCoords = [Number(targetUserCoords[0]), Number(targetUserCoords[1])];
+            renderAnimatedUserMarkerAt(animatedUserCoords[0], animatedUserCoords[1]);
         }
-        if (!window.ymaps || typeof ymaps.Placemark !== 'function') return;
-        const [lat, lon] = userLocation;
-        const [smoothLat, smoothLon] = applyLegacyMovingAverage(lat, lon);
-        const speed = Number(userSpeedKmh) || 0;
-        const speedMs = speed / 3.6;
-        const heading = (Number(userHeadingDeg) || 0) % 360;
-        const visualHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
-        if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
-            lastUserHeading = heading;
-        }
-
-        const iconContent = buildUserMarkerHtmlForMap(visualHeading);
-        try {
-            if (!userLocationMarker) {
-                const iconContentLayout = getLegacyUserIconContentLayout();
-                userLocationMarker = new ymaps.Placemark(
-                    [smoothLat, smoothLon],
-                    { iconContent },
-                    {
-                        iconLayout: 'default#imageWithContent',
-                        iconImageHref: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
-                        iconImageSize: [LEGACY_USER_MARKER_SIZE, LEGACY_USER_MARKER_SIZE],
-                        iconImageOffset: [-LEGACY_USER_MARKER_HALF, -LEGACY_USER_MARKER_HALF],
-                        iconContentLayout
-                    }
-                );
-                if (myMap?.geoObjects?.add) myMap.geoObjects.add(userLocationMarker);
-            } else {
-                if (typeof userLocationMarker.geometry?.setCoordinates === 'function') {
-                    userLocationMarker.geometry.setCoordinates([smoothLat, smoothLon]);
-                }
-                if (typeof userLocationMarker.properties?.set === 'function') {
-                    userLocationMarker.properties.set('iconContent', iconContent);
-                }
-            }
-            lastUserCoords = [smoothLat, smoothLon];
-        } catch (e) {
-            console.warn('Не удалось обновить маркер пользователя (ymaps2):', e?.message || e);
-        }
+        ensureUserMarkerAnimationLoop();
     }
 // ...existing code...
     
