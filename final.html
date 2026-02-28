@@ -831,7 +831,8 @@
         }
 
         /* Прячем старые плавающие элементы, чтобы интерфейс соответствовал ТЗ */
-        .top-controls, .fab-stack, .follow-toggle, .feedback-btn { display: none !important; }
+        .top-controls, .fab-stack, .feedback-btn { display: none !important; }
+        .follow-toggle { display: flex !important; }
         .fab-row {
             display: flex;
             gap: 10px;
@@ -7123,7 +7124,7 @@
     function updateTargetAutoVisibility() {
         const target = document.querySelector('.target');
         if (!target) return;
-        target.classList.toggle('target-autofollow-hidden', !!autoFollow);
+        target.classList.remove('target-autofollow-hidden');
     }
 
     function updateLocateBtnUiState() {
