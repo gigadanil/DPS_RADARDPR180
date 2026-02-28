@@ -94,40 +94,37 @@
         .user-marker,
         .ym3-user-marker {
             position: absolute;
-            width: 44px !important;
-            height: 44px !important;
+            width: 36px !important;
+            height: 36px !important;
             pointer-events: none;
             z-index: 1000;
             will-change: transform;
             transform-origin: 50% 50%;
             transform-box: fill-box;
-            transform: translate(-50%, -50%) scale(calc(1 / var(--ymaps-viewport-scale, 1))) !important;
+            transform: translate(-50%, -50%) !important;
             contain: layout;
         }
         .ym3-user-arrow {
             position: absolute;
             left: 50%;
             top: 50%;
-            width: 0;
-            height: 0;
-            transform: translate(-50%, -50%) rotateX(65deg) rotateZ(0deg);
-            transform-origin: 50% 68%;
-            transform-box: fill-box;
-            transform-style: preserve-3d;
-            transition: transform 0.3s linear;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-bottom: 24px solid #FFD700;
-            filter: drop-shadow(0 0 2px rgba(255, 215, 0, 0.72));
+            width: 20px;
+            height: 28px;
+            transform: translate(-50%, -50%) rotate(0deg);
+            transform-origin: 50% 74%;
+            background: linear-gradient(160deg, #fff1a8 0%, #ffd700 46%, #f1ab00 100%);
+            clip-path: polygon(50% 0%, 100% 100%, 52% 82%, 0% 100%);
+            filter: drop-shadow(0px 4px 2px rgba(0,0,0,0.4));
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             z-index: 2;
         }
         .ym3-user-pulse {
             position: absolute;
             left: 50%;
             top: 50%;
-            width: 18px;
-            height: 18px;
-            border: 2px solid rgba(255, 215, 0, 0.45);
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 215, 0, 0.36);
             background: transparent;
             border-radius: 50%;
             transform: translate(-50%, -50%);
@@ -6734,9 +6731,58 @@
 
     function updateDynamicCourseCamera() {
         if (!myMap || !autoFollow || !userLocation) return;
-        try { myMap.setCenter(userLocation, 17, { duration: 450, timingFunction: 'ease-out' }); }
-        catch (e) {
-            try { myMap.setCenter(userLocation, 17); } catch (e2) {}
+        const speedKmh = Number(userSpeedKmh) || 0;
+        const speedMs = speedKmh / 3.6;
+        const heading = normalizeDeg(Number(userHeadingDeg) || 0);
+
+        const hasHeading = Number.isFinite(Number(heading));
+        if (!Number.isFinite(Number(followCameraAzimuthDeg))) {
+            followCameraAzimuthDeg = hasHeading ? heading : 0;
+        }
+        if (hasHeading) {
+            // Стрелка меняется мгновенно, камера — плавно догоняет
+            followCameraAzimuthDeg = smoothAngleDeg(followCameraAzimuthDeg, heading, 0.18);
+        }
+
+        // Смещение центра вперёд по курсу: машина оказывается ближе к нижней части экрана
+        const aheadMeters = hasHeading
+            ? Math.max(120, Math.min(520, 170 + speedMs * 22))
+            : 180;
+        const cameraTarget = hasHeading
+            ? destinationPointByBearing(userLocation[0], userLocation[1], heading, aheadMeters)
+            : [Number(userLocation[0]), Number(userLocation[1])];
+
+        try {
+            const ym3Root = myMap?.__ym3Root;
+            if (ym3Root) {
+                const loc = {
+                    center: [Number(cameraTarget[1]), Number(cameraTarget[0])],
+                    zoom: 17,
+                    azimuth: followCameraAzimuthDeg,
+                    pitch: 0,
+                    tilt: 0,
+                    duration: 800,
+                    easing: 'linear'
+                };
+                if (typeof ym3Root.setLocation === 'function') ym3Root.setLocation(loc);
+                else ym3Root.update({ location: loc });
+
+                myMap.__ym3LastCenter = [Number(cameraTarget[0]), Number(cameraTarget[1])];
+                myMap.__ym3LastZoom = 17;
+                myMap.__ym3LastAzimuth = Number(followCameraAzimuthDeg || 0);
+                myMap.__ym3LastTilt = 0;
+                return;
+            }
+        } catch (e) {}
+
+        try {
+            if (myMap?.options?.set && hasHeading) {
+                myMap.options.set('rotation', followCameraAzimuthDeg);
+                myMap.options.set('azimuth', followCameraAzimuthDeg);
+            }
+            myMap.setCenter(cameraTarget, 17, { duration: 800, timingFunction: 'linear' });
+        } catch (e) {
+            try { myMap.setCenter(cameraTarget, 17); } catch (e2) {}
         }
     }
 
@@ -6777,8 +6823,8 @@
                 ym3UserMarkerEl = document.createElement('div');
                                 ym3UserMarkerEl.className = 'user-marker ym3-user-marker';
                                 ym3UserMarkerEl.style.pointerEvents = 'none';
-                                ym3UserMarkerEl.style.width = '44px';
-                                ym3UserMarkerEl.style.height = '44px';
+                                ym3UserMarkerEl.style.width = '36px';
+                                ym3UserMarkerEl.style.height = '36px';
                 ym3UserMarkerEl.innerHTML = `
                   <div class="ym3-user-pulse"></div>
                   <div class="ym3-user-arrow"></div>
@@ -6797,9 +6843,9 @@
             // Плавный поворот стрелки
             if (ym3UserArrowEl) {
                 if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
-                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotateX(65deg) rotateZ(${heading}deg)`;
+                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotate(${heading}deg)`;
                 } else {
-                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotateX(65deg) rotateZ(${lastUserHeading}deg)`;
+                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotate(${lastUserHeading}deg)`;
                 }
                 lastUserHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
             }
@@ -6819,7 +6865,9 @@
         autoFollow = true;
         updateFollowButton();
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
-        try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
+        try { updateDynamicCourseCamera(); } catch (e) {
+            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
+        }
     }
 
     // Переключатель автослежения GPS
@@ -6828,7 +6876,9 @@
         updateFollowButton();
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         if (autoFollow && userLocation && myMap) {
-            try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
+            try { updateDynamicCourseCamera(); } catch(e) {
+                try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
+            }
         }
     }
 
