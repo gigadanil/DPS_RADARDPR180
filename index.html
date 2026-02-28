@@ -818,6 +818,22 @@
             pointer-events: none;
         }
 
+        body.autofollow-ui-hidden #onlineCountBadge,
+        body.autofollow-ui-hidden #mapEngineBadge,
+        body.autofollow-ui-hidden #map3dToggleFloating,
+        body.autofollow-ui-hidden #rightBar,
+        body.autofollow-ui-hidden #bottomControls,
+        body.autofollow-ui-hidden .action-panel,
+        body.autofollow-ui-hidden #openActionBtn,
+        body.autofollow-ui-hidden .speedometer,
+        body.autofollow-ui-hidden #speedometerOpenBtn,
+        body.autofollow-ui-hidden #inAppNotifWrap,
+        body.autofollow-ui-hidden .broadcast-banner,
+        body.autofollow-ui-hidden .proximity-banner,
+        body.autofollow-ui-hidden .crowd-confirm {
+            display: none !important;
+        }
+
         .right-bar .action-btn {
             width: 50px;
             height: 50px;
@@ -3161,7 +3177,7 @@
     let dynamicCourseCameraTimerId = null;
     let dynamicCourseCompassInit = false;
     let followCameraAzimuthDeg = 0;
-    const FOLLOW_CAMERA_PITCH_DEG = 65;
+    const FOLLOW_CAMERA_PITCH_DEG = 0;
     const FOLLOW_CAMERA_AZIMUTH_SPEED_MS = 2;
     const DYNAMIC_COURSE_TILT = 0.8;
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
@@ -3189,7 +3205,7 @@
     const MAP_ENGINE_YM3_FAIL_KEY = 'mapEngineYm3Failed';
     const MAP_3D_MODE_KEY = 'map3dModeEnabled';
     const MAP_3D_MIN_ZOOM = 17.5;
-    const MAP_3D_TILT_DEG = 65;
+    const MAP_3D_TILT_DEG = 0;
     const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
     const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
@@ -5147,6 +5163,26 @@
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
     let monolithUserGestureUnlocked = false;
+    let monolithPwaUnlockHintShown = false;
+    let monolithStartupVoiceAnnounced = false;
+    let monolithStartupVoiceTimerId = null;
+    let monolithLastResumeRecoveryTs = 0;
+    const GPS_STALE_RECOVERY_MS = 45000;
+
+    const MONOLITH_STARTUP_DELAY_MS = 1500;
+    const MONOLITH_V2_STARTUP_LINES = [
+        'Система MONOLITH активирована. Карта загружена, база данных обновлена. Хорошей дороги!',
+        'Связь со спутниками установлена. Я слежу за обстановкой. В добрый путь.',
+        'MONOLITH на связи. Все посты и камеры нанесены на карту. Поехали.'
+    ];
+    const MONOLITH_V3_STARTUP_LINES = [
+        'Добро пожаловать в будущее, тестер. Ядро v3.0 запущено в режиме максимальной точности. Начинаю сканирование горизонта.',
+        'MONOLITH Next-Gen приветствует вас. Протокол ЗБТ активен. Удачных тестов на дорогах.',
+        'Система версии три-ноль готова. Визуализация в 3D активирована. Штурман на связи.'
+    ];
+    const MONOLITH_WARN_GPS_LINE = 'Внимание! Низкая точность GPS. Синяя метка может быть смещена. Пожалуйста, откалибруйте прицел.';
+    const MONOLITH_WARN_DB_LINE = 'Связь с базой нестабильна. Возможны задержки в обновлении меток.';
+    const MONOLITH_WARN_BATTERY_LINE = 'Внимание! Низкий заряд аккумулятора. Рекомендуется подключить устройство к питанию.';
 
     // very small silent WAV (short) as data URI
     const MONOLITH_SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
@@ -5214,6 +5250,12 @@
         monolithSelectedRuVoice = monolithPickRussianVoice();
     }
 
+    function monolithPickRandomLine(lines) {
+        if (!Array.isArray(lines) || !lines.length) return '';
+        const idx = Math.floor(Math.random() * lines.length);
+        return String(lines[idx] || '').trim();
+    }
+
     function monolithSpeakNextFromQueue() {
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
@@ -5223,11 +5265,26 @@
         const next = monolithTtsQueue.shift();
         if (!next) return;
 
+        const payload = (typeof next === 'object' && next !== null)
+            ? next
+            : { text: next };
+        const text = String(payload.text || '').trim();
+        if (!text) {
+            monolithTtsIsSpeaking = false;
+            monolithSpeakNextFromQueue();
+            return;
+        }
+
+        const pitchValue = Number(payload.pitch);
+        const pitch = Number.isFinite(pitchValue)
+            ? Math.max(0.5, Math.min(2.0, pitchValue))
+            : 1.0;
+
         monolithTtsIsSpeaking = true;
-        const utterance = new SpeechSynthesisUtterance(String(next));
+        const utterance = new SpeechSynthesisUtterance(text);
         utterance.lang = 'ru-RU';
         utterance.rate = 1.0;
-        utterance.pitch = 1.0;
+        utterance.pitch = pitch;
         utterance.volume = 1.0;
         if (!monolithSelectedRuVoice) monolithSelectedRuVoice = monolithPickRussianVoice();
         if (monolithSelectedRuVoice) utterance.voice = monolithSelectedRuVoice;
@@ -5257,21 +5314,86 @@
     }
 
     // Требование: если синтез уже говорит — новые фразы в очередь, не прерывать.
-    function aiSpeak(text) {
+    function aiSpeak(text, options = {}) {
         const t = String(text || '').trim();
         if (!t) return;
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
 
+        const payload = {
+            text: t,
+            pitch: Number.isFinite(Number(options?.pitch)) ? Number(options.pitch) : 1.0
+        };
+
+        if (!monolithUserGestureUnlocked) {
+            monolithTtsQueue.push(payload);
+            if (!monolithPwaUnlockHintShown) {
+                monolithPwaUnlockHintShown = true;
+                try {
+                    showInAppNotification({
+                        title: '🔊 Активация звука',
+                        body: 'Для PWA нажмите один раз по экрану, чтобы включить голос ИИ в этом режиме.',
+                        priority: 'high'
+                    });
+                } catch (e) {}
+            }
+            return;
+        }
         monolithSoftResumeSpeech();
         monolithEnsureVoicesReady();
-        monolithTtsQueue.push(t);
+        monolithTtsQueue.push(payload);
 
         // при старте озвучки пытаемся удержать процесс живым (в пределах возможностей браузера)
         try { monolithMaybeUpdateWakeLock(); } catch (e) {}
         try { monolithMaybeStartKeepAliveAudio(); } catch (e) {}
 
         monolithSpeakNextFromQueue();
+    }
+
+    async function monolithAnnounceStartupStatus() {
+        if (monolithStartupVoiceAnnounced) return;
+        monolithStartupVoiceAnnounced = true;
+
+        if (monolithStartupVoiceTimerId) {
+            clearTimeout(monolithStartupVoiceTimerId);
+            monolithStartupVoiceTimerId = null;
+        }
+
+        monolithStartupVoiceTimerId = setTimeout(async () => {
+            if (!isMonolithVoiceEnabled()) return;
+
+            const engine = String(activeMapEngine || preferredMapEngine || '').toLowerCase();
+            const isV3Engine = engine.includes('ymaps3');
+
+            let access = null;
+            try { access = await getNextGenAccess(false); } catch (e) { access = null; }
+            const isV3Tester = !!(isV3Engine && (access?.isTester || access?.isAdmin));
+            const startupLine = monolithPickRandomLine(isV3Tester ? MONOLITH_V3_STARTUP_LINES : MONOLITH_V2_STARTUP_LINES);
+
+            if (startupLine) {
+                try { aiSpeak(startupLine, { pitch: isV3Tester ? 1.08 : 1.0 }); } catch (e) {}
+            }
+
+            const poorGps = !gpsReliable || (Number.isFinite(Number(lastGpsAccuracyMeters)) && Number(lastGpsAccuracyMeters) > 80);
+            if (poorGps) {
+                try { aiSpeak(MONOLITH_WARN_GPS_LINE, { pitch: isV3Tester ? 1.05 : 1.0 }); } catch (e) {}
+            }
+
+            const connectionUnstable = (typeof navigator !== 'undefined' && navigator.onLine === false);
+            if (connectionUnstable) {
+                try { aiSpeak(MONOLITH_WARN_DB_LINE, { pitch: isV3Tester ? 1.05 : 1.0 }); } catch (e) {}
+            }
+
+            try {
+                if (typeof navigator !== 'undefined' && typeof navigator.getBattery === 'function') {
+                    const battery = await navigator.getBattery();
+                    const isLowBattery = !!battery && battery.charging === false && Number(battery.level) <= 0.20;
+                    if (isLowBattery) {
+                        try { aiSpeak(MONOLITH_WARN_BATTERY_LINE, { pitch: isV3Tester ? 1.03 : 1.0 }); } catch (e) {}
+                    }
+                }
+            } catch (e) {}
+        }, MONOLITH_STARTUP_DELAY_MS);
     }
 
     async function monolithRequestWakeLock() {
@@ -7180,9 +7302,84 @@
     let ym3UserMarkerEl = null;
     let ym3UserArrowEl = null;
     let ym3UserPulseEl = null;
+    let legacyUserIconContentLayout = null;
     let lastUserHeading = 0;
     let lastUserCoords = null;
     const MIN_ROTATE_SPEED_MS = 1.5;
+    const LEGACY_USER_MARKER_SIZE = 36;
+    const LEGACY_USER_MARKER_HALF = Math.round(LEGACY_USER_MARKER_SIZE / 2);
+    const LEGACY_MOVING_AVG_WINDOW = 5;
+    let legacyUserCoordsHistory = [];
+
+    function applyLegacyMovingAverage(lat, lon) {
+        const latNum = Number(lat);
+        const lonNum = Number(lon);
+        if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
+            if (Array.isArray(lastUserCoords) && lastUserCoords.length >= 2) return [Number(lastUserCoords[0]), Number(lastUserCoords[1])];
+            return [48.01, 37.80];
+        }
+
+        const usePoint = !gpsReliable && legacyUserCoordsHistory.length > 0
+            ? legacyUserCoordsHistory[legacyUserCoordsHistory.length - 1]
+            : [latNum, lonNum];
+
+        legacyUserCoordsHistory.push(usePoint);
+        if (legacyUserCoordsHistory.length > LEGACY_MOVING_AVG_WINDOW) {
+            legacyUserCoordsHistory = legacyUserCoordsHistory.slice(-LEGACY_MOVING_AVG_WINDOW);
+        }
+
+        let sumLat = 0;
+        let sumLon = 0;
+        legacyUserCoordsHistory.forEach(p => {
+            sumLat += Number(p[0]) || 0;
+            sumLon += Number(p[1]) || 0;
+        });
+
+        const denom = legacyUserCoordsHistory.length || 1;
+        return [sumLat / denom, sumLon / denom];
+    }
+
+    function buildUserMarkerHtmlForMap(headingDeg) {
+        const safeHeading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
+        return `
+            <div class="user-marker ym3-user-marker" style="pointer-events:none; width:36px; height:36px;">
+                <div class="ym3-user-halo"></div>
+                <div class="ym3-user-pulse"></div>
+                <div class="ym3-user-arrow" style="transform:translate(-50%, -50%) rotate(${safeHeading}deg)"></div>
+            </div>
+        `;
+    }
+
+    function getLegacyUserIconContentLayout() {
+        if (legacyUserIconContentLayout) return legacyUserIconContentLayout;
+        if (!window.ymaps?.templateLayoutFactory?.createClass) return null;
+        try {
+            legacyUserIconContentLayout = ymaps.templateLayoutFactory.createClass('$[properties.iconContent]');
+        } catch (e) {
+            legacyUserIconContentLayout = null;
+        }
+        return legacyUserIconContentLayout;
+    }
+
+    function applyAutoFollowInterfaceMode() {
+        const hideUi = !!autoFollow;
+        try {
+            document.body.classList.toggle('autofollow-ui-hidden', hideUi);
+        } catch (e) {}
+
+        const card = document.getElementById('actionCard');
+        const openBtn = document.getElementById('openActionBtn');
+        if (hideUi) {
+            actionCardVisible = false;
+            if (card) card.classList.add('hidden');
+            if (openBtn) openBtn.classList.remove('visible');
+        } else {
+            if (card) card.classList.toggle('hidden', !actionCardVisible);
+            if (openBtn) openBtn.classList.toggle('visible', !actionCardVisible);
+        }
+
+        try { setRightActionsHidden(hideUi || !!actionCardVisible); } catch (e) {}
+    }
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
@@ -7228,9 +7425,48 @@
             lastUserCoords = [lat, lon];
             return;
         }
-        // ...existing code for ymaps2 and admin...
+
+        if (!window.ymaps || typeof ymaps.Placemark !== 'function') return;
+        const [lat, lon] = userLocation;
+        const [smoothLat, smoothLon] = applyLegacyMovingAverage(lat, lon);
+        const speed = Number(userSpeedKmh) || 0;
+        const speedMs = speed / 3.6;
+        const heading = (Number(userHeadingDeg) || 0) % 360;
+        const visualHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
+        if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
+            lastUserHeading = heading;
+        }
+
+        const iconContent = buildUserMarkerHtmlForMap(visualHeading);
+        try {
+            if (!userLocationMarker) {
+                const iconContentLayout = getLegacyUserIconContentLayout();
+                userLocationMarker = new ymaps.Placemark(
+                    [smoothLat, smoothLon],
+                    { iconContent },
+                    {
+                        iconLayout: 'default#imageWithContent',
+                        iconImageHref: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+                        iconImageSize: [LEGACY_USER_MARKER_SIZE, LEGACY_USER_MARKER_SIZE],
+                        iconImageOffset: [-LEGACY_USER_MARKER_HALF, -LEGACY_USER_MARKER_HALF],
+                        iconContentLayout
+                    }
+                );
+                if (myMap?.geoObjects?.add) myMap.geoObjects.add(userLocationMarker);
+            } else {
+                if (typeof userLocationMarker.geometry?.setCoordinates === 'function') {
+                    userLocationMarker.geometry.setCoordinates([smoothLat, smoothLon]);
+                }
+                if (typeof userLocationMarker.properties?.set === 'function') {
+                    userLocationMarker.properties.set('iconContent', iconContent);
+                }
+            }
+            lastUserCoords = [smoothLat, smoothLon];
+        } catch (e) {
+            console.warn('Не удалось обновить маркер пользователя (ymaps2):', e?.message || e);
+        }
     }
-// ...existing code...
+
     
     // Центрирует карту на текущем местоположении и включает автоследование
     function centerOnMyLocation() {
@@ -7261,6 +7497,18 @@
     function updateFollowButton() {
         try { updateTargetAutoVisibility(); } catch(e) {}
         const btn = document.getElementById('followToggleBtn');
+        const bottomBtn = document.getElementById('followBottomBtn');
+        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
+
+        try { applyAutoFollowInterfaceMode(); } catch(e) {}
+
+        if (bottomBtn) {
+            bottomBtn.style.display = isYm3Active ? 'none' : 'flex';
+            bottomBtn.classList.toggle('active', !!autoFollow);
+            bottomBtn.title = autoFollow ? 'Автослежение: ВКЛ' : 'Автослежение: ВЫКЛ';
+            const iconEl = bottomBtn.querySelector('.locate-icon');
+            if (iconEl) iconEl.textContent = autoFollow ? '👁️' : '🚫';
+        }
         if (!btn) {
             try { updateLocateBtnUiState(); } catch(e) {}
             return;
@@ -12665,6 +12913,7 @@
             try { updateFollowButton(); } catch(e) { /* ignore */ }
             // Загружаем маркеры с сервера
             loadMarkers();
+            try { monolithAnnounceStartupStatus(); } catch(e) {}
             // Fallback-поллинг на случай потери realtime
             setInterval(loadMarkersDebounced, 10000);
 
@@ -12706,6 +12955,7 @@
                 initGPS();
                 try { updateFollowButton(); } catch(e) { /* ignore */ }
                 loadMarkers();
+                try { monolithAnnounceStartupStatus(); } catch(e) {}
                 setInterval(loadMarkersDebounced, 10000);
                 
                 const openBtn = document.getElementById('openActionBtn');
