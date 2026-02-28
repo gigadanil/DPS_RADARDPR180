@@ -436,36 +436,32 @@
             transform: translate(-50%, -50%);
             z-index: 9999;
             pointer-events: none;
-            width: 22px;
-            height: 22px;
+            width: 30px;
+            height: 30px;
             transition: visibility 0.2s, opacity 0.2s;
             visibility: visible;
             opacity: 1;
         }
-        .target.target-autofollow-hidden {
-            visibility: hidden !important;
-            opacity: 0 !important;
-        }
         .target::before {
             content: '';
             position: absolute;
-            inset: 2px;
+            inset: 0;
             border-radius: 50%;
-            border: 2px solid rgba(255,255,255,0.95);
-            background: rgba(0, 122, 255, 0.62);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+            border: 2px solid var(--blue);
+            background: rgba(255,255,255,0.92);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.18);
         }
         .target::after {
             content: '';
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 5px;
-            height: 5px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.96);
+            background: #ff3b30;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 0 1px rgba(0,0,0,0.10);
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.95);
         }
         .bottom-ui, .action-panel {
             position: fixed;
@@ -707,78 +703,6 @@
             100% { box-shadow: 0 0 0 0 rgba(57,255,20,0.0); }
         }
 
-        .hide-ui {
-            opacity: 0;
-            pointer-events: none;
-            transition: 0.5s;
-        }
-
-        .driving-hud {
-            position: fixed;
-            inset: 0;
-            z-index: 2100;
-            pointer-events: none;
-        }
-        #speed-val {
-            position: fixed;
-            top: calc(10px + var(--safe-area-inset-top));
-            left: calc(12px + var(--safe-area-inset-left));
-            font-size: 56px;
-            font-weight: 900;
-            color: var(--text-primary);
-            text-shadow: var(--critical-outline);
-            line-height: 1;
-            opacity: 0;
-            transition: opacity 0.35s ease;
-        }
-        #online-count {
-            position: fixed;
-            top: calc(12px + var(--safe-area-inset-top));
-            right: calc(12px + var(--safe-area-inset-right));
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 10px;
-            border-radius: 12px;
-            background: var(--card-strong);
-            border: 1px solid var(--stroke);
-            color: var(--text-primary);
-            font-size: 13px;
-            font-weight: 800;
-            opacity: 0;
-            transition: opacity 0.35s ease;
-        }
-        #dps-alert {
-            position: fixed;
-            top: calc(12px + var(--safe-area-inset-top));
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 7px 12px;
-            border-radius: 12px;
-            background: var(--card-strong);
-            border: 1px solid var(--stroke);
-            color: var(--text-primary);
-            font-size: 13px;
-            font-weight: 900;
-            opacity: 0;
-            transition: opacity 0.35s ease;
-        }
-        #dps-alert.is-danger {
-            background: #ff3b30;
-            border-color: #ff3b30;
-            color: #fff;
-            animation: dpsAlertBlink 0.9s steps(2, start) infinite;
-        }
-        @keyframes dpsAlertBlink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.45; }
-        }
-        body.driving-mode #speed-val,
-        body.driving-mode #online-count,
-        body.driving-mode #dps-alert {
-            opacity: 1;
-        }
-
         .user-marker-wrap { position: relative; width: 100%; height: 100%; pointer-events: none; }
         .user-pulse {
             position: absolute;
@@ -903,10 +827,7 @@
         }
 
         /* Прячем старые плавающие элементы, чтобы интерфейс соответствовал ТЗ */
-        .top-controls, .feedback-btn { display: none !important; }
-        .fab-stack, .follow-toggle { display: none !important; }
-        body.engine-v3 .fab-stack { display: flex !important; }
-        body.engine-v3 .follow-toggle { display: flex !important; }
+        .top-controls, .fab-stack, .follow-toggle, .feedback-btn { display: none !important; }
         .fab-row {
             display: flex;
             gap: 10px;
@@ -1665,11 +1586,6 @@
     <div id="onlineCountBadge" class="online-count" aria-label="Онлайн">
         <span class="online-dot" aria-hidden="true"></span>
         <span id="onlineCountText">В сети: —</span>
-    </div>
-    <div id="drivingHud" class="driving-hud" aria-hidden="true">
-        <div id="speed-val">0</div>
-        <div id="online-count">👤 <span id="online-count-val">—</span></div>
-        <div id="dps-alert">👮 ДПС: —</div>
     </div>
     <div id="mapEngineBadge" class="engine-badge" aria-label="Движок карты">🗺️ ymaps3</div>
     <button id="map3dToggleFloating" onclick="toggleMap3dFromUI()" title="Переключить 2D/3D" aria-label="Переключить 2D/3D">3D OFF</button>
@@ -2604,10 +2520,7 @@
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     // Формат: '@YourBot'
     const BOT_USERNAME = '@DPSRADARDPR180bot';
-    const SUPABASE_CLIENT_CACHE = {};
     function createSupabaseClient(token = null) {
-        const cacheKey = token ? `auth:${String(token)}` : 'anon';
-        if (SUPABASE_CLIENT_CACHE[cacheKey]) return SUPABASE_CLIENT_CACHE[cacheKey];
         const options = {
             auth: {
                 persistSession: false,
@@ -2618,9 +2531,7 @@
         if (token) {
             options.global = { headers: { Authorization: `Bearer ${token}` } };
         }
-        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
-        SUPABASE_CLIENT_CACHE[cacheKey] = client;
-        return client;
+        return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
     }
 
     function clearSupabaseAuth() {
@@ -3167,7 +3078,6 @@
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
     const DYNAMIC_COURSE_AHEAD_MAX_M = 2300;
     const DYNAMIC_COURSE_UPDATE_MS = 450;
-    const DRIVING_MODE_SPEED_THRESHOLD_KMH = 5;
     // Текущие серверные ачивки (ключ -> count)
     let currentAchievementCounts = {};
     // Коллекция для маркеров (чтобы не удалять служебные geoObjects при обновлении)
@@ -3213,10 +3123,6 @@
     // Спидометр: видимость
     let speedometerEnabled = true;
     let map3dEnabled = false;
-    let drivingModeEnabled = false;
-    let drivingNearestDpsDistanceMeters = null;
-    let drivingDpsCoordsCache = [];
-    const DRIVING_DPS_HUD_MIN_VALID_METERS = 20;
     // Анти-спам для меток
     const MARKER_RATE_LIMIT_MS = 120000;
     // Переменная для хранения выбранной фотографии
@@ -3386,60 +3292,6 @@
         const fallback = myMap.getCenter();
         const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
         if (isYm3Active) {
-            try {
-                const target = document.querySelector('.target');
-                const mapEl = document.getElementById('map');
-                const targetRect = target?.getBoundingClientRect?.();
-                const mapRect = mapEl?.getBoundingClientRect?.();
-                const center = (mapAdapter && typeof mapAdapter.getCenter === 'function')
-                    ? mapAdapter.getCenter()
-                    : fallback;
-                const zoom = (mapAdapter && typeof mapAdapter.getZoom === 'function')
-                    ? Number(mapAdapter.getZoom())
-                    : Number(myMap?.getZoom?.() || myMap?.__ym3LastZoom || 16);
-
-                if (
-                    targetRect && mapRect && Array.isArray(center) && center.length >= 2 &&
-                    Number.isFinite(Number(center[0])) && Number.isFinite(Number(center[1])) &&
-                    Number.isFinite(zoom)
-                ) {
-                    const latCenter = Number(center[0]);
-                    const lonCenter = Number(center[1]);
-                    const latRad = latCenter * Math.PI / 180;
-                    const metersPerPixel = (Math.cos(latRad) * 2 * Math.PI * 6378137) / (256 * Math.pow(2, zoom));
-
-                    const anchorX = targetRect.left + targetRect.width * 0.5;
-                    const anchorY = targetRect.top + targetRect.height * 0.68;
-                    const mapCenterX = mapRect.left + mapRect.width * 0.5;
-                    const mapCenterY = mapRect.top + mapRect.height * 0.5;
-
-                    const dxPx = anchorX - mapCenterX;
-                    const dyPx = anchorY - mapCenterY;
-
-                    const tiltDeg = Number(myMap?.__ym3LastTilt || FOLLOW_CAMERA_PITCH_DEG || 0);
-                    const tiltRad = tiltDeg * Math.PI / 180;
-                    const verticalScale = 1 / Math.max(0.25, Math.cos(tiltRad));
-
-                    const screenEastM = dxPx * metersPerPixel;
-                    const screenNorthM = -dyPx * metersPerPixel * verticalScale;
-
-                    const azimuthDeg = Number(myMap?.__ym3LastAzimuth || 0);
-                    const azimuthRad = azimuthDeg * Math.PI / 180;
-
-                    const eastM = (screenEastM * Math.cos(azimuthRad)) + (screenNorthM * Math.sin(azimuthRad));
-                    const northM = (-screenEastM * Math.sin(azimuthRad)) + (screenNorthM * Math.cos(azimuthRad));
-
-                    const dLat = northM / 111320;
-                    const dLon = eastM / Math.max(1e-6, 111320 * Math.cos(latRad));
-
-                    const resultLat = latCenter + dLat;
-                    const resultLon = lonCenter + dLon;
-                    if (Number.isFinite(resultLat) && Number.isFinite(resultLon)) {
-                        return [resultLat, resultLon];
-                    }
-                }
-            } catch (e) {}
-
             if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
                 return [Number(fallback[0]), Number(fallback[1])];
             }
@@ -3944,152 +3796,14 @@
 
     function updateSpeedometerUI(speedKmh) {
         const valueEl = document.getElementById('speedValue');
-        const normalizedSpeed = Math.max(0, Math.round(speedKmh || 0));
-        if (valueEl) valueEl.textContent = normalizedSpeed;
-
-        const speedHudEl = document.getElementById('speed-val');
-        if (speedHudEl) speedHudEl.textContent = String(normalizedSpeed);
-
-        setDrivingModeEnabled(normalizedSpeed > DRIVING_MODE_SPEED_THRESHOLD_KMH);
-    }
-
-    function getDrivingUiTargets() {
-        const selectors = [
-            '#ccLayersBtn',
-            '#ccCourseBtn',
-            '#patrolHeatmapBtn',
-            '#dtpHeatmapBtn',
-            '#map .ymaps-2-1-79-zoom',
-            '#map [class*="zoom-control"]'
-        ];
-        const out = [];
-        selectors.forEach(selector => {
-            document.querySelectorAll(selector).forEach(el => out.push(el));
-        });
-        return out;
-    }
-
-    function setDrivingModeEnabled(enabled) {
-        const next = !!enabled;
-        if (drivingModeEnabled === next) return;
-        drivingModeEnabled = next;
-
-        const body = document.body;
-        if (body) {
-            if (drivingModeEnabled) body.classList.add('driving-mode');
-            else body.classList.remove('driving-mode');
-        }
-
-        getDrivingUiTargets().forEach(el => {
-            if (drivingModeEnabled) el.classList.add('hide-ui');
-            else el.classList.remove('hide-ui');
-        });
-
-        updateDrivingHudDpsAlert();
-    }
-
-    function updateDrivingHudOnlineCount(rawText) {
-        const el = document.getElementById('online-count-val');
-        if (!el) return;
-        const source = String(rawText || document.getElementById('onlineCountText')?.textContent || '');
-        const matched = source.match(/(\d+)/);
-        el.textContent = matched ? matched[1] : '—';
-    }
-
-    function refreshDrivingNearestDpsDistanceFromCache() {
-        if (!Array.isArray(userLocation) || userLocation.length < 2 || !Array.isArray(drivingDpsCoordsCache) || drivingDpsCoordsCache.length === 0) {
-            drivingNearestDpsDistanceMeters = null;
-            updateDrivingHudDpsAlert();
-            return;
-        }
-        const userLat = Number(userLocation[0]);
-        const userLon = Number(userLocation[1]);
-        if (!Number.isFinite(userLat) || !Number.isFinite(userLon)) {
-            drivingNearestDpsDistanceMeters = null;
-            updateDrivingHudDpsAlert();
-            return;
-        }
-
-        let minDistance = Infinity;
-        let minDistanceAboveGuard = Infinity;
-        drivingDpsCoordsCache.forEach(p => {
-            if (!Array.isArray(p) || p.length < 2) return;
-            const lat = Number(p[0]);
-            const lon = Number(p[1]);
-            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-            const dist = calculateDistance(userLat, userLon, lat, lon);
-            if (!Number.isFinite(dist)) return;
-            if (dist < minDistance) minDistance = dist;
-            if (dist >= DRIVING_DPS_HUD_MIN_VALID_METERS && dist < minDistanceAboveGuard) {
-                minDistanceAboveGuard = dist;
-            }
-        });
-
-        const bestDistance = Number.isFinite(minDistanceAboveGuard)
-            ? minDistanceAboveGuard
-            : (Number.isFinite(minDistance) && minDistance >= DRIVING_DPS_HUD_MIN_VALID_METERS ? minDistance : null);
-
-        drivingNearestDpsDistanceMeters = Number.isFinite(bestDistance) ? bestDistance : null;
-        updateDrivingHudDpsAlert();
-    }
-
-    function updateDrivingHudDpsAlert() {
-        const alertEl = document.getElementById('dps-alert');
-        if (!alertEl) return;
-        const dist = Number(drivingNearestDpsDistanceMeters);
-        if (!Number.isFinite(dist)) {
-            alertEl.textContent = '👮 ДПС: —';
-            alertEl.classList.remove('is-danger');
-            return;
-        }
-
-        const isDanger = dist < 1000;
-        const formatted = dist >= 1000 ? `${(dist / 1000).toFixed(1)} км` : `${Math.round(dist)} м`;
-        alertEl.textContent = `👮 ДПС: ${formatted}`;
-        if (isDanger) alertEl.classList.add('is-danger');
-        else alertEl.classList.remove('is-danger');
-    }
-
-    function updateDrivingFollowCenter() {
-        if (!myMap || !Array.isArray(userLocation) || userLocation.length < 2) return;
-        const lat = Number(userLocation[0]);
-        const lon = Number(userLocation[1]);
-        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
-
-        try {
-            if (typeof myMap.update === 'function') {
-                myMap.update({
-                    location: {
-                        center: [lon, lat],
-                        duration: 500
-                    }
-                });
-                myMap.__ym3LastCenter = [lat, lon];
-                return;
-            }
-        } catch (e) {}
-
-        try {
-            const ym3Root = myMap?.__ym3Root;
-            if (ym3Root && typeof ym3Root.update === 'function') {
-                ym3Root.update({
-                    location: {
-                        center: [lon, lat],
-                        duration: 500
-                    }
-                });
-                myMap.__ym3LastCenter = [lat, lon];
-                return;
-            }
-        } catch (e) {}
-
-        try { myMap.setCenter([lat, lon], 17, { duration: 500 }); } catch (e) {}
+        if (!valueEl) return;
+        valueEl.textContent = Math.max(0, Math.round(speedKmh || 0));
     }
 
     function registerServiceWorker() {
         if (!('serviceWorker' in navigator)) return;
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('service-worker.js?v=5').catch(err => {
+            navigator.serviceWorker.register('service-worker.js?v=4').catch(err => {
                 console.warn('Service Worker registration failed:', err);
             });
         });
@@ -4523,15 +4237,33 @@
 
     function extractMarkerCoordsForNotif(marker) {
         if (!marker) return null;
-        if (Array.isArray(marker.coords) && marker.coords.length >= 2) {
-            const a = Number(marker.coords[0]);
-            const b = Number(marker.coords[1]);
+
+        // Нормализуем coords — Supabase может вернуть строку "[lat,lon]" или объект или массив
+        let coordsArr = marker.coords;
+        if (typeof coordsArr === 'string') {
+            try { coordsArr = JSON.parse(coordsArr); } catch (e) { coordsArr = null; }
+        }
+        // coords может быть объектом {lat, lon} или {latitude, longitude}
+        if (coordsArr && !Array.isArray(coordsArr) && typeof coordsArr === 'object') {
+            const lat = Number(coordsArr.lat ?? coordsArr.latitude);
+            const lon = Number(coordsArr.lon ?? coordsArr.longitude);
+            if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+        }
+
+        if (Array.isArray(coordsArr) && coordsArr.length >= 2) {
+            const a = Number(coordsArr[0]);
+            const b = Number(coordsArr[1]);
+            if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
             if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return { lat: a, lon: b };
             if (Math.abs(a) <= 180 && Math.abs(b) <= 90) return { lat: b, lon: a };
             return { lat: a, lon: b };
         }
         if (typeof marker.latitude === 'number' && typeof marker.longitude === 'number') {
             return { lat: marker.latitude, lon: marker.longitude };
+        }
+        if (marker.lat != null && marker.lon != null) {
+            const lat = Number(marker.lat), lon = Number(marker.lon);
+            if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
         }
         return null;
     }
@@ -4969,7 +4701,7 @@
 
     function formatDistanceMeters(distance) {
         if (!isFinite(distance)) return '';
-        if (distance >= 1000) return `${Math.round(distance / 10) * 10} м`;
+        if (distance >= 1000) return `${(distance / 1000).toFixed(1)} км`;
         if (distance >= 100) return `${Math.round(distance / 10) * 10} м`;
         return `${Math.round(distance)} м`;
     }
@@ -6210,20 +5942,16 @@
                     // Обновляем маркер на карте (включая визуализацию скорости/ачивок/стиля)
                     updateUserLocationMarker();
                     updateSpeedometerUI(userSpeedKmh);
-                    refreshDrivingNearestDpsDistanceFromCache();
 
                     // Интеллектуальные подсказки по истории меток ДПС/Спецбат
                     maybeCheckSmartHint(latitude, longitude);
 
+                    // Пересчитываем расстояние до активного маркера баннера при каждом GPS-обновлении
+                    try { refreshProximityBanner(); } catch (e) {}
+
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try {
-                            if ((Number(userSpeedKmh) || 0) > DRIVING_MODE_SPEED_THRESHOLD_KMH) {
-                                updateDrivingFollowCenter();
-                            } else {
-                                updateDynamicCourseCamera();
-                            }
-                        } catch (e2) { console.warn(e2); }
+                        try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
@@ -6516,10 +6244,6 @@
 
             const engine = String(activeMapEngine || preferredMapEngine || '').toLowerCase();
             const isV3 = engine.includes('ymaps3');
-            try {
-                document.body.classList.toggle('engine-v3', isV3);
-                document.body.classList.toggle('engine-v2', !isV3);
-            } catch (e) {}
             badge.classList.toggle('is-v3', isV3);
             badge.classList.toggle('is-v2', !isV3);
             badge.textContent = isV3 ? '🗺️ ymaps3' : '🗺️ ymaps2 legacy';
@@ -7261,7 +6985,6 @@
     }
 
     function updateFollowButton() {
-        try { updateTargetAutoVisibility(); } catch(e) {}
         const btn = document.getElementById('followToggleBtn');
         if (!btn) {
             try { updateLocateBtnUiState(); } catch(e) {}
@@ -7282,12 +7005,6 @@
         btn.innerHTML = `<span class="follow-icon">${icon}</span>${badge}`;
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         try { updateLocateBtnUiState(); } catch(e) {}
-    }
-
-    function updateTargetAutoVisibility() {
-        const target = document.querySelector('.target');
-        if (!target) return;
-        target.classList.toggle('target-autofollow-hidden', !!autoFollow);
     }
 
     function updateLocateBtnUiState() {
@@ -11461,14 +11178,12 @@
             const t = document.getElementById('onlineCountText');
             if (t) t.textContent = `В сети: ${count}`;
             else badge.textContent = `В сети: ${count}`;
-            updateDrivingHudOnlineCount(`В сети: ${count}`);
             try { badge.classList.add('visible'); } catch(e) {}
         } catch (e) {
             console.warn('Ошибка loadOnlineCount:', e?.message || e);
             const t = document.getElementById('onlineCountText');
             if (t) t.textContent = 'В сети: ?';
             else badge.textContent = 'В сети: ?';
-            updateDrivingHudOnlineCount('В сети: ?');
             presenceSupported = false;
         }
     }
@@ -12891,18 +12606,6 @@
             const parsed = Date.parse(m.exp);
             return !isNaN(parsed) ? parsed > now : true;
         });
-        drivingDpsCoordsCache = activeMarkers
-            .filter(m => String(m?.type) === 'dps' && String(m?.author_id || '') !== String(uid || ''))
-            .map(m => {
-                const c = extractMarkerCoordsForNotif(m);
-                if (!c) return null;
-                const lat = Number(c.lat);
-                const lon = Number(c.lon);
-                if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-                return [lat, lon];
-            })
-            .filter(Boolean);
-        refreshDrivingNearestDpsDistanceFromCache();
         
         // Подсчитываем метки по типам
         const typeCounts = {};
