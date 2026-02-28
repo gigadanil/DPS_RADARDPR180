@@ -16,6 +16,7 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="avatar-editor.js?v=20260227"></script>
     <script src="https://api-maps.yandex.ru/v3/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <script src="https://api-maps.yandex.ru/2.1/?apikey=7f7db9e2-0eff-47d4-98d3-59b326552ed7&lang=ru_RU"></script>
     <style>
@@ -88,6 +89,91 @@
         }
         
         /* ============= ЭКРАН ПРИВЕТСТВИЯ ============= */
+
+        /* --- YM3 кастомный маркер пользователя --- */
+        .user-marker,
+        .ym3-user-marker {
+            position: absolute;
+            width: 36px !important;
+            height: 36px !important;
+            pointer-events: none;
+            z-index: 1000;
+            will-change: transform;
+            transform-origin: 50% 50%;
+            transform-box: fill-box;
+            transform: translate(-50%, -50%) !important;
+            contain: layout;
+        }
+        .ym3-user-arrow {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 22px;
+            height: 30px;
+            transform: translate(-50%, -50%) rotate(0deg);
+            transform-origin: 50% 74%;
+            filter: drop-shadow(0px 4px 2px rgba(0,0,0,0.4));
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 2;
+        }
+        .ym3-user-arrow::before,
+        .ym3-user-arrow::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 0;
+        }
+        .ym3-user-arrow::before {
+            background: linear-gradient(180deg, #fff2a4 0%, #ffd94a 58%, #f4be25 100%);
+            clip-path: polygon(50% 0%, 0% 100%, 50% 83%);
+        }
+        .ym3-user-arrow::after {
+            background: linear-gradient(180deg, #f5c33a 0%, #e2a507 60%, #b37a00 100%);
+            clip-path: polygon(50% 0%, 100% 100%, 50% 83%);
+        }
+        .ym3-user-halo {
+            position: absolute;
+            left: 50%;
+            top: 57%;
+            width: 26px;
+            height: 18px;
+            border-radius: 50%;
+            background: radial-gradient(ellipse at center, rgba(255,215,0,0.42) 0%, rgba(255,215,0,0.16) 48%, rgba(255,215,0,0) 100%);
+            filter: blur(3.5px);
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .ym3-user-pulse {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 215, 0, 0.36);
+            background: transparent;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            animation: ym3UserPulse 1.35s ease-out infinite;
+            z-index: 1;
+        }
+        @keyframes ym3UserPulse {
+            0% {
+                opacity: 0.6;
+                transform: translate(-50%, -50%) scale(1);
+                border-color: rgba(255, 215, 0, 0.55);
+            }
+            70% {
+                opacity: 0.2;
+                transform: translate(-50%, -50%) scale(2.25);
+                border-color: rgba(255, 215, 0, 0.2);
+            }
+            100% {
+                opacity: 0.0;
+                transform: translate(-50%, -50%) scale(2.7);
+                border-color: rgba(255, 215, 0, 0.0);
+            }
+        }
         #splashScreen {
             position: fixed;
             top: 0;
@@ -186,6 +272,78 @@
         
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+
+        /* ============= MONOLITH RELEASE WAIT SCREEN ============= */
+        .release-wait-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 100120;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: calc(24px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));
+            background:
+                radial-gradient(1200px 700px at 20% 10%, rgba(255,215,0,0.10) 0%, rgba(0,0,0,0) 60%),
+                repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 2px, rgba(0,0,0,0) 2px 8px),
+                #050505;
+            font-family: 'Montserrat', 'Roboto', system-ui, -apple-system, sans-serif;
+        }
+        .release-wait-card {
+            width: min(92vw, 520px);
+            background: rgba(10, 10, 10, 0.92);
+            border: 1px solid rgba(255, 215, 0, 0.28);
+            border-radius: 20px;
+            box-shadow: 0 18px 60px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.04);
+            padding: 24px 18px;
+            text-align: center;
+            color: #fff;
+        }
+        .release-logo {
+            margin: 0 auto 14px;
+            font-size: clamp(34px, 8vw, 46px);
+            letter-spacing: 0.08em;
+            font-weight: 800;
+            color: #FFD700;
+            text-shadow: 0 0 14px rgba(255,215,0,0.35);
+            animation: monolithGlowPulse 2.3s ease-in-out infinite;
+        }
+        .release-title {
+            margin: 0 0 10px;
+            font-size: clamp(15px, 3.8vw, 18px);
+            color: rgba(255,255,255,0.92);
+            font-weight: 700;
+        }
+        .release-countdown {
+            margin: 0 auto 14px;
+            padding: 12px 10px;
+            border-radius: 12px;
+            background: rgba(255, 215, 0, 0.08);
+            border: 1px solid rgba(255, 215, 0, 0.28);
+            color: #FFD700;
+            font-size: clamp(18px, 5vw, 24px);
+            font-weight: 800;
+            letter-spacing: 0.04em;
+        }
+        .release-subtitle {
+            margin: 0 0 10px;
+            color: rgba(255,255,255,0.78);
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .release-changelog {
+            margin: 0;
+            padding: 0 0 0 16px;
+            text-align: left;
+            color: rgba(255,255,255,0.9);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+        .release-changelog li { margin-bottom: 6px; }
+
+        @keyframes monolithGlowPulse {
+            0%, 100% { text-shadow: 0 0 12px rgba(255,215,0,0.28); transform: scale(1); }
+            50% { text-shadow: 0 0 24px rgba(255,215,0,0.45); transform: scale(1.035); }
         }
         
         /* ============= УВЕДОМЛЕНИЕ О БАНЕ ============= */
@@ -503,6 +661,34 @@
         }
         #mapEngineBadge.engine-badge.is-v3 { border-color: rgba(0,212,255,0.45); }
         #mapEngineBadge.engine-badge.is-v2 { border-color: rgba(255,149,0,0.45); }
+        #map3dToggleFloating {
+            position: fixed;
+            top: calc(92px + var(--safe-area-inset-top));
+            left: calc(12px + var(--safe-area-inset-left));
+            z-index: 2000;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 52px;
+            height: 30px;
+            padding: 0 10px;
+            border-radius: 12px;
+            border: 1px solid rgba(245,198,66,0.55);
+            background: rgba(0,0,0,0.86);
+            color: #f5c64a;
+            font-weight: 900;
+            font-size: 11px;
+            letter-spacing: 0.4px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+            backdrop-filter: blur(8px);
+            cursor: pointer;
+            transition: box-shadow 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+        }
+        #map3dToggleFloating.is-on {
+            border-color: rgba(57,255,20,0.72);
+            color: #b9ffb3;
+            box-shadow: 0 0 0 1px rgba(57,255,20,0.25), 0 0 18px rgba(57,255,20,0.38), 0 8px 24px rgba(0,0,0,0.30);
+        }
         .online-dot {
             width: 10px;
             height: 10px;
@@ -1006,6 +1192,12 @@
         .admin-rank { font-size: 11px; color: #d39d10; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px; }
         .admin-online { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #34c759; font-weight: 700; }
         .admin-online-dot { width: 6px; height: 6px; border-radius: 50%; background: #34c759; box-shadow: 0 0 6px rgba(52, 199, 89, 0.9); }
+        .ym3-admin-marker-shell { width: 60px; height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; transform: translate3d(0, 0, 0); will-change: transform; pointer-events: none; }
+        .ym3-admin-marker-crown { font-size: 16px; line-height: 1; margin-bottom: 2px; pointer-events: none; }
+        .ym3-admin-marker-center { position: relative; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+        .ym3-admin-marker-pulse-bg { position: absolute; inset: 0; width: 40px; height: 40px; border-radius: 50%; background: radial-gradient(circle at 30% 25%, #fff8d7 0%, #f5c64a 45%, #b57a10 100%); border: 2px solid #fff; animation: adminPulse 1.6s ease-out infinite; }
+        .ym3-admin-marker-icon { position: relative; z-index: 1; width: 24px; height: 24px; object-fit: contain; vector-effect: non-scaling-stroke; pointer-events: none; }
+        .ym3-admin-marker-name { margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #000; color: #f5c64a; font-size: 10px; font-weight: 900; line-height: 1.2; white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 
         /* Спецбат: визуально отличный маркер (неоновое мигание) */
         .specbat-marker {
@@ -1079,9 +1271,9 @@
             50% { opacity: 0.90; transform: scale(1.12); border-color: rgba(0, 212, 255, 0.70); }
         }
         @keyframes adminPulse {
-            0% { transform: scale(0.85); opacity: 0.8; }
-            70% { transform: scale(1.2); opacity: 0; }
-            100% { transform: scale(1.2); opacity: 0; }
+            0% { transform: scale(0.92); box-shadow: 0 0 0 1px rgba(120,76,0,0.35), 0 0 10px rgba(245,198,66,0.55), 0 6px 14px rgba(0,0,0,0.24); }
+            70% { transform: scale(1.16); box-shadow: 0 0 0 1px rgba(120,76,0,0.28), 0 0 22px rgba(245,198,66,0.65), 0 10px 22px rgba(0,0,0,0.28); }
+            100% { transform: scale(0.92); box-shadow: 0 0 0 1px rgba(120,76,0,0.35), 0 0 10px rgba(245,198,66,0.55), 0 6px 14px rgba(0,0,0,0.24); }
         }
         @keyframes adminSiren {
             0%, 100% { opacity: 0.35; transform: scaleX(0.9); }
@@ -1118,6 +1310,7 @@
         .top-controls { top: var(--ui-safe-top) !important; }
         #onlineCountBadge.online-count { top: var(--ui-safe-top) !important; }
         #mapEngineBadge.engine-badge { top: calc(var(--ui-safe-top) + 44px) !important; }
+        #map3dToggleFloating { top: calc(var(--ui-safe-top) + 80px) !important; }
         .right-bar { top: var(--ui-safe-top) !important; }
         .admin-btn,
         .profile-btn,
@@ -1274,6 +1467,20 @@
     </style>
 </head>
 <body>
+    <div id="releaseWaitScreen" class="release-wait-screen" aria-live="polite">
+        <div class="release-wait-card">
+            <div class="release-logo">MONOLITH</div>
+            <p class="release-title">Запуск обновления уже близко</p>
+            <div class="release-countdown" id="releaseCountdown">--:--:--</div>
+            <p class="release-subtitle">До 1 марта 12:00 осталось:</p>
+            <ul class="release-changelog">
+                <li>Стабильный 2D-режим карты без 3D-ошибок</li>
+                <li>Обновлённый маркер местоположения и плавное перемещение</li>
+                <li>Оптимизация интерфейса под слабые смартфоны</li>
+            </ul>
+        </div>
+    </div>
+
     <!-- ============= ЭКРАН ПРИВЕТСТВИЯ ============= -->
     <div id="splashScreen">
         <img src="img/logo.png" alt="180 СафеДрайв" class="splash-logo">
@@ -1381,6 +1588,7 @@
         <span id="onlineCountText">В сети: —</span>
     </div>
     <div id="mapEngineBadge" class="engine-badge" aria-label="Движок карты">🗺️ ymaps3</div>
+    <button id="map3dToggleFloating" onclick="toggleMap3dFromUI()" title="Переключить 2D/3D" aria-label="Переключить 2D/3D">3D OFF</button>
     <div id="map"></div>
     <div id="mapDimmingOverlay"></div>
 
@@ -1390,7 +1598,7 @@
         <button class="action-btn" id="ccSettingsBtn" onclick="openAdminModal()" title="Настройки" aria-label="Настройки">⚙️</button>
         <button class="action-btn" id="ccMapEngineBtn" onclick="toggleMapEngineFromUI()" title="Тест движка карты" aria-label="Тест движка карты">🗺️</button>
         <button class="action-btn" id="ccLayersBtn" onclick="toggleMainLayers()" title="Слои" aria-label="Слои">🗂️</button>
-        <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс">🧭</button>
+        <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс" style="display:none;">🧭</button>
         <button class="action-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
         <button class="action-btn" id="ccChatBtn" onclick="openChatModal()" title="Чат" aria-label="Чат">💬</button>
         <button class="action-btn" id="ccActivityBtn" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС/Спецбат" aria-label="Активность ДПС/Спецбат">👮🛡️</button>
@@ -2102,8 +2310,14 @@
                 <button onclick="toggleMapEngineFromUI()" id="mapEngineSettingsBtn" class="main-btn" style="width:100%; background:#007aff; padding:10px; font-size:12px; border-radius:8px;">
                     Переключить ymaps2 / ymaps3
                 </button>
+                <button onclick="toggleMap3dFromUI()" id="map3dSettingsBtn" class="main-btn" style="width:100%; margin-top:8px; background:#111; color:#f5c64a; border:1px solid rgba(245,198,66,0.6); box-shadow:0 0 0 1px rgba(245,198,66,0.15); padding:10px; font-size:12px; border-radius:8px;">
+                    3D: ВЫКЛ
+                </button>
                 <div id="mapEngineSettingsHint" style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
                     Текущий режим: —
+                </div>
+                <div id="map3dSettingsHint" style="font-size: 11px; color: var(--gray); margin-top: 6px; text-align: center;">
+                    3D доступно только в ymaps3
                 </div>
             </div>
 
@@ -2839,6 +3053,7 @@
     let lastGpsAccuracyMeters = null;
     let gpsReliable = false;
     let gpsWarnedUnreliable = false;
+    let gpsTimeoutLastNotifyTs = 0;
     // ID отслеживания GPS (для остановки отслеживания)
     let gpsWatchId = null;
     // Маркер текущего местоположения на карте
@@ -2848,7 +3063,7 @@
     let lastUserPositionTime = null; // ms
     let userSpeedKmh = 0; // скорость в км/ч
     let userHeadingDeg = 0; // курс (0..360)
-    let dynamicCourseEnabled = true;
+    let dynamicCourseEnabled = false;
     let dynamicCourseCompassDeg = null;
     let dynamicCourseGpsDeg = null;
     let dynamicCourseFusedDeg = null;
@@ -2856,6 +3071,9 @@
     let dynamicCourseLastCompassTs = 0;
     let dynamicCourseCameraTimerId = null;
     let dynamicCourseCompassInit = false;
+    let followCameraAzimuthDeg = 0;
+    const FOLLOW_CAMERA_PITCH_DEG = 65;
+    const FOLLOW_CAMERA_AZIMUTH_SPEED_MS = 2;
     const DYNAMIC_COURSE_TILT = 0.8;
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
     const DYNAMIC_COURSE_AHEAD_MAX_M = 2300;
@@ -2879,6 +3097,9 @@
     const MAP_ENGINE_STORAGE_KEY = 'mapEnginePreference';
     const MAP_ENGINE_LEGACY_FORCE_KEY = 'mapEngineLegacyForce';
     const MAP_ENGINE_YM3_FAIL_KEY = 'mapEngineYm3Failed';
+    const MAP_3D_MODE_KEY = 'map3dModeEnabled';
+    const MAP_3D_MIN_ZOOM = 17.5;
+    const MAP_3D_TILT_DEG = 65;
     const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
     const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
@@ -2901,6 +3122,7 @@
     let initAppInProgress = false;
     // Спидометр: видимость
     let speedometerEnabled = true;
+    let map3dEnabled = false;
     // Анти-спам для меток
     const MARKER_RATE_LIMIT_MS = 120000;
     // Переменная для хранения выбранной фотографии
@@ -4638,6 +4860,7 @@
     let monolithKeepAliveTimerId = null;
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
+    let monolithUserGestureUnlocked = false;
 
     // very small silent WAV (short) as data URI
     const MONOLITH_SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
@@ -4829,8 +5052,12 @@
         } catch (e) {}
     }
 
-    function monolithPrimeAudioOnce() {
+    function monolithPrimeAudioOnce(eventOrForce) {
+        const forced = eventOrForce === true;
+        const trustedGesture = !!(eventOrForce && eventOrForce.isTrusted === true);
+        if (!forced && !trustedGesture) return;
         if (monolithAudioPrimed) return;
+        monolithUserGestureUnlocked = true;
 
         // Android/WebView: часто нужно "разбудить" speechSynthesis после user gesture.
         try {
@@ -4855,6 +5082,7 @@
 
     function monolithEnsureAudioContext() {
         if (monolithAudioCtx) return monolithAudioCtx;
+        if (!monolithUserGestureUnlocked) return null;
         const Ctx = window.AudioContext || window.webkitAudioContext;
         if (!Ctx) return null;
         try {
@@ -4868,6 +5096,7 @@
 
     function monolithStartAudioContextKeepAlive() {
         if (!monolithIsVoiceSessionActive() || !monolithAudioPrimed) return;
+        if (!monolithUserGestureUnlocked) return;
         const ctx = monolithEnsureAudioContext();
         if (!ctx) return;
 
@@ -5309,12 +5538,10 @@
         const warningMax = getDynamicWarningMaxMeters();
 
         const prevState = markerDistanceState.get(markerId);
-        let trend = 'approaching';
+        let trend = prevState?.lastTrend || 'approaching';
         if (prevState && typeof prevState.lastDistance === 'number') {
-            const deltaDistance = distance - Number(prevState.lastDistance);
-            if (deltaDistance > 25) trend = 'away';
-            else if (deltaDistance < -25) trend = 'approaching';
-            else trend = 'steady';
+            if (distance > prevState.lastDistance + 25) trend = 'away';
+            else if (distance < prevState.lastDistance - 25) trend = 'approaching';
         }
         markerDistanceState.set(markerId, { lastDistance: distance, lastTrend: trend, lastUpdate: Date.now() });
 
@@ -5345,7 +5572,7 @@
             }
         } catch (e) {}
 
-        if (trend === 'away' && prevState && typeof prevState.lastDistance === 'number') {
+        if (trend === 'away') {
             if (currentNotification) {
                 distanceNotifications.delete(markerId);
                 stopWarningOutput();
@@ -5559,32 +5786,24 @@
     }
 
     function loadDynamicCourseEnabled() {
-        try {
-            const raw = localStorage.getItem(DYNAMIC_COURSE_ENABLED_KEY);
-            if (raw === 'true' || raw === 'false') dynamicCourseEnabled = (raw === 'true');
-        } catch (e) {}
+        dynamicCourseEnabled = false;
+        try { localStorage.removeItem(DYNAMIC_COURSE_ENABLED_KEY); } catch (e) {}
     }
 
     function saveDynamicCourseEnabled() {
-        try { localStorage.setItem(DYNAMIC_COURSE_ENABLED_KEY, dynamicCourseEnabled ? 'true' : 'false'); } catch (e) {}
+        dynamicCourseEnabled = false;
+        try { localStorage.removeItem(DYNAMIC_COURSE_ENABLED_KEY); } catch (e) {}
     }
 
     function updateCourseBtnUiState() {
         const btn = document.getElementById('ccCourseBtn');
         if (!btn) return;
-        btn.classList.toggle('active', !!dynamicCourseEnabled);
-        btn.classList.toggle('off', !dynamicCourseEnabled);
-        btn.textContent = dynamicCourseEnabled ? '🧭' : '🧱';
-        btn.title = dynamicCourseEnabled ? 'Динамический курс: ВКЛ' : 'Динамический курс: ВЫКЛ';
+        btn.style.display = 'none';
     }
 
     function toggleDynamicCourseFromUI() {
-        dynamicCourseEnabled = !dynamicCourseEnabled;
+        dynamicCourseEnabled = false;
         saveDynamicCourseEnabled();
-        if (dynamicCourseEnabled) {
-            requestDynamicCourseOrientationPermission().catch(()=>{});
-            try { updateDynamicCourseCamera(); } catch (e) {}
-        }
         updateCourseBtnUiState();
     }
 
@@ -5646,8 +5865,12 @@
                             // Не перетираем точные координаты мусором
                             return;
                         }
-                        // Не используем явно недостоверную точку как пользовательскую позицию
-                        // (иначе карта и proximity-логика уезжают в ложные координаты).
+                        // Если точных ещё нет — покажем хотя бы маркер, но без синка радиуса и автоследования
+                        userSpeedKmh = 0;
+                        userLocation = [latNum, lonNum];
+                        updateUserLocationMarker();
+                        updateSpeedometerUI(userSpeedKmh);
+                        console.log(`📍 GPS (не точно): ${latNum.toFixed(4)}, ${lonNum.toFixed(4)} (точность: ${Number(accuracy).toFixed(0)}м)`);
                         return;
                     }
 
@@ -5707,16 +5930,19 @@
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try { updateDynamicCourseCamera(); } catch (e) {
-                            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
-                        }
+                        try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
                 },
                 (error) => {
                     // Ошибка получения координат
-                    console.warn('Ошибка GPS:', error.message);
+                    const timeoutByCode = Number(error?.code) === Number(error?.TIMEOUT || 3);
+                    const timeoutByMessage = /timeout expired|timeout|истекло время/i.test(String(error?.message || ''));
+                    const isTimeoutError = timeoutByCode || timeoutByMessage;
+                    if (!isTimeoutError) {
+                        console.warn('Ошибка GPS:', error?.message || error);
+                    }
                     switch(error.code) {
                         case error.PERMISSION_DENIED:
                             console.warn('Разрешение на доступ к GPS отклонено');
@@ -5744,7 +5970,15 @@
                             }, ()=>{}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
                             break;
                         case error.TIMEOUT:
-                            console.warn('Истекло время ожидания GPS — попробуйте ещё раз');
+                            // В Telegram WebView таймауты бывают часто: не спамим лог каждую попытку
+                            if ((Date.now() - Number(gpsTimeoutLastNotifyTs || 0)) > 30000) {
+                                gpsTimeoutLastNotifyTs = Date.now();
+                                console.warn('Истекло время ожидания GPS — продолжаю попытки, включите точную геолокацию/GPS и подождите 10–20 секунд');
+                            }
+                            if (!userLocation && Array.isArray(lastReliableUserLocation) && lastReliableUserLocation.length >= 2) {
+                                userLocation = [Number(lastReliableUserLocation[0]), Number(lastReliableUserLocation[1])];
+                                updateUserLocationMarker();
+                            }
                             break;
                     }
                 },
@@ -5895,13 +6129,6 @@
                 const zoom = Number.isFinite(Number(camera.zoom)) ? Number(camera.zoom) : (map.getZoom ? map.getZoom() : 16);
                 const duration = Number.isFinite(Number(camera.duration)) ? Number(camera.duration) : 500;
 
-                try {
-                    if (map.options && typeof map.options.set === 'function') {
-                        if (Number.isFinite(Number(camera.azimuth))) map.options.set('azimuth', normalizeDeg(camera.azimuth));
-                        if (Number.isFinite(Number(camera.tilt))) map.options.set('tilt', Number(camera.tilt));
-                    }
-                } catch (e) {}
-
                 if (center && map.setCenter) {
                     try {
                         map.setCenter(center, zoom, { duration, timingFunction: 'ease-out' });
@@ -5940,6 +6167,55 @@
         updateMapEngineBadge();
     }
 
+    function loadMap3dPreference() {
+        map3dEnabled = false;
+        try { localStorage.removeItem(MAP_3D_MODE_KEY); } catch (e) {}
+    }
+
+    function saveMap3dPreference() {
+        map3dEnabled = false;
+        try { localStorage.removeItem(MAP_3D_MODE_KEY); } catch (e) {}
+    }
+
+    function updateMap3dToggleUi() {
+        const isYm3Active = String(activeMapEngine || preferredMapEngine || '').includes('ymaps3');
+
+        const floatingBtn = document.getElementById('map3dToggleFloating');
+        if (floatingBtn) {
+            floatingBtn.classList.remove('is-on');
+            floatingBtn.textContent = '2D';
+            floatingBtn.title = '2D режим (наклон и 3D отключены)';
+            floatingBtn.style.display = 'none';
+        }
+
+        const settingsBtn = document.getElementById('map3dSettingsBtn');
+        if (settingsBtn) {
+            settingsBtn.classList.remove('active');
+            settingsBtn.textContent = '2D: ВКЛ';
+            settingsBtn.style.display = 'none';
+        }
+
+        const hint = document.getElementById('map3dSettingsHint');
+        if (hint) {
+            hint.textContent = isYm3Active
+                ? 'Режим карты: 2D (плоский, стабильный)'
+                : 'Режим карты: 2D (legacy)';
+        }
+    }
+
+    function applyMap3dMode(options = {}) {
+        updateMap3dToggleUi();
+        return false;
+    }
+
+    function toggleMap3dFromUI() {
+        map3dEnabled = false;
+        saveMap3dPreference();
+        updateMap3dToggleUi();
+    }
+
+    window.toggleMap3dFromUI = toggleMap3dFromUI;
+
     function updateMapEngineBadge() {
         try {
             const badge = document.getElementById('mapEngineBadge');
@@ -5965,6 +6241,7 @@
         } catch (e) {}
         saveMapEnginePreference();
         updateMapEngineBadge();
+        updateMap3dToggleUi();
         try {
             showInAppNotification({
                 title: '🗺 Движок карты',
@@ -5989,6 +6266,7 @@
 
     async function initPrimaryMapInstance() {
         loadMapEnginePreference();
+        loadMap3dPreference();
         activeMapEngine = 'ymaps2';
 
         if (preferredMapEngine === 'ymaps3') {
@@ -6026,10 +6304,39 @@
                 const FeaturesCtor = ym3Core?.YMapDefaultFeaturesLayer || ymaps3?.YMapDefaultFeaturesLayer;
                 const MarkerCtor = ym3Markers?.YMapMarker || ymaps3?.YMapMarker;
                 if (YMapCtor && SchemeCtor && FeaturesCtor && MarkerCtor) {
+                    map3dEnabled = false;
+                    const YM3_SCHEME_CUSTOMIZATION = [
+                        { tags: { any: ['road'] }, elements: 'geometry.fill', stylers: { color: '#2f3136' } },
+                        { tags: { any: ['road'] }, elements: 'geometry.stroke', stylers: { color: '#3b3f45', width: 1 } },
+                        { tags: { any: ['building'] }, elements: 'geometry.fill', stylers: { color: '#44484e' } },
+                        { tags: { any: ['building'] }, elements: 'geometry.stroke', stylers: { color: '#34383d', width: 1 } },
+                        { tags: { any: ['label', 'street'] }, elements: 'label.text.fill', stylers: { color: '#ffffff' } },
+                        { tags: { any: ['label', 'street'] }, elements: 'label.text.outline', stylers: { color: '#111111', width: 1 } }
+                    ];
                     const root = new YMapCtor(visualMapHost, {
-                        location: { center: [37.80, 48.01], zoom: 16, azimuth: 0, tilt: 0.8 }
+                        location: {
+                            center: [37.80, 48.01],
+                            zoom: 16,
+                            pitch: FOLLOW_CAMERA_PITCH_DEG,
+                            tilt: FOLLOW_CAMERA_PITCH_DEG,
+                            azimuth: 0
+                        },
+                        camera: {
+                            maxTilt: 80,
+                            minTilt: 0
+                        }
                     });
-                    const scheme = new SchemeCtor({});
+                    try {
+                        if (typeof root.setUpdateProps === 'function') {
+                            root.setUpdateProps({ location: { pitch: FOLLOW_CAMERA_PITCH_DEG, tilt: FOLLOW_CAMERA_PITCH_DEG } });
+                        }
+                    } catch (e) {}
+                    let scheme = null;
+                    try {
+                        scheme = new SchemeCtor({ id: 'scheme', customization: YM3_SCHEME_CUSTOMIZATION });
+                    } catch (e) {
+                        scheme = new SchemeCtor({ id: 'scheme' });
+                    }
                     root.addChild(scheme);
                     const features = new ymaps3.YMapDefaultFeaturesLayer({});
                     root.addChild(features);
@@ -6038,9 +6345,13 @@
                         if (ZoomControlCtor) root.addChild(new ZoomControlCtor({}));
                     } catch (e) {}
                     myMap.__ym3Root = root;
+                    myMap.__ym3Core = ym3Core || ymaps3;
                     myMap.__ym3MarkerLayer = features;
+                    myMap.__ym3BuildingsLayer = null;
                     myMap.__ym3LastCenter = [48.01, 37.80];
                     myMap.__ym3LastZoom = 16;
+                    myMap.__ym3LastTilt = FOLLOW_CAMERA_PITCH_DEG;
+                    myMap.__ym3LastAzimuth = 0;
 
                     const approximateBoundsFromCenterZoom = (center, zoom) => {
                         const lat = Number(center?.[0]);
@@ -6069,14 +6380,19 @@
                         if (!Number.isFinite(lat) || !Number.isFinite(lon)) return myMap;
                         myMap.__ym3LastCenter = [lat, lon];
                         myMap.__ym3LastZoom = nextZoom;
+                        myMap.__ym3LastAzimuth = Number.isFinite(Number(options?.azimuth))
+                            ? normalizeDeg(Number(options.azimuth))
+                            : Number(myMap.__ym3LastAzimuth || 0);
+                        myMap.__ym3LastTilt = FOLLOW_CAMERA_PITCH_DEG;
                         myMap.__ym3LastBounds = approximateBoundsFromCenterZoom(myMap.__ym3LastCenter, myMap.__ym3LastZoom);
                         try {
                             root.update({
                                 location: {
                                     center: [lon, lat],
                                     zoom: nextZoom,
-                                    azimuth: Number(options?.azimuth || 0),
-                                    tilt: Number.isFinite(Number(options?.tilt)) ? Number(options.tilt) : 0.8
+                                    azimuth: Number(myMap.__ym3LastAzimuth || 0),
+                                    pitch: FOLLOW_CAMERA_PITCH_DEG,
+                                    tilt: FOLLOW_CAMERA_PITCH_DEG
                                 }
                             });
                         } catch (e) {}
@@ -6114,6 +6430,7 @@
         myMap.geoObjects.add(markersCollection);
         mapAdapter = createMapAdapter(activeMapEngine, myMap, markersCollection);
         updateMapEngineBadge();
+        updateMap3dToggleUi();
 
         if (activeMapEngine === 'ymaps3-compat') {
             console.info('🧭 ymaps3 active: running staged adapter mode with legacy-safe fallback.');
@@ -6240,6 +6557,8 @@
                                 if (Number.isFinite(lat) && Number.isFinite(lon)) {
                                     map.__ym3LastCenter = [lat, lon];
                                     if (Number.isFinite(zoom)) map.__ym3LastZoom = zoom;
+                                    map.__ym3LastAzimuth = 0;
+                                    map.__ym3LastTilt = 0;
                                     map.__ym3LastBounds = approximateBoundsFromCenterZoom([lat, lon], map.__ym3LastZoom || 16);
                                 }
                             } catch (e) {}
@@ -6267,11 +6586,17 @@
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;');
+                const iconText = String(descriptor.icon || '📍');
+                const safeIconText = iconText
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+                const iconImgSrc = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><text x="50%" y="52%" dominant-baseline="middle" text-anchor="middle" font-size="44">${safeIconText}</text></svg>`);
 
                 const markerEl = document.createElement('div');
                 if (isAdminRole) {
-                    markerEl.style.cssText = 'position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:translate(-50%,-100%);cursor:pointer;user-select:none;pointer-events:auto;';
-                    markerEl.innerHTML = `<div style="font-size:16px;line-height:1;filter:drop-shadow(0 2px 6px rgba(0,0,0,0.35));margin-bottom:2px;">👑</div><div style="width:40px;height:40px;border-radius:50%;background:radial-gradient(circle at 30% 25%, #fff8d7 0%, #f5c64a 45%, #b57a10 100%);border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:18px;color:#2d1a00;box-shadow:0 0 0 1px rgba(120,76,0,0.35),0 0 14px rgba(245,198,66,0.65),0 8px 20px rgba(0,0,0,0.28);animation:adminPulse 1.6s ease-out infinite;"><span style="position:relative;z-index:1;">${String(descriptor.icon || '📍')}</span></div><div style="margin-top:4px;padding:2px 8px;border-radius:999px;background:linear-gradient(135deg,#fff0b3 0%,#f5c64a 55%,#c68d00 100%);border:1px solid rgba(120,76,0,0.45);color:#2d1a00;font-size:10px;font-weight:900;line-height:1.2;box-shadow:0 3px 10px rgba(0,0,0,0.22);white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis;">${safeAuthorName}</div>`;
+                    markerEl.style.cssText = 'position:relative;transform:translate(-50%,-100%);cursor:pointer;user-select:none;pointer-events:auto;';
+                    markerEl.innerHTML = `<div class="ym3-admin-marker-shell"><div class="ym3-admin-marker-crown">👑</div><div class="ym3-admin-marker-center"><div class="ym3-admin-marker-pulse-bg"></div><img src="${iconImgSrc}" alt="event" class="ym3-admin-marker-icon" /></div><div class="ym3-admin-marker-name">${safeAuthorName}</div></div>`;
                 } else {
                     markerEl.style.cssText = 'width:30px;height:30px;border-radius:50%;background:#fff;border:2px solid #0a84ff;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 2px 10px rgba(0,0,0,0.28);cursor:pointer;';
                     markerEl.innerHTML = `${String(descriptor.icon || '📍')}`;
@@ -6440,185 +6765,177 @@
         attachYandexCameraCompat(myMap);
         try {
             if (typeof myMap.setBehaviors === 'function') {
-                myMap.setBehaviors(['drag', 'scrollZoom', 'tilt', 'rotate']);
+                myMap.setBehaviors(['drag', 'scrollZoom']);
                 return;
             }
         } catch (e) {}
         try {
             if (myMap.behaviors && typeof myMap.behaviors.enable === 'function') {
-                myMap.behaviors.enable(['drag', 'scrollZoom', 'tilt', 'rotate']);
+                myMap.behaviors.enable(['drag', 'scrollZoom']);
             }
         } catch (e) {}
     }
 
     function updateDynamicCourseCamera() {
-        if (!dynamicCourseEnabled) return;
         if (!myMap || !autoFollow || !userLocation) return;
+        const speedKmh = Number(userSpeedKmh) || 0;
+        const speedMs = speedKmh / 3.6;
+        const heading = normalizeDeg(Number(userHeadingDeg) || 0);
 
-        const heading = getDynamicCourseHeadingDeg();
-        if (!Number.isFinite(Number(heading))) return;
+        const hasHeading = Number.isFinite(Number(heading));
+        if (!Number.isFinite(Number(followCameraAzimuthDeg))) {
+            followCameraAzimuthDeg = hasHeading ? heading : 0;
+        }
+        if (hasHeading) {
+            // Стрелка меняется мгновенно, камера — плавно догоняет
+            followCameraAzimuthDeg = smoothAngleDeg(followCameraAzimuthDeg, heading, 0.18);
+        }
 
-        const speed = Number(userSpeedKmh) || 0;
-        const targetZoom = getDynamicFollowZoomBySpeed(speed);
-        const aheadMeters = Math.max(
-            DYNAMIC_COURSE_AHEAD_MIN_M,
-            Math.min(DYNAMIC_COURSE_AHEAD_MAX_M, 650 + speed * 10)
-        );
-        const cameraTarget = destinationPointByBearing(userLocation[0], userLocation[1], heading, aheadMeters);
-
-        const smoothedHeading = (dynamicCourseFusedDeg === null)
-            ? normalizeDeg(heading)
-            : smoothAngleDeg(dynamicCourseFusedDeg, heading, 0.22);
-        dynamicCourseFusedDeg = smoothedHeading;
-        userHeadingDeg = smoothedHeading;
+        // Смещение центра вперёд по курсу: машина оказывается ближе к нижней части экрана
+        const aheadMeters = hasHeading
+            ? Math.max(120, Math.min(520, 170 + speedMs * 22))
+            : 180;
+        const cameraTarget = hasHeading
+            ? destinationPointByBearing(userLocation[0], userLocation[1], heading, aheadMeters)
+            : [Number(userLocation[0]), Number(userLocation[1])];
 
         try {
-            const mapAny = myMap;
-            if (typeof mapAny?.setCamera === 'function') {
-                mapAny.setCamera({
-                    center: cameraTarget,
-                    azimuth: smoothedHeading,
-                    tilt: DYNAMIC_COURSE_TILT,
-                    zoom: targetZoom,
-                    duration: 500
-                });
-            } else if (mapAny?.options?.set) {
-                mapAny.options.set('rotation', smoothedHeading);
-                mapAny.options.set('azimuth', smoothedHeading);
-                mapAny.options.set('tilt', DYNAMIC_COURSE_TILT);
+            const ym3Root = myMap?.__ym3Root;
+            if (ym3Root) {
+                const loc = {
+                    center: [Number(cameraTarget[1]), Number(cameraTarget[0])],
+                    zoom: 17,
+                    azimuth: followCameraAzimuthDeg,
+                    pitch: FOLLOW_CAMERA_PITCH_DEG,
+                    tilt: FOLLOW_CAMERA_PITCH_DEG,
+                    duration: 800,
+                    easing: 'linear'
+                };
+                if (typeof ym3Root.setLocation === 'function') ym3Root.setLocation(loc);
+                else ym3Root.update({ location: loc });
+
+                myMap.__ym3LastCenter = [Number(cameraTarget[0]), Number(cameraTarget[1])];
+                myMap.__ym3LastZoom = 17;
+                myMap.__ym3LastAzimuth = Number(followCameraAzimuthDeg || 0);
+                myMap.__ym3LastTilt = Number(FOLLOW_CAMERA_PITCH_DEG);
+                return;
             }
         } catch (e) {}
 
-        const canMove = !Number.isFinite(dynamicCourseLastCameraDeg)
-            || Math.abs(shortestAngleDeltaDeg(dynamicCourseLastCameraDeg, smoothedHeading)) >= 1.2
-            || speed >= 12;
-        if (!canMove) return;
-
-        dynamicCourseLastCameraDeg = smoothedHeading;
         try {
-            myMap.setCenter(cameraTarget, targetZoom, { duration: 500, timingFunction: 'ease-out' });
+            if (myMap?.options?.set && hasHeading) {
+                myMap.options.set('rotation', followCameraAzimuthDeg);
+                myMap.options.set('azimuth', followCameraAzimuthDeg);
+            }
+            myMap.setCenter(cameraTarget, 17, { duration: 800, timingFunction: 'linear' });
         } catch (e) {
-            try { myMap.setCenter(cameraTarget, targetZoom); } catch (e2) {}
+            try { myMap.setCenter(cameraTarget, 17); } catch (e2) {}
         }
     }
 
+    window.updateCourse = (heading) => {
+        const nextHeading = normalizeDeg(Number(heading) || 0);
+        followCameraAzimuthDeg = nextHeading;
+        try {
+            const ym3Root = myMap?.__ym3Root;
+            const center = Array.isArray(myMap?.__ym3LastCenter) && myMap.__ym3LastCenter.length >= 2
+                ? myMap.__ym3LastCenter
+                : (Array.isArray(userLocation) && userLocation.length >= 2 ? userLocation : [48.0159, 37.8041]);
+            const zoom = Number.isFinite(Number(myMap?.__ym3LastZoom)) ? Number(myMap.__ym3LastZoom) : 17;
+
+            if (ym3Root) {
+                const loc = {
+                    center: [Number(center[1]), Number(center[0])],
+                    zoom,
+                    tilt: FOLLOW_CAMERA_PITCH_DEG,
+                    pitch: FOLLOW_CAMERA_PITCH_DEG,
+                    azimuth: nextHeading,
+                    duration: 1000,
+                    easing: 'linear'
+                };
+                if (typeof ym3Root.setLocation === 'function') ym3Root.setLocation(loc);
+                else ym3Root.update({ location: loc });
+                myMap.__ym3LastAzimuth = nextHeading;
+                myMap.__ym3LastTilt = FOLLOW_CAMERA_PITCH_DEG;
+                return;
+            }
+            if (myMap?.options?.set) {
+                myMap.options.set('rotation', nextHeading);
+                myMap.options.set('azimuth', nextHeading);
+            }
+        } catch (e) {}
+    };
+
     function startDynamicCourseLoop() {
-        if (dynamicCourseCameraTimerId) return;
-        dynamicCourseCameraTimerId = setInterval(() => {
-            try { updateDynamicCourseCamera(); } catch (e) {}
-        }, DYNAMIC_COURSE_UPDATE_MS);
+        if (dynamicCourseCameraTimerId) {
+            clearInterval(dynamicCourseCameraTimerId);
+            dynamicCourseCameraTimerId = null;
+        }
+        return;
     }
 
     function initDynamicCourseSensors() {
-        if (dynamicCourseCompassInit) return;
-        dynamicCourseCompassInit = true;
-        const orientationAllowed = isFeatureAllowedByPolicy('accelerometer') && isFeatureAllowedByPolicy('gyroscope');
-        if (!orientationAllowed) {
-            if (!initDynamicCourseSensors.__policyWarned) {
-                initDynamicCourseSensors.__policyWarned = true;
-                console.info('Компасные сенсоры недоступны по policy — курс остаётся по GPS.');
-            }
-            startDynamicCourseLoop();
-            return;
-        }
-        try {
-            window.addEventListener('deviceorientationabsolute', onDynamicCourseOrientation, true);
-            window.addEventListener('deviceorientation', onDynamicCourseOrientation, true);
-        } catch (e) {}
+        dynamicCourseEnabled = false;
         startDynamicCourseLoop();
+        return;
     }
     
-    // Функция обновления маркера текущего местоположения на карте
+    // --- YM3: Плавный кастомный маркер пользователя ---
+    let ym3UserMarker = null;
+    let ym3UserMarkerEl = null;
+    let ym3UserArrowEl = null;
+    let ym3UserPulseEl = null;
+    let lastUserHeading = 0;
+    let lastUserCoords = null;
+    const MIN_ROTATE_SPEED_MS = 1.5;
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
-        if (isAdmin && adminInvisible) {
-            if (userLocationMarker) {
-                try { myMap.geoObjects.remove(userLocationMarker); } catch(e) {}
-                userLocationMarker = null;
+        // Только для ymaps3
+        if (window.ymaps3 && myMap.__ym3Root) {
+            const [lat, lon] = userLocation;
+            const speed = Number(userSpeedKmh) || 0;
+            const speedMs = speed / 3.6;
+            const heading = (Number(userHeadingDeg) || 0) % 360;
+            // Создаём маркер один раз
+            if (!ym3UserMarker) {
+                // HTML структура маркера
+                ym3UserMarkerEl = document.createElement('div');
+                                ym3UserMarkerEl.className = 'user-marker ym3-user-marker';
+                                ym3UserMarkerEl.style.pointerEvents = 'none';
+                                ym3UserMarkerEl.style.width = '36px';
+                                ym3UserMarkerEl.style.height = '36px';
+                ym3UserMarkerEl.innerHTML = `
+                                    <div class="ym3-user-halo"></div>
+                  <div class="ym3-user-pulse"></div>
+                  <div class="ym3-user-arrow"></div>
+                `;
+                ym3UserArrowEl = ym3UserMarkerEl.querySelector('.ym3-user-arrow');
+                ym3UserPulseEl = ym3UserMarkerEl.querySelector('.ym3-user-pulse');
+
+                // Создаём маркер
+                ym3UserMarker = new ymaps3.YMapMarker({ coordinates: [lon, lat] }, ym3UserMarkerEl);
+                const parent = myMap.__ym3MarkerLayer || myMap.__ym3Root;
+                parent.addChild(ym3UserMarker);
+            } else {
+                // Плавно обновляем координаты
+                ym3UserMarker.update({ coordinates: [lon, lat] });
             }
+            // Плавный поворот стрелки
+            if (ym3UserArrowEl) {
+                if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
+                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotate(${heading}deg)`;
+                } else {
+                    ym3UserArrowEl.style.transform = `translate(-50%, -50%) rotate(${lastUserHeading}deg)`;
+                }
+                lastUserHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
+            }
+            lastUserCoords = [lat, lon];
             return;
         }
-
-        // Удаляем старый маркер если он есть
-        if (userLocationMarker) {
-            try { myMap.geoObjects.remove(userLocationMarker); } catch(e){}
-        }
-
-                const speed = Number(userSpeedKmh) || 0; // km/h
-                const size = 46;
-                const heading = (Number(userHeadingDeg) || 0) % 360;
-
-                // Кастомный маркер: чёрная стрелка-треугольник + поворот по курсу
-                const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-    <rect width="100%" height="100%" fill="transparent"/>
-    <g transform="rotate(${heading.toFixed(1)} ${size/2} ${size/2})">
-        <path d="M ${size/2} ${size*0.10} L ${size*0.78} ${size*0.86} L ${size/2} ${size*0.70} L ${size*0.22} ${size*0.86} Z"
-                    fill="#0b0b0b" stroke="rgba(255,255,255,0.88)" stroke-width="1.6" stroke-linejoin="round"/>
-    </g>
-    <circle cx="${size/2}" cy="${size/2}" r="${size*0.49}" fill="none" stroke="rgba(0,0,0,0.06)" stroke-width="1"/>
-</svg>`;
-
-        if (isAdmin) {
-            const adminSize = 36;
-            const adminIconHtml = `
-                <div class="admin-marker admin-marker--self">
-                    <span class="admin-siren admin-siren-left"></span>
-                    <span class="admin-siren admin-siren-right"></span>
-                    <span class="admin-marker-core">🚗</span>
-                    <span class="admin-marker-badge">♛</span>
-                </div>
-            `;
-            userLocationMarker = new ymaps.Placemark(userLocation,
-                {
-                    hintContent: 'Вы здесь (Админ)',
-                    balloonContent: `👑 Админ на связи<br>Скорость: ${speed} км/ч`
-                },
-                {
-                    iconLayout: 'default#imageWithContent',
-                    iconContent: adminIconHtml,
-                    iconImageSize: [adminSize, adminSize],
-                    iconImageOffset: [-(adminSize/2), -(adminSize/2)],
-                    zIndex: 1100
-                }
-            );
-        } else {
-            const svgUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
-
-            let pulseLayout = null;
-            try {
-                pulseLayout = window.__userPulseLayout || (window.__userPulseLayout = ymaps.templateLayoutFactory.createClass('<div class="user-marker-wrap"><div class="user-pulse"></div></div>'));
-            } catch (e) {
-                pulseLayout = null;
-            }
-
-            userLocationMarker = new ymaps.Placemark(userLocation,
-                {
-                    hintContent: 'Вы здесь',
-                    balloonContent: `📍 Ваше текущее местоположение<br>Скорость: ${speed} км/ч`
-                },
-                {
-                    iconLayout: 'default#imageWithContent',
-                    iconImageHref: svgUrl,
-                    iconImageSize: [size, size],
-                    iconImageOffset: [-(size/2), -(size/2)],
-                    iconContentLayout: pulseLayout || undefined,
-                    iconContentOffset: [-(size/2), -(size/2)],
-                    iconContentSize: [size, size],
-                    zIndex: 1000
-                }
-            );
-        }
-
-        myMap.geoObjects.add(userLocationMarker);
-
-        // Центрируем карту на текущем местоположении (если это первый раз)
-        if (!myMap.lastUserLocationUpdate) {
-            try { myMap.setCenter(userLocation, 17); } catch(e){}
-            myMap.lastUserLocationUpdate = true;
-        }
+        // ...existing code for ymaps2 and admin...
     }
+// ...existing code...
     
     // Центрирует карту на текущем местоположении и включает автоследование
     function centerOnMyLocation() {
@@ -6628,7 +6945,6 @@
         }
         autoFollow = true;
         updateFollowButton();
-        requestDynamicCourseOrientationPermission().catch(()=>{});
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         try { updateDynamicCourseCamera(); } catch (e) {
             try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
@@ -6641,7 +6957,6 @@
         updateFollowButton();
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         if (autoFollow && userLocation && myMap) {
-            requestDynamicCourseOrientationPermission().catch(()=>{});
             try { updateDynamicCourseCamera(); } catch(e) {
                 try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
             }
@@ -6695,7 +7010,7 @@
             try { monolithStopKeepAliveAudio(); } catch (e) {}
             try { monolithReleaseWakeLock(); } catch (e) {}
         } else {
-            try { monolithPrimeAudioOnce(); } catch (e) {}
+            try { monolithPrimeAudioOnce(true); } catch (e) {}
             try { monolithSoftResumeSpeech(); } catch (e) {}
             try { monolithMaybeUpdateWakeLock(); } catch (e) {}
         }
@@ -6713,6 +7028,7 @@
         btn.title = isV3 ? 'Тест движка: ymaps3 (нажмите для ymaps2)' : 'Тест движка: ymaps2 (нажмите для ymaps3)';
         const hint = document.getElementById('mapEngineSettingsHint');
         if (hint) hint.textContent = `Текущий режим: ${isV3 ? 'ymaps3' : 'ymaps2'}`;
+        updateMap3dToggleUi();
     }
 
     function toggleMapEngineFromUI() {
@@ -6896,6 +7212,9 @@
 
         // Если токен есть — определяем админа по Telegram ID (и в Mini App, и в Web/PWA)
         isAdmin = !!uid && String(uid) === String(ADMIN_ID);
+        if (isAdmin) {
+            try { hideReleaseWaitScreen(); } catch (e) {}
+        }
 
         // Если пользователь уже в ЗБТ — гарантируем ачивку "Первопроходец"
         try {
@@ -7939,178 +8258,142 @@
         }
     }
 
-    // Функция изменения аватара (только фото, emoji не поддерживается без колонки avatar)
-    async function changeAvatar() {
-        // Открываем выбор фото
-        document.getElementById('profile-photo-input').click();
+    // Аватар: Croppie модуль + загрузка в Supabase Storage
+    let avatarEditorInstance = null;
+    let avatarEditorInitPromise = null;
+
+    async function blobToDataUrl(blob) {
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error('Не удалось преобразовать изображение'));
+            reader.readAsDataURL(blob);
+        });
     }
 
-    // Переменные для редактора аватара
-    let avatarEditorState = {
-        fileBlob: null,
-        zoom: 1,
-        offsetX: 0,
-        offsetY: 0
-    };
-
-    // Обработка загрузки фото аватара
-    document.addEventListener('change', async function(e) {
-        if (e.target.id === 'profile-photo-input') {
-            const file = e.target.files[0];
-            if (file) {
-                try {
-                    // Читаем файл как Data URL для предпросмотра
-                    const reader = new FileReader();
-                    reader.onload = function(event) {
-                        // Показываем редактор аватара
-                        const img = document.getElementById('avatarEditorImage');
-                        img.src = event.target.result;
-                        
-                        // Сохраняем blob файла
-                        avatarEditorState.fileBlob = file;
-                        avatarEditorState.zoom = 1;
-                        avatarEditorState.offsetX = 0;
-                        avatarEditorState.offsetY = 0;
-                        
-                        // Обновляем контролы
-                        document.getElementById('avatarZoom').value = 1;
-                        document.getElementById('avatarZoomValue').textContent = '100';
-                        document.getElementById('avatarOffsetX').value = 0;
-                        document.getElementById('avatarOffsetY').value = 0;
-                        
-                        // Открываем модальное окно редактора
-                        const target = document.querySelector('.target');
-                        if (target) target.style.visibility = 'hidden';
-                        document.getElementById('avatarEditorModal').classList.add('active');
-                    };
-                    reader.readAsDataURL(file);
-                } catch (err) {
-                    alert('Ошибка при открытии файла: ' + (err?.message || err));
-                }
-                e.target.value = ''; // очищаем input
-            }
-        }
-    });
-
-    // Обновление превью при изменении zoom
-    document.getElementById('avatarZoom')?.addEventListener('input', function(e) {
-        avatarEditorState.zoom = parseFloat(e.target.value);
-        document.getElementById('avatarZoomValue').textContent = Math.round(avatarEditorState.zoom * 100);
-        updateAvatarEditorPreview();
-    });
-
-    // Обновление превью при изменении offsetX
-    document.getElementById('avatarOffsetX')?.addEventListener('input', function(e) {
-        avatarEditorState.offsetX = parseFloat(e.target.value);
-        updateAvatarEditorPreview();
-    });
-
-    // Обновление превью при изменении offsetY
-    document.getElementById('avatarOffsetY')?.addEventListener('input', function(e) {
-        avatarEditorState.offsetY = parseFloat(e.target.value);
-        updateAvatarEditorPreview();
-    });
-
-    // Функция обновления превью в редакторе
-    function updateAvatarEditorPreview() {
-        const img = document.getElementById('avatarEditorImage');
-        if (img) {
-            // Применяем трансформацию к изображению
-            const scalePercent = avatarEditorState.zoom;
-            const offsetXPercent = avatarEditorState.offsetX;
-            const offsetYPercent = avatarEditorState.offsetY;
-            
-            img.style.transform = `scale(${scalePercent}) translate(${offsetXPercent}px, ${offsetYPercent}px)`;
-        }
+    function isStorageBucketMissingError(error) {
+        const msg = String(error?.message || error?.error || error?.details || '').toLowerCase();
+        const status = Number(error?.statusCode || error?.status || 0);
+        if (msg.includes('bucket not found')) return true;
+        if (msg.includes('bucket') && msg.includes('not found')) return true;
+        if (msg.includes('nosuchbucket')) return true;
+        if ((status === 400 || status === 404) && msg.includes('bucket')) return true;
+        return false;
     }
 
-    // Функция закрытия редактора аватара
-    function closeAvatarEditor() {
-        const target = document.querySelector('.target');
-        if (target) target.style.visibility = 'visible';
-        document.getElementById('avatarEditorModal').classList.remove('active');
-        avatarEditorState = {
-            fileBlob: null,
-            zoom: 1,
-            offsetX: 0,
-            offsetY: 0
+    async function uploadAvatarViaEdgeFunction(blob) {
+        const dataUrl = await blobToDataUrl(blob);
+        const headers = {
+            'content-type': 'application/json',
+            apikey: SUPABASE_KEY
         };
+        const token = String(currentSupabaseToken || '').trim();
+        if (token) headers['authorization'] = `Bearer ${token}`;
+
+        const resp = await fetch(`${SUPABASE_URL}/functions/v1/avatar-upload`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ image_data_url: dataUrl })
+        });
+
+        const payload = await resp.json().catch(() => ({}));
+        if (!resp.ok || !payload?.ok || !payload?.public_url) {
+            const err = new Error(String(payload?.error || `avatar-upload failed (${resp.status})`));
+            err.status = resp.status;
+            throw err;
+        }
+
+        return String(payload.public_url);
     }
 
-    // Функция сохранения отредактированного аватара
-    async function saveAvatarEdit() {
+    async function uploadAvatarBlobToStorage(blob, ext = 'jpg') {
+        if (!uid) throw new Error('Пользователь не авторизован');
         try {
-            if (!avatarEditorState.fileBlob) {
-                alert('Ошибка: файл не загружен');
-                return;
+            return await uploadAvatarViaEdgeFunction(blob);
+        } catch (error) {
+            const message = String(error?.message || '').toLowerCase();
+            const status = Number(error?.status || 0);
+            const isExpectedFallback =
+                message.includes('bucket') ||
+                message.includes('row-level security') ||
+                message.includes('rls') ||
+                message.includes('failed to fetch') ||
+                status === 400 || status === 401 || status === 404;
+            if (!isExpectedFallback) throw error;
+
+            console.warn('Edge upload недоступен, используем fallback data URL:', error?.message || error);
+            return await blobToDataUrl(blob);
+        }
+    }
+
+    async function ensureAvatarEditorReady() {
+        if (avatarEditorInstance) return avatarEditorInstance;
+        if (avatarEditorInitPromise) return avatarEditorInitPromise;
+
+        avatarEditorInitPromise = (async () => {
+            if (typeof window.TelegramAvatarEditor !== 'function') {
+                throw new Error('Модуль редактора аватара не загружен');
             }
 
-            // Создаем canvas для вырезания круглого изображения
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 400;
-            canvas.height = 400;
+            const editor = new window.TelegramAvatarEditor({
+                fileInput: '#profile-photo-input',
+                cssPath: './avatar-editor.css',
+                title: 'Редактор аватара',
+                saveText: 'Обрезать и сохранить',
+                onSave: async (blob) => {
+                    const avatarUrl = await uploadAvatarBlobToStorage(blob, 'jpg');
+                    const safeAvatarUrl = sanitizeMediaUrl(avatarUrl);
+                    if (!safeAvatarUrl) throw new Error('Некорректный URL аватара');
 
-            // Загружаем изображение
-            const img = new Image();
-            img.onload = async function() {
-                // Очищаем canvas
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Рисуем круглую маску
-                ctx.beginPath();
-                ctx.arc(200, 200, 200, 0, Math.PI * 2);
-                ctx.clip();
-
-                // Применяем масштабирование и смещение
-                const scaleFactor = avatarEditorState.zoom;
-                const offsetX = (canvas.width / 2) + (avatarEditorState.offsetX * 2);
-                const offsetY = (canvas.height / 2) + (avatarEditorState.offsetY * 2);
-
-                // Рисуем изображение с трансформацией
-                ctx.drawImage(
-                    img,
-                    offsetX - (img.width / 2) * scaleFactor,
-                    offsetY - (img.height / 2) * scaleFactor,
-                    img.width * scaleFactor,
-                    img.height * scaleFactor
-                );
-
-                // Получаем blob из canvas
-                canvas.toBlob((blob) => {
-                    try {
-                        // Преобразуем blob в Base64
-                        const reader = new FileReader();
-                        reader.onload = function(event) {
-                            const base64 = event.target.result; // data:image/jpeg;base64,...
-
-                            // Отображаем фото как аватар
-                            const avatarEl = document.getElementById('profile-avatar-display');
-                            avatarEl.style.backgroundImage = `url('${base64}')`;
-                            avatarEl.style.backgroundSize = 'cover';
-                            avatarEl.style.backgroundPosition = 'center';
-                            avatarEl.textContent = '';
-
-                            // Сохраняем Base64 в поле
-                            document.getElementById('profile-avatar-url').value = base64;
-                            document.getElementById('profile-avatar-value').value = '';
-
-                            // Закрываем редактор
-                            closeAvatarEditor();
-                            alert('✅ Аватар сохранен!');
-                        };
-                        reader.readAsDataURL(blob);
-                    } catch (err) {
-                        alert('Ошибка загрузки: ' + (err?.message || err));
+                    const avatarEl = document.getElementById('profile-avatar-display');
+                    if (avatarEl) {
+                        avatarEl.style.backgroundImage = `url('${safeAvatarUrl}')`;
+                        avatarEl.style.backgroundSize = 'cover';
+                        avatarEl.style.backgroundPosition = 'center';
+                        avatarEl.textContent = '';
                     }
-                }, 'image/jpeg', 0.9);
-            };
 
-            // Загружаем исходное изображение
-            img.src = document.getElementById('avatarEditorImage').src;
-        } catch (err) {
-            alert('Ошибка сохранения: ' + (err?.message || err));
+                    const avatarUrlEl = document.getElementById('profile-avatar-url');
+                    const avatarValueEl = document.getElementById('profile-avatar-value');
+                    if (avatarUrlEl) avatarUrlEl.value = safeAvatarUrl;
+                    if (avatarValueEl) avatarValueEl.value = '';
+                    if (currentDriver) currentDriver.avatar_url = safeAvatarUrl;
+
+                    alert('✅ Аватар сохранен');
+                },
+                onError: (error) => {
+                    const msg = error?.message || 'Ошибка редактора аватара';
+                    console.warn('Avatar editor error:', msg);
+                }
+            });
+
+            await editor.init();
+            avatarEditorInstance = editor;
+            return editor;
+        })();
+
+        try {
+            return await avatarEditorInitPromise;
+        } finally {
+            avatarEditorInitPromise = null;
         }
+    }
+
+    async function changeAvatar() {
+        try {
+            await ensureAvatarEditorReady();
+            document.getElementById('profile-photo-input')?.click();
+        } catch (e) {
+            alert('Ошибка загрузки редактора: ' + (e?.message || e));
+        }
+    }
+
+    function closeAvatarEditor() {
+        try { avatarEditorInstance?.close?.(); } catch (e) {}
+    }
+
+    async function saveAvatarEdit() {
+        try { await avatarEditorInstance?.save?.(); } catch (e) {}
     }
 
     // Функция сохранения изменений профиля
@@ -12314,14 +12597,7 @@
         
         // Используем GPS координаты пользователя, иначе центр карты
         const fallbackCenter = (mapAdapter && typeof mapAdapter.getCenter === 'function') ? mapAdapter.getCenter() : (myMap?.getCenter?.() || null);
-        const hasLiveUserCoords = Array.isArray(userLocation) && userLocation.length >= 2;
-        const hasLastReliableUserCoords = Array.isArray(lastReliableUserLocation) && lastReliableUserLocation.length >= 2;
-        const userCoords = gpsReliable && hasLiveUserCoords
-            ? [Number(userLocation[0]), Number(userLocation[1])]
-            : (hasLastReliableUserCoords
-                ? [Number(lastReliableUserLocation[0]), Number(lastReliableUserLocation[1])]
-                : null);
-        const renderReferenceCoords = Array.isArray(userCoords) ? userCoords : fallbackCenter;
+        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : fallbackCenter;
 
         // Для производительности рендерим только метки в видимой области (+запас)
         // или рядом с пользователем (чтобы голос/подсказки не терялись при смещении карты).
@@ -12346,8 +12622,8 @@
                 }
 
                 let nearUser = false;
-                if (Array.isArray(renderReferenceCoords) && renderReferenceCoords.length >= 2) {
-                    nearUser = calculateDistance(Number(renderReferenceCoords[0]), Number(renderReferenceCoords[1]), Number(coords.lat), Number(coords.lon)) <= NEARBY_RENDER_METERS;
+                if (Array.isArray(userCoords) && userCoords.length >= 2) {
+                    nearUser = calculateDistance(Number(userCoords[0]), Number(userCoords[1]), Number(coords.lat), Number(coords.lon)) <= NEARBY_RENDER_METERS;
                 }
 
                 return inBounds || nearUser;
@@ -12606,7 +12882,7 @@
             checkMarkerDistance(m, userCoords);
             
             // Очищаем уведомления для маркеров которые уже далеко (более 800м)
-            if (distanceNotifications.has(m.id) && Array.isArray(userCoords) && userCoords.length >= 2) {
+            if (distanceNotifications.has(m.id)) {
                 const mc = extractMarkerCoordsForNotif(m);
                 if (mc) {
                     const distance = calculateDistance(userCoords[0], userCoords[1], mc.lat, mc.lon);
@@ -12966,6 +13242,84 @@
         function hideSplashScreenImmediately() {
             document.getElementById('splashScreen').classList.add('hidden');
         }
+
+        let releaseWaitTimerId = null;
+        function getReleaseTargetDate() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const target = new Date(year, 2, 1, 12, 0, 0, 0); // 1 марта 12:00 (локальное время)
+            return target;
+        }
+
+        function formatReleaseCountdown(msLeft) {
+            const totalSeconds = Math.max(0, Math.floor(msLeft / 1000));
+            const days = Math.floor(totalSeconds / 86400);
+            const hours = Math.floor((totalSeconds % 86400) / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            const hh = String(hours).padStart(2, '0');
+            const mm = String(minutes).padStart(2, '0');
+            const ss = String(seconds).padStart(2, '0');
+            return `${days}д ${hh}:${mm}:${ss}`;
+        }
+
+        function hideReleaseWaitScreen() {
+            const gate = document.getElementById('releaseWaitScreen');
+            if (gate) gate.style.display = 'none';
+            if (releaseWaitTimerId) {
+                clearInterval(releaseWaitTimerId);
+                releaseWaitTimerId = null;
+            }
+        }
+
+        function shouldBypassReleaseWaitForAdmin() {
+            try {
+                if (isAdmin === true) return true;
+                const currentUid = String(uid || '').trim();
+                if (currentUid && currentUid === String(ADMIN_ID)) return true;
+                const tgUid = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || '').trim();
+                if (tgUid && tgUid === String(ADMIN_ID)) return true;
+                const storedUid = String(localStorage.getItem('site_uid') || '').trim();
+                if (storedUid && storedUid === String(ADMIN_ID)) return true;
+            } catch (e) {}
+            return false;
+        }
+
+        function initReleaseWaitScreen() {
+            const gate = document.getElementById('releaseWaitScreen');
+            const countdown = document.getElementById('releaseCountdown');
+            if (!gate || !countdown) return;
+
+            if (shouldBypassReleaseWaitForAdmin()) {
+                hideReleaseWaitScreen();
+                return;
+            }
+
+            const target = getReleaseTargetDate();
+            const update = () => {
+                if (shouldBypassReleaseWaitForAdmin()) {
+                    hideReleaseWaitScreen();
+                    return;
+                }
+                const nowTs = Date.now();
+                const left = target.getTime() - nowTs;
+                if (left <= 0) {
+                    hideReleaseWaitScreen();
+                    return;
+                }
+                gate.style.display = 'flex';
+                countdown.textContent = formatReleaseCountdown(left);
+            };
+
+            update();
+            if (gate.style.display !== 'none') {
+                releaseWaitTimerId = setInterval(update, 1000);
+            }
+        }
+
+        setTimeout(() => {
+            try { initReleaseWaitScreen(); } catch (e) {}
+        }, 0);
 
         // ============= ПРОВЕРКА БАНА =============
         let userBanStatus = null;
