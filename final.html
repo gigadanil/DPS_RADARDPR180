@@ -703,6 +703,78 @@
             100% { box-shadow: 0 0 0 0 rgba(57,255,20,0.0); }
         }
 
+        .hide-ui {
+            opacity: 0;
+            pointer-events: none;
+            transition: 0.5s;
+        }
+
+        .driving-hud {
+            position: fixed;
+            inset: 0;
+            z-index: 2100;
+            pointer-events: none;
+        }
+        #speed-val {
+            position: fixed;
+            top: calc(10px + var(--safe-area-inset-top));
+            left: calc(12px + var(--safe-area-inset-left));
+            font-size: 56px;
+            font-weight: 900;
+            color: var(--text-primary);
+            text-shadow: var(--critical-outline);
+            line-height: 1;
+            opacity: 0;
+            transition: opacity 0.35s ease;
+        }
+        #online-count {
+            position: fixed;
+            top: calc(12px + var(--safe-area-inset-top));
+            right: calc(12px + var(--safe-area-inset-right));
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 12px;
+            background: var(--card-strong);
+            border: 1px solid var(--stroke);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-weight: 800;
+            opacity: 0;
+            transition: opacity 0.35s ease;
+        }
+        #dps-alert {
+            position: fixed;
+            top: calc(12px + var(--safe-area-inset-top));
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 7px 12px;
+            border-radius: 12px;
+            background: var(--card-strong);
+            border: 1px solid var(--stroke);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-weight: 900;
+            opacity: 0;
+            transition: opacity 0.35s ease;
+        }
+        #dps-alert.is-danger {
+            background: #ff3b30;
+            border-color: #ff3b30;
+            color: #fff;
+            animation: dpsAlertBlink 0.9s steps(2, start) infinite;
+        }
+        @keyframes dpsAlertBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.45; }
+        }
+        body.driving-mode #speed-val,
+        body.driving-mode #online-count,
+        body.driving-mode #dps-alert {
+            opacity: 1;
+        }
+
         .user-marker-wrap { position: relative; width: 100%; height: 100%; pointer-events: none; }
         .user-pulse {
             position: absolute;
@@ -1586,6 +1658,11 @@
     <div id="onlineCountBadge" class="online-count" aria-label="Онлайн">
         <span class="online-dot" aria-hidden="true"></span>
         <span id="onlineCountText">В сети: —</span>
+    </div>
+    <div id="drivingHud" class="driving-hud" aria-hidden="true">
+        <div id="speed-val">0</div>
+        <div id="online-count">👤 <span id="online-count-val">—</span></div>
+        <div id="dps-alert">👮 ДПС: —</div>
     </div>
     <div id="mapEngineBadge" class="engine-badge" aria-label="Движок карты">🗺️ ymaps3</div>
     <button id="map3dToggleFloating" onclick="toggleMap3dFromUI()" title="Переключить 2D/3D" aria-label="Переключить 2D/3D">3D OFF</button>
@@ -3078,6 +3155,7 @@
     const DYNAMIC_COURSE_AHEAD_MIN_M = 450;
     const DYNAMIC_COURSE_AHEAD_MAX_M = 2300;
     const DYNAMIC_COURSE_UPDATE_MS = 450;
+    const DRIVING_MODE_SPEED_THRESHOLD_KMH = 5;
     // Текущие серверные ачивки (ключ -> count)
     let currentAchievementCounts = {};
     // Коллекция для маркеров (чтобы не удалять служебные geoObjects при обновлении)
@@ -3123,6 +3201,9 @@
     // Спидометр: видимость
     let speedometerEnabled = true;
     let map3dEnabled = false;
+    let drivingModeEnabled = false;
+    let drivingNearestDpsDistanceMeters = null;
+    let drivingDpsCoordsCache = [];
     // Анти-спам для меток
     const MARKER_RATE_LIMIT_MS = 120000;
     // Переменная для хранения выбранной фотографии
@@ -3796,8 +3877,135 @@
 
     function updateSpeedometerUI(speedKmh) {
         const valueEl = document.getElementById('speedValue');
-        if (!valueEl) return;
-        valueEl.textContent = Math.max(0, Math.round(speedKmh || 0));
+        const normalizedSpeed = Math.max(0, Math.round(speedKmh || 0));
+        if (valueEl) valueEl.textContent = normalizedSpeed;
+
+        const speedHudEl = document.getElementById('speed-val');
+        if (speedHudEl) speedHudEl.textContent = String(normalizedSpeed);
+
+        setDrivingModeEnabled(normalizedSpeed > DRIVING_MODE_SPEED_THRESHOLD_KMH);
+    }
+
+    function getDrivingUiTargets() {
+        const selectors = [
+            '#ccLayersBtn',
+            '#ccCourseBtn',
+            '#patrolHeatmapBtn',
+            '#dtpHeatmapBtn',
+            '#map .ymaps-2-1-79-zoom',
+            '#map [class*="zoom-control"]'
+        ];
+        const out = [];
+        selectors.forEach(selector => {
+            document.querySelectorAll(selector).forEach(el => out.push(el));
+        });
+        return out;
+    }
+
+    function setDrivingModeEnabled(enabled) {
+        const next = !!enabled;
+        if (drivingModeEnabled === next) return;
+        drivingModeEnabled = next;
+
+        const body = document.body;
+        if (body) {
+            if (drivingModeEnabled) body.classList.add('driving-mode');
+            else body.classList.remove('driving-mode');
+        }
+
+        getDrivingUiTargets().forEach(el => {
+            if (drivingModeEnabled) el.classList.add('hide-ui');
+            else el.classList.remove('hide-ui');
+        });
+
+        updateDrivingHudDpsAlert();
+    }
+
+    function updateDrivingHudOnlineCount(rawText) {
+        const el = document.getElementById('online-count-val');
+        if (!el) return;
+        const source = String(rawText || document.getElementById('onlineCountText')?.textContent || '');
+        const matched = source.match(/(\d+)/);
+        el.textContent = matched ? matched[1] : '—';
+    }
+
+    function refreshDrivingNearestDpsDistanceFromCache() {
+        if (!Array.isArray(userLocation) || userLocation.length < 2 || !Array.isArray(drivingDpsCoordsCache) || drivingDpsCoordsCache.length === 0) {
+            drivingNearestDpsDistanceMeters = null;
+            updateDrivingHudDpsAlert();
+            return;
+        }
+        const userLat = Number(userLocation[0]);
+        const userLon = Number(userLocation[1]);
+        if (!Number.isFinite(userLat) || !Number.isFinite(userLon)) {
+            drivingNearestDpsDistanceMeters = null;
+            updateDrivingHudDpsAlert();
+            return;
+        }
+
+        let minDistance = Infinity;
+        drivingDpsCoordsCache.forEach(p => {
+            if (!Array.isArray(p) || p.length < 2) return;
+            const lat = Number(p[0]);
+            const lon = Number(p[1]);
+            if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+            const dist = calculateDistance(userLat, userLon, lat, lon);
+            if (Number.isFinite(dist) && dist < minDistance) minDistance = dist;
+        });
+
+        drivingNearestDpsDistanceMeters = Number.isFinite(minDistance) ? minDistance : null;
+        updateDrivingHudDpsAlert();
+    }
+
+    function updateDrivingHudDpsAlert() {
+        const alertEl = document.getElementById('dps-alert');
+        if (!alertEl) return;
+        const dist = Number(drivingNearestDpsDistanceMeters);
+        if (!Number.isFinite(dist)) {
+            alertEl.textContent = '👮 ДПС: —';
+            alertEl.classList.remove('is-danger');
+            return;
+        }
+
+        const isDanger = dist < 1000;
+        const formatted = dist >= 1000 ? `${(dist / 1000).toFixed(1)} км` : `${Math.round(dist)} м`;
+        alertEl.textContent = `👮 ДПС: ${formatted}`;
+        if (isDanger) alertEl.classList.add('is-danger');
+        else alertEl.classList.remove('is-danger');
+    }
+
+    function updateDrivingFollowCenter() {
+        if (!myMap || !Array.isArray(userLocation) || userLocation.length < 2) return;
+        const lat = Number(userLocation[0]);
+        const lon = Number(userLocation[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+
+        try {
+            if (typeof myMap.update === 'function') {
+                myMap.update({
+                    location: {
+                        center: [lon, lat],
+                        duration: 500
+                    }
+                });
+                return;
+            }
+        } catch (e) {}
+
+        try {
+            const ym3Root = myMap?.__ym3Root;
+            if (ym3Root && typeof ym3Root.update === 'function') {
+                ym3Root.update({
+                    location: {
+                        center: [lon, lat],
+                        duration: 500
+                    }
+                });
+                return;
+            }
+        } catch (e) {}
+
+        try { myMap.setCenter([lat, lon], 17, { duration: 500 }); } catch (e) {}
     }
 
     function registerServiceWorker() {
@@ -5924,13 +6132,20 @@
                     // Обновляем маркер на карте (включая визуализацию скорости/ачивок/стиля)
                     updateUserLocationMarker();
                     updateSpeedometerUI(userSpeedKmh);
+                    refreshDrivingNearestDpsDistanceFromCache();
 
                     // Интеллектуальные подсказки по истории меток ДПС/Спецбат
                     maybeCheckSmartHint(latitude, longitude);
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try { updateDynamicCourseCamera(); } catch (e2) { console.warn(e2); }
+                        try {
+                            if ((Number(userSpeedKmh) || 0) > DRIVING_MODE_SPEED_THRESHOLD_KMH) {
+                                updateDrivingFollowCenter();
+                            } else {
+                                updateDynamicCourseCamera();
+                            }
+                        } catch (e2) { console.warn(e2); }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
@@ -11157,12 +11372,14 @@
             const t = document.getElementById('onlineCountText');
             if (t) t.textContent = `В сети: ${count}`;
             else badge.textContent = `В сети: ${count}`;
+            updateDrivingHudOnlineCount(`В сети: ${count}`);
             try { badge.classList.add('visible'); } catch(e) {}
         } catch (e) {
             console.warn('Ошибка loadOnlineCount:', e?.message || e);
             const t = document.getElementById('onlineCountText');
             if (t) t.textContent = 'В сети: ?';
             else badge.textContent = 'В сети: ?';
+            updateDrivingHudOnlineCount('В сети: ?');
             presenceSupported = false;
         }
     }
@@ -12585,6 +12802,15 @@
             const parsed = Date.parse(m.exp);
             return !isNaN(parsed) ? parsed > now : true;
         });
+        drivingDpsCoordsCache = activeMarkers
+            .filter(m => String(m?.type) === 'dps')
+            .map(m => {
+                const c = extractMarkerCoordsForNotif(m);
+                if (!c) return null;
+                return [Number(c.lat), Number(c.lon)];
+            })
+            .filter(Boolean);
+        refreshDrivingNearestDpsDistanceFromCache();
         
         // Подсчитываем метки по типам
         const typeCounts = {};
