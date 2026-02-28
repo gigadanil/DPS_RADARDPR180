@@ -2604,7 +2604,10 @@
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     // Формат: '@YourBot'
     const BOT_USERNAME = '@DPSRADARDPR180bot';
+    const SUPABASE_CLIENT_CACHE = {};
     function createSupabaseClient(token = null) {
+        const cacheKey = token ? `auth:${String(token)}` : 'anon';
+        if (SUPABASE_CLIENT_CACHE[cacheKey]) return SUPABASE_CLIENT_CACHE[cacheKey];
         const options = {
             auth: {
                 persistSession: false,
@@ -2615,7 +2618,9 @@
         if (token) {
             options.global = { headers: { Authorization: `Bearer ${token}` } };
         }
-        return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
+        const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
+        SUPABASE_CLIENT_CACHE[cacheKey] = client;
+        return client;
     }
 
     function clearSupabaseAuth() {
@@ -4084,7 +4089,7 @@
     function registerServiceWorker() {
         if (!('serviceWorker' in navigator)) return;
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('service-worker.js?v=4').catch(err => {
+            navigator.serviceWorker.register('service-worker.js?v=5').catch(err => {
                 console.warn('Service Worker registration failed:', err);
             });
         });
