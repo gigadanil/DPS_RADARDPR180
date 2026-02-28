@@ -3995,8 +3995,6 @@
                         duration: 500
                     }
                 });
-                myMap.__ym3LastCenter = [lat, lon];
-                if (!Number.isFinite(Number(myMap.__ym3LastZoom))) myMap.__ym3LastZoom = 17;
                 return;
             }
         } catch (e) {}
@@ -4010,8 +4008,6 @@
                         duration: 500
                     }
                 });
-                myMap.__ym3LastCenter = [lat, lon];
-                if (!Number.isFinite(Number(myMap.__ym3LastZoom))) myMap.__ym3LastZoom = 17;
                 return;
             }
         } catch (e) {}
@@ -5717,7 +5713,6 @@
      */
     function checkMarkerDistance(marker, userCoords) {
             if (!userCoords || userCoords.length < 2) return;
-            if (String(marker?.author_id || '') === String(uid || '')) return;
             const followOkForBanner = !(proximityRequiresFollow && !autoFollow);
 
             // Поддерживаем разные форматы координат маркера: coords: [lat,lon] или latitude/longitude
@@ -12688,7 +12683,6 @@
 
         // Берём координаты из позиции центральной метки (прицела),
         // чтобы постановка была точной даже при поднятии прицела над нижним виджетом.
-        disableAutoFollowOnce = true;
         const coords = getTargetPlacementCoords();
 
         const commentEl = document.getElementById('m-comm');
@@ -12827,14 +12821,11 @@
             return !isNaN(parsed) ? parsed > now : true;
         });
         drivingDpsCoordsCache = activeMarkers
-            .filter(m => String(m?.type) === 'dps' && String(m?.author_id || '') !== String(uid || ''))
+            .filter(m => String(m?.type) === 'dps')
             .map(m => {
                 const c = extractMarkerCoordsForNotif(m);
                 if (!c) return null;
-                const lat = Number(c.lat);
-                const lon = Number(c.lon);
-                if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-                return [lat, lon];
+                return [Number(c.lat), Number(c.lon)];
             })
             .filter(Boolean);
         refreshDrivingNearestDpsDistanceFromCache();
