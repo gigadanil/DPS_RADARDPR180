@@ -903,7 +903,10 @@
         }
 
         /* Прячем старые плавающие элементы, чтобы интерфейс соответствовал ТЗ */
-        .top-controls, .fab-stack, .follow-toggle, .feedback-btn { display: none !important; }
+        .top-controls, .feedback-btn { display: none !important; }
+        .fab-stack, .follow-toggle { display: none !important; }
+        body.engine-v3 .fab-stack { display: flex !important; }
+        body.engine-v3 .follow-toggle { display: flex !important; }
         .fab-row {
             display: flex;
             gap: 10px;
@@ -6442,6 +6445,10 @@
 
             const engine = String(activeMapEngine || preferredMapEngine || '').toLowerCase();
             const isV3 = engine.includes('ymaps3');
+            try {
+                document.body.classList.toggle('engine-v3', isV3);
+                document.body.classList.toggle('engine-v2', !isV3);
+            } catch (e) {}
             badge.classList.toggle('is-v3', isV3);
             badge.classList.toggle('is-v2', !isV3);
             badge.textContent = isV3 ? '🗺️ ymaps3' : '🗺️ ymaps2 legacy';
