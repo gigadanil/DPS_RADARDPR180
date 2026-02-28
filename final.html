@@ -3212,6 +3212,7 @@
     let markerRenderMode = 'nearby'; // 'nearby' | 'all'
     // Флаг видимости нижнего виджета
     let actionCardVisible = false;
+    let currentActionCardCenterOffsetPx = 0;
     // Флаг для отключения автосцентрирования GPS после размещения метки
     let disableAutoFollowOnce = false;
     // Кэш данных авторов для оптимизации запросов к БД
@@ -3256,12 +3257,56 @@
             const panel = document.querySelector('.action-panel');
             if (panel) panel.classList.toggle('open', !!actionCardVisible);
         } catch (e) {}
+        try { applyActionCardCenterOffset(); } catch (e) {}
+        setTimeout(() => { try { applyActionCardCenterOffset(); } catch (e) {} }, 240);
         updateTargetAnchorPosition();
     }
 
     function setRightActionsHidden(hidden) {
         const bar = document.getElementById('rightBar');
         if (bar) bar.classList.toggle('hidden', !!hidden);
+    }
+
+    function getActionCardOcclusionPx() {
+        if (!actionCardVisible) return 0;
+        const card = document.getElementById('actionCard');
+        const mapEl = document.getElementById('map');
+        if (!card || !mapEl || card.classList.contains('hidden')) return 0;
+        const cardRect = card.getBoundingClientRect();
+        const mapRect = mapEl.getBoundingClientRect();
+        const overlap = Math.max(0, Number(mapRect.bottom || 0) - Number(cardRect.top || 0));
+        return Math.round(overlap);
+    }
+
+    function shiftMapCenterByPixels(offsetY) {
+        const dy = Number(offsetY) || 0;
+        if (!myMap || !Number.isFinite(dy) || Math.abs(dy) < 1) return;
+        const center = myMap.getCenter?.();
+        const zoom = Number(myMap.getZoom?.());
+        const projection = myMap.options?.get?.('projection');
+        if (!Array.isArray(center) || center.length < 2 || !Number.isFinite(zoom) || !projection) return;
+        if (typeof projection.toGlobalPixels !== 'function' || typeof projection.fromGlobalPixels !== 'function') return;
+
+        try {
+            const global = projection.toGlobalPixels([Number(center[0]), Number(center[1])], zoom);
+            if (!Array.isArray(global) || global.length < 2) return;
+            const shifted = [Number(global[0]), Number(global[1]) + dy];
+            const nextCenter = projection.fromGlobalPixels(shifted, zoom);
+            if (!Array.isArray(nextCenter) || nextCenter.length < 2) return;
+            myMap.setCenter([Number(nextCenter[0]), Number(nextCenter[1])], zoom, { duration: 220, timingFunction: 'ease-out' });
+        } catch (e) {}
+    }
+
+    function applyActionCardCenterOffset() {
+        const occlusion = getActionCardOcclusionPx();
+        const targetOffsetPx = actionCardVisible ? Math.round(occlusion * 0.5) : 0;
+        const delta = targetOffsetPx - Number(currentActionCardCenterOffsetPx || 0);
+        if (Math.abs(delta) < 1) {
+            currentActionCardCenterOffsetPx = targetOffsetPx;
+            return;
+        }
+        shiftMapCenterByPixels(delta);
+        currentActionCardCenterOffsetPx = targetOffsetPx;
     }
 
     function updateTargetAnchorPosition() {
@@ -6959,6 +7004,39 @@
     let lastUserHeading = 0;
     let lastUserCoords = null;
     const MIN_ROTATE_SPEED_MS = 1.5;
+    const LEGACY_USER_MARKER_SIZE = 36;
+    const LEGACY_USER_MARKER_HALF = Math.round(LEGACY_USER_MARKER_SIZE / 2);
+    const LEGACY_MOVING_AVG_WINDOW = 5;
+    let legacyUserCoordsHistory = [];
+
+    function applyLegacyMovingAverage(lat, lon) {
+        const latNum = Number(lat);
+        const lonNum = Number(lon);
+        if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
+            if (Array.isArray(lastUserCoords) && lastUserCoords.length >= 2) return [Number(lastUserCoords[0]), Number(lastUserCoords[1])];
+            return [48.01, 37.80];
+        }
+
+        const usePoint = !gpsReliable && legacyUserCoordsHistory.length > 0
+            ? legacyUserCoordsHistory[legacyUserCoordsHistory.length - 1]
+            : [latNum, lonNum];
+
+        legacyUserCoordsHistory.push(usePoint);
+        if (legacyUserCoordsHistory.length > LEGACY_MOVING_AVG_WINDOW) {
+            legacyUserCoordsHistory = legacyUserCoordsHistory.slice(-LEGACY_MOVING_AVG_WINDOW);
+        }
+
+        let sumLat = 0;
+        let sumLon = 0;
+        legacyUserCoordsHistory.forEach(p => {
+            sumLat += Number(p[0]) || 0;
+            sumLon += Number(p[1]) || 0;
+        });
+
+        const denom = legacyUserCoordsHistory.length || 1;
+        return [sumLat / denom, sumLon / denom];
+    }
+
     function buildUserMarkerHtmlForMap(headingDeg) {
         const safeHeading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
         return `
@@ -7018,6 +7096,7 @@
 
         if (!window.ymaps || typeof ymaps.Placemark !== 'function') return;
         const [lat, lon] = userLocation;
+        const [smoothLat, smoothLon] = applyLegacyMovingAverage(lat, lon);
         const speed = Number(userSpeedKmh) || 0;
         const speedMs = speed / 3.6;
         const heading = (Number(userHeadingDeg) || 0) % 360;
@@ -7030,25 +7109,25 @@
         try {
             if (!userLocationMarker) {
                 userLocationMarker = new ymaps.Placemark(
-                    [lat, lon],
+                    [smoothLat, smoothLon],
                     { iconContent },
                     {
                         iconLayout: 'default#imageWithContent',
                         iconImageHref: '',
-                        iconImageSize: [36, 36],
-                        iconImageOffset: [-18, -18]
+                        iconImageSize: [LEGACY_USER_MARKER_SIZE, LEGACY_USER_MARKER_SIZE],
+                        iconImageOffset: [-LEGACY_USER_MARKER_HALF, -LEGACY_USER_MARKER_HALF]
                     }
                 );
                 if (myMap?.geoObjects?.add) myMap.geoObjects.add(userLocationMarker);
             } else {
                 if (typeof userLocationMarker.geometry?.setCoordinates === 'function') {
-                    userLocationMarker.geometry.setCoordinates([lat, lon]);
+                    userLocationMarker.geometry.setCoordinates([smoothLat, smoothLon]);
                 }
                 if (typeof userLocationMarker.properties?.set === 'function') {
                     userLocationMarker.properties.set('iconContent', iconContent);
                 }
             }
-            lastUserCoords = [lat, lon];
+            lastUserCoords = [smoothLat, smoothLon];
         } catch (e) {
             console.warn('Не удалось обновить маркер пользователя (ymaps2):', e?.message || e);
         }
@@ -12495,7 +12574,10 @@
             appInitialized = true;
             initApp();
             updateTargetAnchorPosition();
-            window.addEventListener('resize', updateTargetAnchorPosition);
+            window.addEventListener('resize', () => {
+                try { updateTargetAnchorPosition(); } catch(e) {}
+                try { applyActionCardCenterOffset(); } catch(e) {}
+            });
             setDtpHeatmapUiState(false);
             
             // Инициализируем GPS отслеживание
@@ -12520,9 +12602,15 @@
                 const card = document.getElementById('actionCard');
                 if (card && !card.__targetObserverBound) {
                     card.__targetObserverBound = true;
-                    card.addEventListener('transitionend', () => { try { updateTargetAnchorPosition(); } catch(e) {} });
+                    card.addEventListener('transitionend', () => {
+                        try { updateTargetAnchorPosition(); } catch(e) {}
+                        try { applyActionCardCenterOffset(); } catch(e) {}
+                    });
                     if ('ResizeObserver' in window) {
-                        const ro = new ResizeObserver(() => { try { updateTargetAnchorPosition(); } catch(e) {} });
+                        const ro = new ResizeObserver(() => {
+                            try { updateTargetAnchorPosition(); } catch(e) {}
+                            try { applyActionCardCenterOffset(); } catch(e) {}
+                        });
                         ro.observe(card);
                         card.__targetRO = ro;
                     }
