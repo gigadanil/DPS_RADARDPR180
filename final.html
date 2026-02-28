@@ -3269,7 +3269,6 @@
         if (!target) return;
 
         target.style.transform = 'translate(-50%, -50%)';
-        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
 
         // Базируемся на реальной видимой области карты (а не на window.innerHeight),
         // чтобы нижний виджет не перекрывал прицел.
@@ -3284,58 +3283,19 @@
         const tgBottom = (tgViewportHeightPx && tgViewportHeightPx > 0) ? (mapTop + tgViewportHeightPx) : 0;
         const mapBottom = tgBottom ? Math.min(baseBottom, tgBottom) : baseBottom;
 
-        // Для ymaps3 прицел всегда должен совпадать с реальным центром карты.
-        if (isYm3Active) {
-            const mid = mapTop + (mapBottom - mapTop) * 0.5;
-            target.style.top = `${Math.round(mid)}px`;
-            return;
-        }
-
-        const card = document.getElementById('actionCard');
-        if (!actionCardVisible || !card || card.classList.contains('hidden')) {
-            const mid = mapTop + (mapBottom - mapTop) * 0.5;
-            target.style.top = `${Math.round(mid)}px`;
-            return;
-        }
-
-        const cardRect = card.getBoundingClientRect();
-        const visibleBottom = Math.max(mapTop + 80, Math.min(mapBottom, cardRect.top - TARGET_CARD_GAP_PX));
-        const desiredTop = Math.max(TARGET_MIN_TOP_PX, mapTop + (visibleBottom - mapTop) * 0.5);
-        target.style.top = `${Math.round(desiredTop)}px`;
+        // Для всех движков прицел жёстко в реальном центре карты.
+        const mid = mapTop + (mapBottom - mapTop) * 0.5;
+        target.style.top = `${Math.round(mid)}px`;
     }
 
     function getTargetPlacementCoords() {
         if (!myMap) return [48.01, 37.80];
 
         const fallback = myMap.getCenter();
-        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
-        if (isYm3Active) {
-            if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
-                return [Number(fallback[0]), Number(fallback[1])];
-            }
-            return [48.01, 37.80];
+        if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
+            return [Number(fallback[0]), Number(fallback[1])];
         }
-        try {
-            const target = document.querySelector('.target');
-            const projection = myMap.options?.get?.('projection');
-            if (!target || !projection || !myMap.converter?.pageToGlobal) return fallback;
-
-            const rect = target.getBoundingClientRect();
-            const pixelPoint = [
-                rect.left + rect.width / 2,
-                rect.top + rect.height / 2
-            ];
-
-            const globalPixels = myMap.converter.pageToGlobal(pixelPoint);
-            const coords = projection.fromGlobalPixels(globalPixels, myMap.getZoom());
-
-            if (Array.isArray(coords) && coords.length >= 2 && Number.isFinite(Number(coords[0])) && Number.isFinite(Number(coords[1]))) {
-                return [Number(coords[0]), Number(coords[1])];
-            }
-        } catch (e) {
-            console.warn('Не удалось вычислить координаты по центральной метке:', e?.message || e);
-        }
-        return fallback;
+        return [48.01, 37.80];
     }
 
     function setDtpHeatmapUiState(enabled) {
@@ -4879,6 +4839,9 @@
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
     let monolithUserGestureUnlocked = false;
+    let monolithPwaUnlockHintShown = false;
+    let monolithLastResumeRecoveryTs = 0;
+    const GPS_STALE_RECOVERY_MS = 45000;
 
     // very small silent WAV (short) as data URI
     const MONOLITH_SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
@@ -4995,6 +4958,21 @@
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
 
+        if (!monolithUserGestureUnlocked) {
+            monolithTtsQueue.push(t);
+            if (!monolithPwaUnlockHintShown) {
+                monolithPwaUnlockHintShown = true;
+                try {
+                    showInAppNotification({
+                        title: '🔊 Активация звука',
+                        body: 'Для PWA нажмите один раз по экрану, чтобы включить голос ИИ в этом режиме.',
+                        priority: 'high'
+                    });
+                } catch (e) {}
+            }
+            return;
+        }
+
         monolithSoftResumeSpeech();
         monolithEnsureVoicesReady();
         monolithTtsQueue.push(t);
@@ -5096,6 +5074,30 @@
 
         monolithAudioPrimed = true;
         try { monolithStartAudioContextKeepAlive(); } catch (e) {}
+        try { monolithSoftResumeSpeech(); } catch (e) {}
+        try { monolithSpeakNextFromQueue(); } catch (e) {}
+    }
+
+    function monolithRecoverAfterResume() {
+        const now = Date.now();
+        if ((now - Number(monolithLastResumeRecoveryTs || 0)) < 1500) return;
+        monolithLastResumeRecoveryTs = now;
+
+        try { monolithPrimeAudioOnce(true); } catch (e) {}
+        try { monolithSoftResumeSpeech(); } catch (e) {}
+        try { monolithMaybeUpdateWakeLock(); } catch (e) {}
+
+        if (!navigator.geolocation || document.hidden) return;
+        const gpsStale = !lastUserPositionTime || ((now - Number(lastUserPositionTime || 0)) > GPS_STALE_RECOVERY_MS);
+        if (!gpsStale) return;
+
+        try {
+            if (gpsWatchId !== null && typeof gpsWatchId !== 'undefined') {
+                navigator.geolocation.clearWatch(gpsWatchId);
+            }
+        } catch (e) {}
+        gpsWatchId = null;
+        try { initGPS(); } catch (e) {}
     }
 
     function monolithEnsureAudioContext() {
@@ -5234,9 +5236,12 @@
                 if (window.speechSynthesis) {
                     try { window.speechSynthesis.resume(); } catch(e) {}
                 }
+                monolithRecoverAfterResume();
             }
         } catch (e) {}
     });
+    window.addEventListener('pageshow', () => { try { monolithRecoverAfterResume(); } catch (e) {} });
+    window.addEventListener('focus', () => { try { monolithRecoverAfterResume(); } catch (e) {} });
 
     function speakSmartHintText(text) {
         const t = String(text || '').trim();
