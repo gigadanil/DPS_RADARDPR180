@@ -5309,10 +5309,12 @@
         const warningMax = getDynamicWarningMaxMeters();
 
         const prevState = markerDistanceState.get(markerId);
-        let trend = prevState?.lastTrend || 'approaching';
+        let trend = 'approaching';
         if (prevState && typeof prevState.lastDistance === 'number') {
-            if (distance > prevState.lastDistance + 25) trend = 'away';
-            else if (distance < prevState.lastDistance - 25) trend = 'approaching';
+            const deltaDistance = distance - Number(prevState.lastDistance);
+            if (deltaDistance > 25) trend = 'away';
+            else if (deltaDistance < -25) trend = 'approaching';
+            else trend = 'steady';
         }
         markerDistanceState.set(markerId, { lastDistance: distance, lastTrend: trend, lastUpdate: Date.now() });
 
@@ -5343,7 +5345,7 @@
             }
         } catch (e) {}
 
-        if (trend === 'away') {
+        if (trend === 'away' && prevState && typeof prevState.lastDistance === 'number') {
             if (currentNotification) {
                 distanceNotifications.delete(markerId);
                 stopWarningOutput();
@@ -5644,12 +5646,8 @@
                             // Не перетираем точные координаты мусором
                             return;
                         }
-                        // Если точных ещё нет — покажем хотя бы маркер, но без синка радиуса и автоследования
-                        userSpeedKmh = 0;
-                        userLocation = [latNum, lonNum];
-                        updateUserLocationMarker();
-                        updateSpeedometerUI(userSpeedKmh);
-                        console.log(`📍 GPS (не точно): ${latNum.toFixed(4)}, ${lonNum.toFixed(4)} (точность: ${Number(accuracy).toFixed(0)}м)`);
+                        // Не используем явно недостоверную точку как пользовательскую позицию
+                        // (иначе карта и proximity-логика уезжают в ложные координаты).
                         return;
                     }
 
@@ -12316,7 +12314,14 @@
         
         // Используем GPS координаты пользователя, иначе центр карты
         const fallbackCenter = (mapAdapter && typeof mapAdapter.getCenter === 'function') ? mapAdapter.getCenter() : (myMap?.getCenter?.() || null);
-        const userCoords = (userLocation && userLocation.length >= 2) ? userLocation : fallbackCenter;
+        const hasLiveUserCoords = Array.isArray(userLocation) && userLocation.length >= 2;
+        const hasLastReliableUserCoords = Array.isArray(lastReliableUserLocation) && lastReliableUserLocation.length >= 2;
+        const userCoords = gpsReliable && hasLiveUserCoords
+            ? [Number(userLocation[0]), Number(userLocation[1])]
+            : (hasLastReliableUserCoords
+                ? [Number(lastReliableUserLocation[0]), Number(lastReliableUserLocation[1])]
+                : null);
+        const renderReferenceCoords = Array.isArray(userCoords) ? userCoords : fallbackCenter;
 
         // Для производительности рендерим только метки в видимой области (+запас)
         // или рядом с пользователем (чтобы голос/подсказки не терялись при смещении карты).
@@ -12341,8 +12346,8 @@
                 }
 
                 let nearUser = false;
-                if (Array.isArray(userCoords) && userCoords.length >= 2) {
-                    nearUser = calculateDistance(Number(userCoords[0]), Number(userCoords[1]), Number(coords.lat), Number(coords.lon)) <= NEARBY_RENDER_METERS;
+                if (Array.isArray(renderReferenceCoords) && renderReferenceCoords.length >= 2) {
+                    nearUser = calculateDistance(Number(renderReferenceCoords[0]), Number(renderReferenceCoords[1]), Number(coords.lat), Number(coords.lon)) <= NEARBY_RENDER_METERS;
                 }
 
                 return inBounds || nearUser;
@@ -12601,7 +12606,7 @@
             checkMarkerDistance(m, userCoords);
             
             // Очищаем уведомления для маркеров которые уже далеко (более 800м)
-            if (distanceNotifications.has(m.id)) {
+            if (distanceNotifications.has(m.id) && Array.isArray(userCoords) && userCoords.length >= 2) {
                 const mc = extractMarkerCoordsForNotif(m);
                 if (mc) {
                     const distance = calculateDistance(userCoords[0], userCoords[1], mc.lat, mc.lon);
