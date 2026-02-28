@@ -1609,9 +1609,6 @@
         <button class="locate-btn" id="locateBtn" onclick="centerOnMyLocation()" title="Центрирование" aria-label="Центрирование">
             <span class="locate-icon">➤</span>
         </button>
-        <button class="locate-btn" id="followBottomBtn" onclick="toggleFollow()" title="Автослежение" aria-label="Автослежение">
-            <span class="locate-icon">👁️</span>
-        </button>
         <button class="ptt-btn ptt-fab" id="pttFabBtn" title="Рация (зажми и говори)" aria-label="Рация">🎙️</button>
     </div>
 
@@ -3109,13 +3106,6 @@
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
     let isAdmin = false;
-    let nextGenAccessCache = {
-        checkedAt: 0,
-        allowed: false,
-        isTester: false,
-        isAdmin: false
-    };
-    const NEXT_GEN_ACCESS_CACHE_MS = 60 * 1000;
     // Флаг режима невидимости админа (глобально для всех клиентов)
     let adminInvisible = false;
     // Realtime-канал для админ-уведомлений и статусов
@@ -3212,7 +3202,6 @@
     let markerRenderMode = 'nearby'; // 'nearby' | 'all'
     // Флаг видимости нижнего виджета
     let actionCardVisible = false;
-    let currentActionCardCenterOffsetPx = 0;
     // Флаг для отключения автосцентрирования GPS после размещения метки
     let disableAutoFollowOnce = false;
     // Кэш данных авторов для оптимизации запросов к БД
@@ -3258,51 +3247,11 @@
             if (panel) panel.classList.toggle('open', !!actionCardVisible);
         } catch (e) {}
         updateTargetAnchorPosition();
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                updateTargetAnchorPosition();
-            });
-        });
-        setTimeout(() => { try { updateTargetAnchorPosition(); } catch (e) {} }, 320);
     }
 
     function setRightActionsHidden(hidden) {
         const bar = document.getElementById('rightBar');
         if (bar) bar.classList.toggle('hidden', !!hidden);
-    }
-
-    function getActionCardOcclusionPx() {
-        if (!actionCardVisible) return 0;
-        const card = document.getElementById('actionCard');
-        const mapEl = document.getElementById('map');
-        if (!card || !mapEl || card.classList.contains('hidden')) return 0;
-        const cardRect = card.getBoundingClientRect();
-        const mapRect = mapEl.getBoundingClientRect();
-        const overlap = Math.max(0, Number(mapRect.bottom || 0) - Number(cardRect.top || 0));
-        return Math.round(overlap);
-    }
-
-    function shiftMapCenterByPixels(offsetY) {
-        const dy = Number(offsetY) || 0;
-        if (!myMap || !Number.isFinite(dy) || Math.abs(dy) < 1) return;
-        const center = myMap.getCenter?.();
-        const zoom = Number(myMap.getZoom?.());
-        const projection = myMap.options?.get?.('projection');
-        if (!Array.isArray(center) || center.length < 2 || !Number.isFinite(zoom) || !projection) return;
-        if (typeof projection.toGlobalPixels !== 'function' || typeof projection.fromGlobalPixels !== 'function') return;
-
-        try {
-            const global = projection.toGlobalPixels([Number(center[0]), Number(center[1])], zoom);
-            if (!Array.isArray(global) || global.length < 2) return;
-            const shifted = [Number(global[0]), Number(global[1]) + dy];
-            const nextCenter = projection.fromGlobalPixels(shifted, zoom);
-            if (!Array.isArray(nextCenter) || nextCenter.length < 2) return;
-            myMap.setCenter([Number(nextCenter[0]), Number(nextCenter[1])], zoom, { duration: 220, timingFunction: 'ease-out' });
-        } catch (e) {}
-    }
-
-    function applyActionCardCenterOffset() {
-        return;
     }
 
     function updateTargetAnchorPosition() {
@@ -3332,16 +3281,7 @@
         }
 
         const cardRect = card.getBoundingClientRect();
-        let cardTop = Number(cardRect?.top);
-        const cardHeight = Math.max(Number(card?.offsetHeight || 0), Number(cardRect?.height || 0));
-        const cardIsOutOfScreen = !Number.isFinite(cardTop) || cardTop >= (mapBottom - 4);
-
-        if (cardIsOutOfScreen && cardHeight > 0) {
-            cardTop = mapBottom - cardHeight;
-        }
-
-        const safeCardTop = Number.isFinite(cardTop) ? cardTop : mapBottom;
-        const visibleBottom = Math.max(mapTop + 80, Math.min(mapBottom, safeCardTop - TARGET_CARD_GAP_PX));
+        const visibleBottom = Math.max(mapTop + 80, Math.min(mapBottom, cardRect.top - TARGET_CARD_GAP_PX));
         const desiredTop = Math.max(TARGET_MIN_TOP_PX, mapTop + (visibleBottom - mapTop) * 0.5);
         target.style.top = `${Math.round(desiredTop)}px`;
     }
@@ -3350,10 +3290,34 @@
         if (!myMap) return [48.01, 37.80];
 
         const fallback = myMap.getCenter();
-        if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
-            return [Number(fallback[0]), Number(fallback[1])];
+        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
+        if (isYm3Active) {
+            if (Array.isArray(fallback) && fallback.length >= 2 && Number.isFinite(Number(fallback[0])) && Number.isFinite(Number(fallback[1]))) {
+                return [Number(fallback[0]), Number(fallback[1])];
+            }
+            return [48.01, 37.80];
         }
-        return [48.01, 37.80];
+        try {
+            const target = document.querySelector('.target');
+            const projection = myMap.options?.get?.('projection');
+            if (!target || !projection || !myMap.converter?.pageToGlobal) return fallback;
+
+            const rect = target.getBoundingClientRect();
+            const pixelPoint = [
+                rect.left + rect.width / 2,
+                rect.top + rect.height / 2
+            ];
+
+            const globalPixels = myMap.converter.pageToGlobal(pixelPoint);
+            const coords = projection.fromGlobalPixels(globalPixels, myMap.getZoom());
+
+            if (Array.isArray(coords) && coords.length >= 2 && Number.isFinite(Number(coords[0])) && Number.isFinite(Number(coords[1]))) {
+                return [Number(coords[0]), Number(coords[1])];
+            }
+        } catch (e) {
+            console.warn('Не удалось вычислить координаты по центральной метке:', e?.message || e);
+        }
+        return fallback;
     }
 
     function setDtpHeatmapUiState(enabled) {
@@ -4897,9 +4861,6 @@
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
     let monolithUserGestureUnlocked = false;
-    let monolithPwaUnlockHintShown = false;
-    let monolithLastResumeRecoveryTs = 0;
-    const GPS_STALE_RECOVERY_MS = 45000;
 
     // very small silent WAV (short) as data URI
     const MONOLITH_SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
@@ -5016,21 +4977,6 @@
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
 
-        if (!monolithUserGestureUnlocked) {
-            monolithTtsQueue.push(t);
-            if (!monolithPwaUnlockHintShown) {
-                monolithPwaUnlockHintShown = true;
-                try {
-                    showInAppNotification({
-                        title: '🔊 Активация звука',
-                        body: 'Для PWA нажмите один раз по экрану, чтобы включить голос ИИ в этом режиме.',
-                        priority: 'high'
-                    });
-                } catch (e) {}
-            }
-            return;
-        }
-
         monolithSoftResumeSpeech();
         monolithEnsureVoicesReady();
         monolithTtsQueue.push(t);
@@ -5132,30 +5078,6 @@
 
         monolithAudioPrimed = true;
         try { monolithStartAudioContextKeepAlive(); } catch (e) {}
-        try { monolithSoftResumeSpeech(); } catch (e) {}
-        try { monolithSpeakNextFromQueue(); } catch (e) {}
-    }
-
-    function monolithRecoverAfterResume() {
-        const now = Date.now();
-        if ((now - Number(monolithLastResumeRecoveryTs || 0)) < 1500) return;
-        monolithLastResumeRecoveryTs = now;
-
-        try { monolithPrimeAudioOnce(true); } catch (e) {}
-        try { monolithSoftResumeSpeech(); } catch (e) {}
-        try { monolithMaybeUpdateWakeLock(); } catch (e) {}
-
-        if (!navigator.geolocation || document.hidden) return;
-        const gpsStale = !lastUserPositionTime || ((now - Number(lastUserPositionTime || 0)) > GPS_STALE_RECOVERY_MS);
-        if (!gpsStale) return;
-
-        try {
-            if (gpsWatchId !== null && typeof gpsWatchId !== 'undefined') {
-                navigator.geolocation.clearWatch(gpsWatchId);
-            }
-        } catch (e) {}
-        gpsWatchId = null;
-        try { initGPS(); } catch (e) {}
     }
 
     function monolithEnsureAudioContext() {
@@ -5294,12 +5216,9 @@
                 if (window.speechSynthesis) {
                     try { window.speechSynthesis.resume(); } catch(e) {}
                 }
-                monolithRecoverAfterResume();
             }
         } catch (e) {}
     });
-    window.addEventListener('pageshow', () => { try { monolithRecoverAfterResume(); } catch (e) {} });
-    window.addEventListener('focus', () => { try { monolithRecoverAfterResume(); } catch (e) {} });
 
     function speakSmartHintText(text) {
         const t = String(text || '').trim();
@@ -6011,10 +5930,7 @@
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
-                        try {
-                            myMap.setCenter(userLocation, 17);
-                            applyActionCardCenterOffset();
-                        } catch (e2) { console.warn(e2); }
+                        try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
                     }
                     if (disableAutoFollowOnce) disableAutoFollowOnce = false;
                     console.log(`📍 GPS: ${latitude.toFixed(4)}, ${longitude.toFixed(4)} (точность: ${accuracy.toFixed(0)}м) speed: ${userSpeedKmh} km/h`);
@@ -6338,54 +6254,6 @@
 
     window.setMapEnginePreference = setMapEnginePreference;
 
-
-    async function getNextGenAccess(force = false) {
-        const now = Date.now();
-        if (!force && (now - Number(nextGenAccessCache.checkedAt || 0)) < NEXT_GEN_ACCESS_CACHE_MS) {
-            return { ...nextGenAccessCache };
-        }
-
-        const adminById = !!uid && String(uid) === String(ADMIN_ID);
-        let allowed = adminById;
-        let testerFlag = false;
-        let adminFlag = adminById;
-
-        if (uid && _sb && typeof _sb.from === 'function') {
-            try {
-                const { data, error } = await _sb
-                    .from('drivers')
-                    .select('is_tester,is_admin')
-                    .eq('user_id', uid)
-                    .maybeSingle();
-
-                if (!error && data) {
-                    testerFlag = !!data.is_tester;
-                    adminFlag = adminById || !!data.is_admin;
-                    allowed = testerFlag || adminFlag;
-                }
-            } catch (e) {}
-        }
-
-        nextGenAccessCache = {
-            checkedAt: now,
-            allowed: !!allowed,
-            isTester: !!testerFlag,
-            isAdmin: !!adminFlag
-        };
-        return { ...nextGenAccessCache };
-    }
-
-    function notifyNextGenDenied() {
-        try {
-            showInAppNotification({
-                title: '🧪 Next-Gen v3.0 (ЗБТ)',
-                body: 'Доступ к движку v3.0 открыт только для участников ЗБТ и администраторов. Если хотите доступ — напишите в поддержку.',
-                priority: 'high'
-            });
-        } catch (e) {
-            alert('🧪 Доступ к v3.0 только для участников ЗБТ и администраторов.');
-        }
-    }
     function ensureLegacyMapHost() {
         let host = document.getElementById('mapLegacyHost');
         if (host) return host;
@@ -6960,12 +6828,8 @@
                 myMap.options.set('azimuth', followCameraAzimuthDeg);
             }
             myMap.setCenter(cameraTarget, 17, { duration: 800, timingFunction: 'linear' });
-            applyActionCardCenterOffset();
         } catch (e) {
-            try {
-                myMap.setCenter(cameraTarget, 17);
-                applyActionCardCenterOffset();
-            } catch (e2) {}
+            try { myMap.setCenter(cameraTarget, 17); } catch (e2) {}
         }
     }
 
@@ -7024,50 +6888,6 @@
     let lastUserHeading = 0;
     let lastUserCoords = null;
     const MIN_ROTATE_SPEED_MS = 1.5;
-    const LEGACY_USER_MARKER_SIZE = 36;
-    const LEGACY_USER_MARKER_HALF = Math.round(LEGACY_USER_MARKER_SIZE / 2);
-    const LEGACY_MOVING_AVG_WINDOW = 5;
-    let legacyUserCoordsHistory = [];
-
-    function applyLegacyMovingAverage(lat, lon) {
-        const latNum = Number(lat);
-        const lonNum = Number(lon);
-        if (!Number.isFinite(latNum) || !Number.isFinite(lonNum)) {
-            if (Array.isArray(lastUserCoords) && lastUserCoords.length >= 2) return [Number(lastUserCoords[0]), Number(lastUserCoords[1])];
-            return [48.01, 37.80];
-        }
-
-        const usePoint = !gpsReliable && legacyUserCoordsHistory.length > 0
-            ? legacyUserCoordsHistory[legacyUserCoordsHistory.length - 1]
-            : [latNum, lonNum];
-
-        legacyUserCoordsHistory.push(usePoint);
-        if (legacyUserCoordsHistory.length > LEGACY_MOVING_AVG_WINDOW) {
-            legacyUserCoordsHistory = legacyUserCoordsHistory.slice(-LEGACY_MOVING_AVG_WINDOW);
-        }
-
-        let sumLat = 0;
-        let sumLon = 0;
-        legacyUserCoordsHistory.forEach(p => {
-            sumLat += Number(p[0]) || 0;
-            sumLon += Number(p[1]) || 0;
-        });
-
-        const denom = legacyUserCoordsHistory.length || 1;
-        return [sumLat / denom, sumLon / denom];
-    }
-
-    function buildUserMarkerHtmlForMap(headingDeg) {
-        const safeHeading = Number.isFinite(Number(headingDeg)) ? Number(headingDeg) : 0;
-        return `
-            <div class="user-marker ym3-user-marker" style="pointer-events:none; width:36px; height:36px;">
-                <div class="ym3-user-halo"></div>
-                <div class="ym3-user-pulse"></div>
-                <div class="ym3-user-arrow" style="transform:translate(-50%, -50%) rotate(${safeHeading}deg)"></div>
-            </div>
-        `;
-    }
-
     function updateUserLocationMarker() {
         if (!userLocation || !myMap) return;
 
@@ -7113,45 +6933,9 @@
             lastUserCoords = [lat, lon];
             return;
         }
-
-        if (!window.ymaps || typeof ymaps.Placemark !== 'function') return;
-        const [lat, lon] = userLocation;
-        const [smoothLat, smoothLon] = applyLegacyMovingAverage(lat, lon);
-        const speed = Number(userSpeedKmh) || 0;
-        const speedMs = speed / 3.6;
-        const heading = (Number(userHeadingDeg) || 0) % 360;
-        const visualHeading = (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) ? heading : lastUserHeading;
-        if (speedMs > MIN_ROTATE_SPEED_MS && Number.isFinite(heading)) {
-            lastUserHeading = heading;
-        }
-
-        const iconContent = buildUserMarkerHtmlForMap(visualHeading);
-        try {
-            if (!userLocationMarker) {
-                userLocationMarker = new ymaps.Placemark(
-                    [smoothLat, smoothLon],
-                    { iconContent },
-                    {
-                        iconLayout: 'default#imageWithContent',
-                        iconImageHref: '',
-                        iconImageSize: [LEGACY_USER_MARKER_SIZE, LEGACY_USER_MARKER_SIZE],
-                        iconImageOffset: [-LEGACY_USER_MARKER_HALF, -LEGACY_USER_MARKER_HALF]
-                    }
-                );
-                if (myMap?.geoObjects?.add) myMap.geoObjects.add(userLocationMarker);
-            } else {
-                if (typeof userLocationMarker.geometry?.setCoordinates === 'function') {
-                    userLocationMarker.geometry.setCoordinates([smoothLat, smoothLon]);
-                }
-                if (typeof userLocationMarker.properties?.set === 'function') {
-                    userLocationMarker.properties.set('iconContent', iconContent);
-                }
-            }
-            lastUserCoords = [smoothLat, smoothLon];
-        } catch (e) {
-            console.warn('Не удалось обновить маркер пользователя (ymaps2):', e?.message || e);
-        }
+        // ...existing code for ymaps2 and admin...
     }
+// ...existing code...
     
     // Центрирует карту на текущем местоположении и включает автоследование
     function centerOnMyLocation() {
@@ -7163,10 +6947,7 @@
         updateFollowButton();
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         try { updateDynamicCourseCamera(); } catch (e) {
-            try {
-                myMap.setCenter(userLocation, 17);
-                applyActionCardCenterOffset();
-            } catch (e2) { console.warn(e2); }
+            try { myMap.setCenter(userLocation, 17); } catch (e2) { console.warn(e2); }
         }
     }
 
@@ -7177,27 +6958,13 @@
         try { monolithSetNavigationActive(autoFollow); } catch(e) {}
         if (autoFollow && userLocation && myMap) {
             try { updateDynamicCourseCamera(); } catch(e) {
-                try {
-                    myMap.setCenter(userLocation, 17);
-                    applyActionCardCenterOffset();
-                } catch(e2) { console.warn(e2); }
+                try { myMap.setCenter(userLocation, 17); } catch(e2) { console.warn(e2); }
             }
         }
     }
 
     function updateFollowButton() {
         const btn = document.getElementById('followToggleBtn');
-        const bottomBtn = document.getElementById('followBottomBtn');
-        const isYm3Active = String(activeMapEngine || '').includes('ymaps3') || String(mapAdapter?.mode || '').includes('ymaps3');
-
-        if (bottomBtn) {
-            bottomBtn.style.display = isYm3Active ? 'none' : 'flex';
-            bottomBtn.classList.toggle('active', !!autoFollow);
-            bottomBtn.title = autoFollow ? 'Автослежение: ВКЛ' : 'Автослежение: ВЫКЛ';
-            const iconEl = bottomBtn.querySelector('.locate-icon');
-            if (iconEl) iconEl.textContent = autoFollow ? '👁️' : '🚫';
-        }
-
         if (!btn) {
             try { updateLocateBtnUiState(); } catch(e) {}
             return;
@@ -7264,24 +7031,8 @@
         updateMap3dToggleUi();
     }
 
-    async function toggleMapEngineFromUI() {
+    function toggleMapEngineFromUI() {
         const next = String(preferredMapEngine || '').toLowerCase() === 'ymaps3' ? 'ymaps2' : 'ymaps3';
-
-        if (next === 'ymaps3') {
-            const access = await getNextGenAccess(true);
-            if (!access.allowed) {
-                notifyNextGenDenied();
-                return;
-            }
-            try {
-                showInAppNotification({
-                    title: access.isAdmin ? '🛡️ Admin Next-Gen' : '🚀 Next-Gen v3.0',
-                    body: access.isAdmin ? 'Доступ администратора подтверждён. Магия v3.0 активируется…' : 'Статус ЗБТ подтверждён. Next-Gen v3.0 активируется…',
-                    priority: 'low'
-                });
-            } catch (e) {}
-        }
-
         try {
             if (next === 'ymaps3') {
                 localStorage.removeItem(MAP_ENGINE_LEGACY_FORCE_KEY);
@@ -12600,10 +12351,7 @@
             appInitialized = true;
             initApp();
             updateTargetAnchorPosition();
-            window.addEventListener('resize', () => {
-                try { updateTargetAnchorPosition(); } catch(e) {}
-                try { applyActionCardCenterOffset(); } catch(e) {}
-            });
+            window.addEventListener('resize', updateTargetAnchorPosition);
             setDtpHeatmapUiState(false);
             
             // Инициализируем GPS отслеживание
@@ -12628,15 +12376,9 @@
                 const card = document.getElementById('actionCard');
                 if (card && !card.__targetObserverBound) {
                     card.__targetObserverBound = true;
-                    card.addEventListener('transitionend', () => {
-                        try { updateTargetAnchorPosition(); } catch(e) {}
-                        try { applyActionCardCenterOffset(); } catch(e) {}
-                    });
+                    card.addEventListener('transitionend', () => { try { updateTargetAnchorPosition(); } catch(e) {} });
                     if ('ResizeObserver' in window) {
-                        const ro = new ResizeObserver(() => {
-                            try { updateTargetAnchorPosition(); } catch(e) {}
-                            try { applyActionCardCenterOffset(); } catch(e) {}
-                        });
+                        const ro = new ResizeObserver(() => { try { updateTargetAnchorPosition(); } catch(e) {} });
                         ro.observe(card);
                         card.__targetRO = ro;
                     }
