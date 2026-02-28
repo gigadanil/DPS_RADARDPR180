@@ -4237,33 +4237,15 @@
 
     function extractMarkerCoordsForNotif(marker) {
         if (!marker) return null;
-
-        // Нормализуем coords — Supabase может вернуть строку "[lat,lon]" или объект или массив
-        let coordsArr = marker.coords;
-        if (typeof coordsArr === 'string') {
-            try { coordsArr = JSON.parse(coordsArr); } catch (e) { coordsArr = null; }
-        }
-        // coords может быть объектом {lat, lon} или {latitude, longitude}
-        if (coordsArr && !Array.isArray(coordsArr) && typeof coordsArr === 'object') {
-            const lat = Number(coordsArr.lat ?? coordsArr.latitude);
-            const lon = Number(coordsArr.lon ?? coordsArr.longitude);
-            if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
-        }
-
-        if (Array.isArray(coordsArr) && coordsArr.length >= 2) {
-            const a = Number(coordsArr[0]);
-            const b = Number(coordsArr[1]);
-            if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+        if (Array.isArray(marker.coords) && marker.coords.length >= 2) {
+            const a = Number(marker.coords[0]);
+            const b = Number(marker.coords[1]);
             if (Math.abs(a) <= 90 && Math.abs(b) <= 180) return { lat: a, lon: b };
             if (Math.abs(a) <= 180 && Math.abs(b) <= 90) return { lat: b, lon: a };
             return { lat: a, lon: b };
         }
         if (typeof marker.latitude === 'number' && typeof marker.longitude === 'number') {
             return { lat: marker.latitude, lon: marker.longitude };
-        }
-        if (marker.lat != null && marker.lon != null) {
-            const lat = Number(marker.lat), lon = Number(marker.lon);
-            if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
         }
         return null;
     }
@@ -4701,7 +4683,7 @@
 
     function formatDistanceMeters(distance) {
         if (!isFinite(distance)) return '';
-        if (distance >= 1000) return `${(distance / 1000).toFixed(1)} км`;
+        if (distance >= 1000) return `${Math.round(distance / 10) * 10} м`;
         if (distance >= 100) return `${Math.round(distance / 10) * 10} м`;
         return `${Math.round(distance)} м`;
     }
@@ -5945,9 +5927,6 @@
 
                     // Интеллектуальные подсказки по истории меток ДПС/Спецбат
                     maybeCheckSmartHint(latitude, longitude);
-
-                    // Пересчитываем расстояние до активного маркера баннера при каждом GPS-обновлении
-                    try { refreshProximityBanner(); } catch (e) {}
 
                     // Центрируем карту если автоследование включено
                     if (autoFollow && myMap && userLocation && !disableAutoFollowOnce) {
@@ -12879,8 +12858,9 @@
             const markerCoordsForMap = [Number(normalizedCoords.lat), Number(normalizedCoords.lon)];
             if (!Number.isFinite(markerCoordsForMap[0]) || !Number.isFinite(markerCoordsForMap[1])) return;
 
-            const p = new ymaps.Placemark(markerCoordsForMap, { balloonContent: bHtml, iconContent: iconInner }, 
-            { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
+            const customIconLayout = ymaps.templateLayoutFactory.createClass(`<div style="transform:translate(-50%,-50%);position:relative;">${iconInner}</div>`);
+            const p = new ymaps.Placemark(markerCoordsForMap, { balloonContent: bHtml },
+            { iconLayout: customIconLayout, iconShape: { type: 'Circle', coordinates: [0, 0], radius: iconSize / 2 } });
             const markerDescriptor = {
                 coords: [Number(normalizedCoords.lon), Number(normalizedCoords.lat)],
                 icon: MAP_ICONS[m.type] || '📍',
