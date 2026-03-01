@@ -702,6 +702,58 @@
             color: #b9ffb3;
             box-shadow: 0 0 0 1px rgba(57,255,20,0.25), 0 0 18px rgba(57,255,20,0.38), 0 8px 24px rgba(0,0,0,0.30);
         }
+        #updateAvailableBadge.update-available-badge {
+            position: fixed;
+            top: calc(12px + var(--safe-area-inset-top));
+            right: calc(12px + var(--safe-area-inset-right));
+            z-index: 2100;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid rgba(255,59,48,0.72);
+            border-radius: 999px;
+            background: rgba(28,28,30,0.92);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+            padding: 7px 10px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.32);
+            cursor: pointer;
+        }
+        #updateAvailableBadge.update-available-badge.visible { display: inline-flex; }
+        #updateAvailableBadge .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #ff3b30;
+            box-shadow: 0 0 8px rgba(255,59,48,0.9);
+        }
+        #rushHourBadge.rush-hour-badge {
+            position: fixed;
+            top: calc(128px + var(--safe-area-inset-top));
+            left: calc(12px + var(--safe-area-inset-left));
+            z-index: 2000;
+            min-width: 220px;
+            max-width: min(72vw, 320px);
+            display: none;
+            border-radius: 12px;
+            padding: 8px 10px;
+            background: rgba(0,0,0,0.52);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+            backdrop-filter: blur(8px);
+        }
+        #rushHourBadge.rush-hour-badge.visible { display: block; }
+        #rushHourBadge .rush-hour-title { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.86); }
+        #rushHourBadge .rush-hour-main { margin-top: 2px; font-size: 13px; font-weight: 900; }
+        #rushHourBadge .rush-hour-sub { margin-top: 3px; font-size: 11px; color: rgba(255,255,255,0.88); }
+        #rushHourBadge .rush-hour-graph { margin-top: 5px; font-size: 11px; letter-spacing: 1px; color: #ffd60a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #rushHourBadge.rush-level-low { border-color: rgba(52,199,89,0.55); }
+        #rushHourBadge.rush-level-mid { border-color: rgba(255,214,10,0.60); }
+        #rushHourBadge.rush-level-high { border-color: rgba(255,159,10,0.65); }
+        #rushHourBadge.rush-level-critical { border-color: rgba(255,59,48,0.72); }
         .online-dot {
             width: 10px;
             height: 10px;
@@ -1323,8 +1375,10 @@
         /* Требование: сдвинуть основной UI и модалки ниже системных кнопок ("Закрыть", "...") */
         .top-controls { top: var(--ui-safe-top) !important; }
         #onlineCountBadge.online-count { top: var(--ui-safe-top) !important; }
+        #updateAvailableBadge.update-available-badge { top: var(--ui-safe-top) !important; }
         #mapEngineBadge.engine-badge { top: calc(var(--ui-safe-top) + 44px) !important; }
         #map3dToggleFloating { top: calc(var(--ui-safe-top) + 80px) !important; }
+        #rushHourBadge.rush-hour-badge { top: calc(var(--ui-safe-top) + 116px) !important; }
         .right-bar { top: var(--ui-safe-top) !important; }
         .admin-btn,
         .profile-btn,
@@ -1601,8 +1655,13 @@
         <span class="online-dot" aria-hidden="true"></span>
         <span id="onlineCountText">В сети: —</span>
     </div>
+    <button id="updateAvailableBadge" class="update-available-badge" onclick="applyAppUpdate()" aria-label="Доступно обновление">
+        <span class="dot" aria-hidden="true"></span>
+        <span>Update Available</span>
+    </button>
     <div id="mapEngineBadge" class="engine-badge" aria-label="Движок карты">🗺️ ymaps3</div>
     <button id="map3dToggleFloating" onclick="toggleMap3dFromUI()" title="Переключить 2D/3D" aria-label="Переключить 2D/3D">3D OFF</button>
+    <div id="rushHourBadge" class="rush-hour-badge" aria-live="polite" aria-label="Час пик ДПС"></div>
     <div id="map"></div>
     <div id="mapDimmingOverlay"></div>
 
@@ -2283,6 +2342,18 @@
             </div>
 
             <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">🚦 Час Пик ДПС</div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="setRushScorePreset('calm')" id="rushPresetCalm" class="main-btn" style="flex: 1; background: #9c9c9c; padding: 10px; font-size: 12px; border-radius: 8px;">🟢 Спокойно</button>
+                    <button onclick="setRushScorePreset('normal')" id="rushPresetNormal" class="main-btn" style="flex: 1; background: #34c759; padding: 10px; font-size: 12px; border-radius: 8px;">🟡 Норм</button>
+                    <button onclick="setRushScorePreset('hard')" id="rushPresetHard" class="main-btn" style="flex: 1; background: #9c9c9c; padding: 10px; font-size: 12px; border-radius: 8px;">🔴 Жесть</button>
+                </div>
+                <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
+                    <span id="rushPresetDescription">Режим: Норм (сбалансированный)</span>
+                </div>
+            </div>
+
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
                 <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">🗺️ Движок карты</div>
                 <button onclick="toggleMapEngineFromUI()" id="mapEngineSettingsBtn" class="main-btn" style="width:100%; background:#007aff; padding:10px; font-size:12px; border-radius:8px;">
                     Переключить ymaps2 / ymaps3
@@ -2327,6 +2398,7 @@
             </div>
             
             <button class="main-btn" onclick="logout()">ВЫЙТИ</button>
+            <div id="appVersionInfo" onclick="openAppVersionActions()" style="margin-top: 12px; text-align:center; font-size: 11px; color: #9b9b9b; cursor: pointer; user-select: none;">v—</div>
         </div>
     </div>
     
@@ -2494,6 +2566,14 @@
     // Константы для подключения к Supabase базе данных
     const SUPABASE_URL = "https://phazbjchjhsruwalddis.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
+    const APP_VERSION = '3.0.1';
+    const APP_BUILD = '0103262348';
+    const APP_CHANGELOG = [
+        'Час Пик ДПС: баллы опасности + мини-график',
+        'Web Push на iPhone: отдельное включение по тапу',
+        'Оптимизация обработки realtime-меток'
+    ];
+    const APP_VERSION_LABEL = `v${APP_VERSION} (build ${APP_BUILD})`;
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     // Формат: '@YourBot'
     const BOT_USERNAME = '@DPSRADARDPR180bot';
@@ -3104,6 +3184,9 @@
     let initAppInProgress = false;
     // Спидометр: видимость
     let speedometerEnabled = true;
+    let appSwRegistration = null;
+    let appSwUpdateWorker = null;
+    let appUpdateApplying = false;
     let map3dEnabled = false;
     // Анти-спам для меток
     const MARKER_RATE_LIMIT_MS = 120000;
@@ -3227,8 +3310,24 @@
     const NOTIF_FEED_SYNC_INTERVAL_MS = 5 * 60 * 1000;
     const CRITICAL_DTP_CONFIRMATIONS = 3;
     const PATROL_TYPES = new Set(['dps', 'patrol', 'specbat', 'motobat', 'cargo_control']);
+    const RUSH_HOUR_LOOKBACK_HOURS = 12;
+    const RUSH_HOUR_CACHE_MS = 5 * 60 * 1000;
+    const RUSH_HOUR_MAX_POINTS = 5000;
+    const RUSH_SCORE_MAX_ACTIVE_CREWS = 18;
+    const RUSH_SCORE_REF_MARKERS_PER_HOUR = 10;
+    const RUSH_SCORE_BASELINE = 1;
+    const RUSH_SCORE_W_CREWS = 0.5;
+    const RUSH_SCORE_W_CURRENT = 0.3;
+    const RUSH_SCORE_W_RECENT = 0.2;
+    const RUSH_SCORE_PRESET_KEY = 'rushScorePreset';
     const TARGET_MIN_TOP_PX = 120;
     const TARGET_CARD_GAP_PX = 90;
+    let rushHourTrendCache = [];
+    let rushHourTrendLoadedAt = 0;
+    let rushHourTrendPromise = null;
+    let rushHourLastActiveMarkers = [];
+    let rushHourWidgetIntervalId = null;
+    let rushScorePreset = 'normal';
     let dtpHeatmapEnabled = false;
     let dtpHeatmapCollection = null;
     let dtpHeatmapCellsCache = [];
@@ -3657,6 +3756,170 @@
         return Date.now();
     }
 
+    function buildRushHourSparkline(values) {
+        const bars = '▁▂▃▄▅▆▇█';
+        const arr = Array.isArray(values) ? values : [];
+        const max = Math.max(1, ...arr.map(v => Number(v) || 0));
+        return arr.map(v => {
+            const n = Math.max(0, Number(v) || 0);
+            const idx = Math.max(0, Math.min(bars.length - 1, Math.round((n / max) * (bars.length - 1))));
+            return bars[idx];
+        }).join('');
+    }
+
+    function getRushLevelClass(score) {
+        if (score >= 8) return 'rush-level-critical';
+        if (score >= 6) return 'rush-level-high';
+        if (score >= 4) return 'rush-level-mid';
+        return 'rush-level-low';
+    }
+
+    function getRushLevelIcon(score) {
+        if (score >= 8) return '🔴';
+        if (score >= 6) return '🟠';
+        if (score >= 4) return '🟡';
+        return '🟢';
+    }
+
+    function getRushScorePresetConfig() {
+        if (rushScorePreset === 'calm') {
+            return {
+                modeLabel: 'Спокойно',
+                modeHint: 'мягкая оценка',
+                maxActiveCrews: 24,
+                refMarkersPerHour: 14,
+                baseline: 0,
+                wCrews: 0.45,
+                wCurrent: 0.30,
+                wRecent: 0.25
+            };
+        }
+        if (rushScorePreset === 'hard') {
+            return {
+                modeLabel: 'Жесть',
+                modeHint: 'строгая оценка',
+                maxActiveCrews: 14,
+                refMarkersPerHour: 7,
+                baseline: 2,
+                wCrews: 0.55,
+                wCurrent: 0.30,
+                wRecent: 0.15
+            };
+        }
+        return {
+            modeLabel: 'Норм',
+            modeHint: 'сбалансированная оценка',
+            maxActiveCrews: RUSH_SCORE_MAX_ACTIVE_CREWS,
+            refMarkersPerHour: RUSH_SCORE_REF_MARKERS_PER_HOUR,
+            baseline: RUSH_SCORE_BASELINE,
+            wCrews: RUSH_SCORE_W_CREWS,
+            wCurrent: RUSH_SCORE_W_CURRENT,
+            wRecent: RUSH_SCORE_W_RECENT
+        };
+    }
+
+    async function loadRushHourTrend(force = false) {
+        if (!force && (Date.now() - rushHourTrendLoadedAt) < RUSH_HOUR_CACHE_MS && rushHourTrendCache.length) {
+            return rushHourTrendCache;
+        }
+        if (rushHourTrendPromise) return rushHourTrendPromise;
+
+        rushHourTrendPromise = (async () => {
+            const now = Date.now();
+            const sinceMs = now - (RUSH_HOUR_LOOKBACK_HOURS * 60 * 60 * 1000);
+            const sinceIso = new Date(sinceMs).toISOString();
+            const patrolTypes = ['dps', 'patrol', 'specbat', 'motobat', 'cargo_control'];
+            let rows = [];
+
+            const q1 = await _sb
+                .from('markers')
+                .select('type,ts')
+                .in('type', patrolTypes)
+                .gte('ts', sinceMs)
+                .order('ts', { ascending: false })
+                .limit(RUSH_HOUR_MAX_POINTS);
+
+            if (q1?.error) {
+                const q2 = await _sb
+                    .from('markers')
+                    .select('type,ts')
+                    .in('type', patrolTypes)
+                    .gte('ts', sinceIso)
+                    .order('ts', { ascending: false })
+                    .limit(RUSH_HOUR_MAX_POINTS);
+                if (!q2?.error && Array.isArray(q2?.data)) rows = q2.data;
+            } else if (Array.isArray(q1?.data)) {
+                rows = q1.data;
+            }
+
+            const buckets = new Array(RUSH_HOUR_LOOKBACK_HOURS).fill(0);
+            rows.forEach(row => {
+                if (!PATROL_TYPES.has(String(row?.type || ''))) return;
+                const tsMs = parseMarkerTimestampToMs(row?.ts);
+                if (!Number.isFinite(tsMs) || tsMs < sinceMs || tsMs > now) return;
+                const ageHours = Math.floor((now - tsMs) / (60 * 60 * 1000));
+                const bucketIndex = (RUSH_HOUR_LOOKBACK_HOURS - 1) - ageHours;
+                if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+                    buckets[bucketIndex] += 1;
+                }
+            });
+
+            rushHourTrendCache = buckets;
+            rushHourTrendLoadedAt = Date.now();
+            return rushHourTrendCache;
+        })();
+
+        try {
+            return await rushHourTrendPromise;
+        } catch (e) {
+            console.warn('Не удалось загрузить тренд часа пик ДПС:', e?.message || e);
+            return rushHourTrendCache;
+        } finally {
+            rushHourTrendPromise = null;
+        }
+    }
+
+    async function updateRushHourDangerWidget(activeMarkers = null) {
+        const badge = document.getElementById('rushHourBadge');
+        if (!badge) return;
+        const preset = getRushScorePresetConfig();
+
+        const sourceMarkers = Array.isArray(activeMarkers) ? activeMarkers : [];
+        const activeCrews = sourceMarkers.filter(m => PATROL_TYPES.has(String(m?.type || ''))).length;
+        const trend = await loadRushHourTrend(false);
+        const trendArr = Array.isArray(trend) && trend.length ? trend : new Array(RUSH_HOUR_LOOKBACK_HOURS).fill(0);
+
+        const currentHour = Number(trendArr[trendArr.length - 1] || 0);
+        const recentWindow = trendArr.slice(Math.max(0, trendArr.length - 3));
+        const recentAvg = recentWindow.length
+            ? (recentWindow.reduce((sum, v) => sum + (Number(v) || 0), 0) / recentWindow.length)
+            : 0;
+        const maxHour = Math.max(1, ...trendArr.map(v => Number(v) || 0));
+        const crewsNorm = Math.min(1, activeCrews / preset.maxActiveCrews);
+        const currentNorm = Math.min(1, currentHour / preset.refMarkersPerHour);
+        const recentNorm = Math.min(1, recentAvg / preset.refMarkersPerHour);
+        const weightedNorm = (
+            (crewsNorm * preset.wCrews)
+            + (currentNorm * preset.wCurrent)
+            + (recentNorm * preset.wRecent)
+        );
+        const scoreRaw = preset.baseline + (weightedNorm * (10 - preset.baseline));
+        const score = Math.max(0, Math.min(10, Math.round(scoreRaw)));
+
+        const spark = buildRushHourSparkline(trendArr);
+        const icon = getRushLevelIcon(score);
+
+        badge.classList.add('visible');
+        badge.classList.remove('rush-level-low', 'rush-level-mid', 'rush-level-high', 'rush-level-critical');
+        badge.classList.add(getRushLevelClass(score));
+        badge.innerHTML = `
+            <div class="rush-hour-title">${icon} Час пик ДПС</div>
+            <div class="rush-hour-main">${score} / 10 баллов опасности</div>
+            <div class="rush-hour-sub">Сейчас в городе ${score} баллов. Работают ${activeCrews} экипажей. Режим: ${preset.modeLabel}.</div>
+            <div class="rush-hour-graph">${spark} · ${currentHour}/ч (ср.3ч ${recentAvg.toFixed(1)} · пик ${maxHour}/ч)</div>
+        `;
+    }
+
     function getDtpHeatmapCellDegrees(zoom) {
         // Чем ближе зум — тем мельче сетка, чтобы "пятна" указывали на конкретнее место.
         if (zoom >= 17) return 0.0010;
@@ -3903,11 +4166,88 @@
         try { myMap.setCenter([lat, lon], 17, { duration: 500 }); } catch (e) {}
     }
 
+    function setUpdateAvailableVisible(visible, worker = null) {
+        const badge = document.getElementById('updateAvailableBadge');
+        if (!badge) return;
+        badge.classList.toggle('visible', !!visible);
+        if (worker) appSwUpdateWorker = worker;
+    }
+
+    async function applyAppUpdate() {
+        try {
+            const waiting = appSwRegistration?.waiting || appSwUpdateWorker;
+            if (waiting && typeof waiting.postMessage === 'function') {
+                appUpdateApplying = true;
+                waiting.postMessage({ type: 'SKIP_WAITING' });
+                return;
+            }
+            if (appSwRegistration && typeof appSwRegistration.update === 'function') {
+                await appSwRegistration.update();
+            }
+        } catch (e) {
+            console.warn('Не удалось применить обновление:', e?.message || e);
+        }
+    }
+
+    function monitorServiceWorkerUpdates(registration) {
+        if (!registration) return;
+
+        if (registration.waiting) {
+            setUpdateAvailableVisible(true, registration.waiting);
+        }
+
+        registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    setUpdateAvailableVisible(true, newWorker);
+                }
+            });
+        });
+    }
+
+    function renderAppVersionInfo() {
+        const infoEl = document.getElementById('appVersionInfo');
+        if (infoEl) infoEl.textContent = APP_VERSION_LABEL;
+    }
+
+    async function clearAppCacheAndReload() {
+        try {
+            if ('caches' in window) {
+                const keys = await caches.keys();
+                await Promise.all(keys.map(key => caches.delete(key)));
+            }
+        } catch (e) {
+            console.warn('Не удалось очистить кэш:', e?.message || e);
+        }
+        try {
+            if (appSwRegistration) await appSwRegistration.update();
+        } catch (e) {}
+        window.location.reload();
+    }
+
+    async function openAppVersionActions() {
+        const changelogText = APP_CHANGELOG.map((item, index) => `${index + 1}. ${item}`).join('\n');
+        const ok = confirm(`${APP_VERSION_LABEL}\n\nЧто нового:\n${changelogText}\n\nНажмите OK, чтобы очистить кэш и перезагрузить приложение.`);
+        if (!ok) return;
+        await clearAppCacheAndReload();
+    }
+
     function registerServiceWorker() {
         if (!('serviceWorker' in navigator)) return;
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('service-worker.js?v=4').catch(err => {
+            navigator.serviceWorker.register(`service-worker.js?v=${APP_BUILD}`).then(reg => {
+                appSwRegistration = reg;
+                monitorServiceWorkerUpdates(reg);
+            }).catch(err => {
                 console.warn('Service Worker registration failed:', err);
+            });
+
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!appUpdateApplying) return;
+                setUpdateAvailableVisible(false);
+                window.location.reload();
             });
         });
     }
@@ -4630,12 +4970,22 @@
         try {
             if (!marker || !marker.type) return;
             const HELP_NOTIFY_SHARED_KEY = 'f050f0aa-91dc-46c1-b761-2e1030af5b49';
+            const HELP_NOTIFY_AUTH_COOLDOWN_MS = 2 * 60 * 1000;
             const helpTypes = new Set(['sos', 'dps', 'specbat', 'dtp', 'danger', 'traffic_jam', 'works']);
-            if (!helpTypes.has(String(marker.type))) return;
+            const normalizeHelpType = (value) => {
+                const raw = String(value || '').trim().toLowerCase();
+                if (raw === 'specpolk' || raw === 'special_police' || raw === 'specialpolice') return 'specbat';
+                return raw;
+            };
+            const markerType = normalizeHelpType(marker.type);
+            if (!helpTypes.has(markerType)) return;
 
             const nowMs = Date.now();
             try {
                 const cooldownUntil = Number(localStorage.getItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY) || 0);
+                if (Number.isFinite(cooldownUntil) && cooldownUntil > nowMs + 12 * 60 * 60 * 1000) {
+                    localStorage.removeItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY);
+                }
                 if (cooldownUntil > nowMs) return;
             } catch (e) {}
 
@@ -4667,7 +5017,7 @@
 
             const payload = {
                 markerId: marker.id,
-                type: marker.type,
+                type: markerType,
                 comment: marker.comment || '',
                 createdAtMs: Number(marker.ts || marker.createdAtMs || Date.now()),
                 lat: marker.coords?.[0],
@@ -4694,14 +5044,18 @@
                 });
             };
 
-            const resp = await sendHelpNotify(authToken);
-            if (resp.status === 401) {
+            let resp = await sendHelpNotify(authToken);
+            if (resp.status === 401 && authToken) {
                 try {
                     localStorage.removeItem('sb_jwt');
                     localStorage.removeItem('sb_jwt_exp');
                 } catch (e) {}
-                try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000)); } catch (e) {}
-                console.warn('help-notify: авторизация отклонена (JWT/ключ), временный cooldown');
+                resp = await sendHelpNotify('');
+            }
+
+            if (resp.status === 401) {
+                try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + HELP_NOTIFY_AUTH_COOLDOWN_MS)); } catch (e) {}
+                console.warn('help-notify: авторизация отклонена (JWT/ключ), временный cooldown 2 мин');
                 return;
             }
 
@@ -4710,7 +5064,7 @@
                 try { bodyText = await resp.text(); } catch(e) { bodyText = ''; }
                 console.warn('help-notify вернул ошибку:', resp.status, bodyText || '(пустой ответ)');
                 if (resp.status === 401) {
-                    try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + 10 * 60 * 1000)); } catch (e) {}
+                    try { localStorage.setItem(HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY, String(Date.now() + HELP_NOTIFY_AUTH_COOLDOWN_MS)); } catch (e) {}
                 }
                 return;
             }
@@ -5866,6 +6220,53 @@
         } catch (e) {
             console.warn('Не удалось загрузить стиль озвучки:', e);
         }
+    }
+
+    function updateRushPresetUI() {
+        const calmBtn = document.getElementById('rushPresetCalm');
+        const normalBtn = document.getElementById('rushPresetNormal');
+        const hardBtn = document.getElementById('rushPresetHard');
+        const descriptionEl = document.getElementById('rushPresetDescription');
+
+        const setButtonState = (btn, active) => {
+            if (!btn) return;
+            btn.style.background = active ? '#34c759' : '#9c9c9c';
+            btn.style.color = 'white';
+        };
+
+        setButtonState(calmBtn, rushScorePreset === 'calm');
+        setButtonState(normalBtn, rushScorePreset === 'normal');
+        setButtonState(hardBtn, rushScorePreset === 'hard');
+
+        if (descriptionEl) {
+            const preset = getRushScorePresetConfig();
+            descriptionEl.textContent = `Режим: ${preset.modeLabel} (${preset.modeHint})`;
+        }
+    }
+
+    function setRushScorePreset(preset) {
+        if (!isViewingOwnProfile) return;
+        const next = (preset === 'calm' || preset === 'hard' || preset === 'normal') ? preset : 'normal';
+        rushScorePreset = next;
+        updateRushPresetUI();
+        try {
+            localStorage.setItem(RUSH_SCORE_PRESET_KEY, rushScorePreset);
+        } catch (e) {
+            console.warn('Не удалось сохранить режим часа пик:', e);
+        }
+        updateRushHourDangerWidget(rushHourLastActiveMarkers).catch(()=>{});
+    }
+
+    function loadRushScorePreset() {
+        try {
+            const saved = String(localStorage.getItem(RUSH_SCORE_PRESET_KEY) || '').trim();
+            if (saved === 'calm' || saved === 'normal' || saved === 'hard') {
+                rushScorePreset = saved;
+            }
+        } catch (e) {
+            console.warn('Не удалось загрузить режим часа пик:', e);
+        }
+        updateRushPresetUI();
     }
 
     function updateWarningDistanceUI() {
@@ -7698,10 +8099,12 @@
         }
 
         // Загружаем сохраненный стиль озвучки
+        renderAppVersionInfo();
         loadVoiceStyle();
         try { initMonolithVoiceToggle(); } catch(e) {}
         try { maybeSpeakRoleWelcome(); } catch(e) {}
         loadProximityMode();
+        loadRushScorePreset();
         loadMarkerRenderMode();
         loadDynamicCourseEnabled();
         loadWarningDistance();
@@ -7718,6 +8121,14 @@
         updateSpeedometerUI(userSpeedKmh);
         registerServiceWorker();
         try { refreshEnablePushButtonState(); } catch (e) {}
+        try {
+            updateRushHourDangerWidget(rushHourLastActiveMarkers).catch(()=>{});
+            if (!rushHourWidgetIntervalId) {
+                rushHourWidgetIntervalId = setInterval(() => {
+                    updateRushHourDangerWidget(rushHourLastActiveMarkers).catch(()=>{});
+                }, RUSH_HOUR_CACHE_MS);
+            }
+        } catch (e) {}
         // Авто-подключаем Web Push, если разрешение уже выдано (без новых диалогов)
         try {
             if ('Notification' in window && Notification.permission === 'granted') {
@@ -12774,7 +13185,7 @@
                 disableAutoFollowOnce = true;
                 alert('✅ Метка успешно добавлена!');
                 if (insertedMarkers && insertedMarkers[0]) {
-                    notifyHelpBotAboutMarker(insertedMarkers[0]);
+                    await notifyHelpBotAboutMarker(insertedMarkers[0]);
                 }
                 loadMarkers();
             } else {
@@ -12836,6 +13247,8 @@
             const parsed = Date.parse(m.exp);
             return !isNaN(parsed) ? parsed > now : true;
         });
+        rushHourLastActiveMarkers = activeMarkers;
+        updateRushHourDangerWidget(activeMarkers).catch(()=>{});
         
         // Подсчитываем метки по типам
         const typeCounts = {};
