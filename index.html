@@ -1707,6 +1707,14 @@
                 <button class="main-btn" style="flex:1; background:#34c759;" onclick="markAllNotificationsRead()">Прочитать все</button>
                 <button class="main-btn" style="flex:1; background:#999;" onclick="clearAllNotifications()">Очистить</button>
             </div>
+            <div style="margin-bottom:10px;">
+                <button id="enablePushBtn" class="main-btn" onclick="enablePushByTap()" style="width:100%; background:#007aff; padding:10px; font-size:12px; border-radius:8px;">
+                    Включить push-уведомления
+                </button>
+                <div id="enablePushHint" style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">
+                    Нажмите кнопку после установки на экран Домой (для iPhone).
+                </div>
+            </div>
             <div id="notificationsList" style="max-height: 460px; overflow-y: auto;">
                 <div style="text-align:center; color: var(--gray); padding: 16px;">Пока нет уведомлений</div>
             </div>
@@ -3914,6 +3922,20 @@
     const WEB_PUSH_VAPID_PUBLIC_KEY = 'BCKNXhwDka5GLPLOGJib2ONjp2Hw985myXXwBOWeH2d5m50A6yiBt7ykM0tbxRtbMo5IBH7HP0EpeMwcA4sLvtE';
     const PUSH_SUB_LOCALSTORAGE_KEY = 'safedrive180:pushSubscription';
 
+    function isIosDevice() {
+        const ua = String(navigator.userAgent || '').toLowerCase();
+        const platform = String(navigator.platform || '').toLowerCase();
+        const maxTouchPoints = Number(navigator.maxTouchPoints || 0);
+        return /iphone|ipad|ipod/.test(ua) || /iphone|ipad|ipod/.test(platform) || (platform === 'macintel' && maxTouchPoints > 1);
+    }
+
+    function isStandalonePwaMode() {
+        try {
+            if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+        } catch (e) {}
+        return !!window.navigator.standalone;
+    }
+
     function urlBase64ToUint8Array(base64String) {
         const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
         const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -3972,10 +3994,33 @@
         }
     }
 
+    async function subscribeUserToPush(serviceWorkerRegistration, vapidPublicKey) {
+        if (!serviceWorkerRegistration || !serviceWorkerRegistration.pushManager) {
+            throw new Error('Service Worker registration не готов для push-подписки');
+        }
+
+        const key = String(vapidPublicKey || '').trim();
+        if (!key) {
+            throw new Error('Не задан WEB_PUSH_VAPID_PUBLIC_KEY — без него подписку создать нельзя');
+        }
+
+        const subscription = await serviceWorkerRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(key)
+        });
+
+        storePushSubscription(subscription.toJSON());
+        saveWebPushSubscriptionOnServer(subscription.toJSON()).catch(()=>{});
+        return subscription;
+    }
+
     async function enableWebPush() {
         if (!('serviceWorker' in navigator)) throw new Error('Service Worker не поддерживается в этом окружении');
         if (!('PushManager' in window)) throw new Error('PushManager не поддерживается (Web Push недоступен)');
         if (!('Notification' in window)) throw new Error('Notification API не поддерживается');
+        if (isIosDevice() && !isStandalonePwaMode()) {
+            throw new Error('На iPhone Web Push работает только в установленной PWA (Добавить на экран Домой)');
+        }
 
         let permission = Notification.permission;
         if (permission === 'default') {
@@ -3993,19 +4038,9 @@
             return existing;
         }
 
-        const key = String(WEB_PUSH_VAPID_PUBLIC_KEY || '').trim();
-        if (!key) {
-            throw new Error('Не задан WEB_PUSH_VAPID_PUBLIC_KEY — без него подписку создать нельзя');
-        }
+        const sub = await subscribeUserToPush(reg, WEB_PUSH_VAPID_PUBLIC_KEY);
 
-        const sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(key)
-        });
-
-        storePushSubscription(sub.toJSON());
         console.log('Web Push subscription created:', sub.toJSON());
-        saveWebPushSubscriptionOnServer(sub.toJSON()).catch(()=>{});
         return sub;
     }
 
@@ -4046,11 +4081,69 @@
         });
     }
 
+    function refreshEnablePushButtonState() {
+        const btn = document.getElementById('enablePushBtn');
+        const hint = document.getElementById('enablePushHint');
+        if (!btn || !hint) return;
+
+        const hasNotificationApi = ('Notification' in window);
+        const hasPushApi = ('PushManager' in window);
+        const hasSw = ('serviceWorker' in navigator);
+        const granted = hasNotificationApi && Notification.permission === 'granted';
+
+        if (!hasSw || !hasPushApi || !hasNotificationApi) {
+            btn.disabled = true;
+            btn.style.opacity = '0.65';
+            hint.textContent = 'Web Push не поддерживается в этом браузере.';
+            return;
+        }
+
+        if (isIosDevice() && !isStandalonePwaMode()) {
+            btn.disabled = true;
+            btn.style.opacity = '0.65';
+            hint.textContent = 'Для iPhone: Safari → Поделиться → На экран Домой, затем откройте и включите push.';
+            return;
+        }
+
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        hint.textContent = granted
+            ? 'Push уже разрешены. Нажмите для проверки/переподписки.'
+            : 'Нажмите, чтобы выдать разрешение и подписаться на push.';
+    }
+
+    async function enablePushByTap() {
+        const btn = document.getElementById('enablePushBtn');
+        const initialText = btn ? btn.textContent : '';
+        try {
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = 'Подключаем...';
+            }
+            await enableWebPush();
+            if (typeof showInAppNotification === 'function') {
+                showInAppNotification({ title: 'Push включены', body: 'Подписка активна. Уведомления будут приходить в фоне.' });
+            } else {
+                alert('✅ Push-уведомления включены');
+            }
+        } catch (e) {
+            const msg = (e && e.message) ? e.message : 'Не удалось включить push';
+            alert(`❌ ${msg}`);
+        } finally {
+            if (btn) {
+                btn.textContent = initialText || 'Включить push-уведомления';
+            }
+            refreshEnablePushButtonState();
+        }
+    }
+
     // Экспортируем минимальный API, чтобы можно было включать через существующие кнопки/жесты.
     window.SafeDrivePwa = {
         enableWebPush,
         disableWebPush,
-        postLocationToServiceWorker
+        postLocationToServiceWorker,
+        enablePushByTap,
+        refreshEnablePushButtonState
     };
 
     function getNotifStorageKey() {
@@ -4185,11 +4278,7 @@
     async function showSystemNotification(notification) {
         if (!document.hidden) return;
         if (!('Notification' in window)) return;
-        let permission = Notification.permission;
-        if (permission === 'default') {
-            try { permission = await Notification.requestPermission(); } catch (e) { return; }
-        }
-        if (permission !== 'granted') return;
+        if (Notification.permission !== 'granted') return;
 
         // Если задан VAPID public key — создаём Web Push подписку (без нового UI).
         try {
@@ -4295,6 +4384,7 @@
         if (target) target.style.visibility = 'hidden';
         syncImportantNotificationsFeed({ silent: true }).catch(()=>{});
         renderNotificationsList();
+        try { refreshEnablePushButtonState(); } catch (e) {}
         document.getElementById('notificationsModal').classList.add('active');
     }
 
@@ -7627,6 +7717,7 @@
         }
         updateSpeedometerUI(userSpeedKmh);
         registerServiceWorker();
+        try { refreshEnablePushButtonState(); } catch (e) {}
         // Авто-подключаем Web Push, если разрешение уже выдано (без новых диалогов)
         try {
             if ('Notification' in window && Notification.permission === 'granted') {
