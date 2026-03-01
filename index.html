@@ -734,21 +734,35 @@
             top: calc(128px + var(--safe-area-inset-top));
             left: calc(12px + var(--safe-area-inset-left));
             z-index: 2000;
-            min-width: 220px;
+            min-width: 170px;
             max-width: min(72vw, 320px);
             display: none;
             border-radius: 12px;
-            padding: 8px 10px;
+            padding: 7px 10px;
             background: rgba(0,0,0,0.52);
             color: #fff;
             border: 1px solid rgba(255,255,255,0.12);
             box-shadow: 0 8px 24px rgba(0,0,0,0.28);
             backdrop-filter: blur(8px);
+            cursor: pointer;
+            user-select: none;
         }
         #rushHourBadge.rush-hour-badge.visible { display: block; }
-        #rushHourBadge .rush-hour-title { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.86); }
-        #rushHourBadge .rush-hour-main { margin-top: 2px; font-size: 13px; font-weight: 900; }
-        #rushHourBadge .rush-hour-sub { margin-top: 3px; font-size: 11px; color: rgba(255,255,255,0.88); }
+        #rushHourBadge .rush-hour-summary {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 900;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        #rushHourBadge .rush-hour-toggle { font-size: 11px; opacity: 0.9; }
+        #rushHourBadge .rush-hour-details { display: none; margin-top: 6px; }
+        #rushHourBadge.expanded .rush-hour-details { display: block; }
+        #rushHourBadge .rush-hour-sub { margin-top: 0; font-size: 11px; color: rgba(255,255,255,0.88); }
         #rushHourBadge .rush-hour-graph { margin-top: 5px; font-size: 11px; letter-spacing: 1px; color: #ffd60a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #rushHourBadge.rush-level-low { border-color: rgba(52,199,89,0.55); }
         #rushHourBadge.rush-level-mid { border-color: rgba(255,214,10,0.60); }
@@ -2114,6 +2128,51 @@
                 </div>
             </div>
 
+            <!-- ============= СЕКЦИЯ SUPPORT TICKETS ============= -->
+            <div id="supportTicketsSection" style="margin-top: 30px; padding: 20px; background: #eaf3ff; border-radius: 12px; border: 2px solid #4a90e2;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0; font-size: 18px; font-weight: 700;">🎫 Support Tickets</h3>
+                    <button onclick="refreshSupportTickets()" style="background: #007aff; color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        🔄 Обновить
+                    </button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+                    <div style="background: white; border-radius: 12px; padding: 15px; text-align: center;">
+                        <div style="font-size: 24px; font-weight: 800; color: #ff9500;" id="newSupportCount">0</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">Новые</div>
+                    </div>
+                    <div style="background: white; border-radius: 12px; padding: 15px; text-align: center;">
+                        <div style="font-size: 24px; font-weight: 800; color: #007aff;" id="inProgressSupportCount">0</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">В работе</div>
+                    </div>
+                    <div style="background: white; border-radius: 12px; padding: 15px; text-align: center;">
+                        <div style="font-size: 24px; font-weight: 800; color: #28a745;" id="resolvedSupportCount">0</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">Решены</div>
+                    </div>
+                </div>
+
+                <div style="max-height: 320px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead style="background: #4a90e2; color: white; font-weight: 700; position: sticky; top: 0;">
+                            <tr>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Тип</th>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Сообщение</th>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Пользователь</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Статус</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Дата</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd;">Действие</th>
+                            </tr>
+                        </thead>
+                        <tbody id="supportTicketsTableBody">
+                            <tr style="background: white;">
+                                <td colspan="6" style="padding: 20px; text-align: center; color: #888;">Загрузка...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Раздел Техническое Обслуживание -->
             <div id="maintenanceSection" style="margin-top: 30px; padding: 20px; background: #e8d5ff; border-radius: 12px; border: 2px solid #9c27b0;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -2354,6 +2413,13 @@
             </div>
 
             <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
+                <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 8px;">🛠 Нашли баг? Пишите здесь</div>
+                <textarea id="supportTicketText" placeholder="Опишите проблему: что произошло и как повторить" style="width:100%; min-height:72px; padding:10px; border:1px solid #ddd; border-radius:8px; box-sizing:border-box; font-size:13px; resize:vertical;"></textarea>
+                <button onclick="submitSupportTicketFromProfile()" class="main-btn" style="width:100%; margin-top:8px; background:#007aff; padding:10px; font-size:12px; border-radius:8px;">Отправить админу</button>
+                <div id="supportTicketStatus" style="font-size:11px; color: var(--gray); margin-top:8px; text-align:center; min-height:14px;"></div>
+            </div>
+
+            <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
                 <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">🗺️ Движок карты</div>
                 <button onclick="toggleMapEngineFromUI()" id="mapEngineSettingsBtn" class="main-btn" style="width:100%; background:#007aff; padding:10px; font-size:12px; border-radius:8px;">
                     Переключить ymaps2 / ymaps3
@@ -2567,7 +2633,7 @@
     const SUPABASE_URL = "https://phazbjchjhsruwalddis.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
     const APP_VERSION = '3.0.1';
-    const APP_BUILD = '0103262348';
+    const APP_BUILD = '0203260040';
     const APP_CHANGELOG = [
         'Час Пик ДПС: баллы опасности + мини-график',
         'Web Push на iPhone: отдельное включение по тапу',
@@ -3104,6 +3170,7 @@
     let canUseV3Engine = false;
     let roleWelcomeSpoken = false;
     const V3_ACCESS_DENIED_TEXT = 'Режим Next-Gen v3.0 (ZBT). Доступ ограничен. Чтобы подать заявку на участие в тесте, свяжитесь с @Админом в канале MONOLITH.';
+    const SUPPORT_NOTIFY_SHARED_KEY = 'f050f0aa-91dc-46c1-b761-2e1030af5b49';
     // Переменные для карты и выбранного типа маркера (по умолчанию ДПС)
     let myMap, selectedType = 'dps';
     let preferredMapEngine = 'ymaps3';
@@ -3320,6 +3387,7 @@
     const RUSH_SCORE_W_CURRENT = 0.3;
     const RUSH_SCORE_W_RECENT = 0.2;
     const RUSH_SCORE_PRESET_KEY = 'rushScorePreset';
+    const RUSH_HOUR_WIDGET_EXPANDED_KEY = 'rushHourWidgetExpanded';
     const TARGET_MIN_TOP_PX = 120;
     const TARGET_CARD_GAP_PX = 90;
     let rushHourTrendCache = [];
@@ -3328,6 +3396,7 @@
     let rushHourLastActiveMarkers = [];
     let rushHourWidgetIntervalId = null;
     let rushScorePreset = 'normal';
+    let rushHourWidgetExpanded = false;
     let dtpHeatmapEnabled = false;
     let dtpHeatmapCollection = null;
     let dtpHeatmapCellsCache = [];
@@ -3781,6 +3850,26 @@
         return '🟢';
     }
 
+    function loadRushHourWidgetExpandedState() {
+        try {
+            rushHourWidgetExpanded = localStorage.getItem(RUSH_HOUR_WIDGET_EXPANDED_KEY) === '1';
+        } catch (e) {
+            rushHourWidgetExpanded = false;
+        }
+    }
+
+    function saveRushHourWidgetExpandedState() {
+        try {
+            localStorage.setItem(RUSH_HOUR_WIDGET_EXPANDED_KEY, rushHourWidgetExpanded ? '1' : '0');
+        } catch (e) {}
+    }
+
+    function toggleRushHourWidgetExpanded() {
+        rushHourWidgetExpanded = !rushHourWidgetExpanded;
+        saveRushHourWidgetExpandedState();
+        updateRushHourDangerWidget(rushHourLastActiveMarkers).catch(()=>{});
+    }
+
     function getRushScorePresetConfig() {
         if (rushScorePreset === 'calm') {
             return {
@@ -3912,11 +4001,31 @@
         badge.classList.add('visible');
         badge.classList.remove('rush-level-low', 'rush-level-mid', 'rush-level-high', 'rush-level-critical');
         badge.classList.add(getRushLevelClass(score));
+        badge.classList.toggle('expanded', rushHourWidgetExpanded);
+        badge.setAttribute('role', 'button');
+        badge.setAttribute('tabindex', '0');
+        badge.setAttribute('aria-expanded', rushHourWidgetExpanded ? 'true' : 'false');
+
+        if (!badge.__rushAccordionBound) {
+            badge.__rushAccordionBound = true;
+            badge.addEventListener('click', () => { toggleRushHourWidgetExpanded(); });
+            badge.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleRushHourWidgetExpanded();
+                }
+            });
+        }
+
         badge.innerHTML = `
-            <div class="rush-hour-title">${icon} Час пик ДПС</div>
-            <div class="rush-hour-main">${score} / 10 баллов опасности</div>
-            <div class="rush-hour-sub">Сейчас в городе ${score} баллов. Работают ${activeCrews} экипажей. Режим: ${preset.modeLabel}.</div>
-            <div class="rush-hour-graph">${spark} · ${currentHour}/ч (ср.3ч ${recentAvg.toFixed(1)} · пик ${maxHour}/ч)</div>
+            <div class="rush-hour-summary">
+                <span>${icon} ${score} / 10 баллов опасности</span>
+                <span class="rush-hour-toggle" aria-hidden="true">${rushHourWidgetExpanded ? '▾' : '▸'}</span>
+            </div>
+            <div class="rush-hour-details">
+                <div class="rush-hour-sub">Работают ${activeCrews} экипажей. Режим: ${preset.modeLabel}.</div>
+                <div class="rush-hour-graph">${spark} · ${currentHour}/ч (ср.3ч ${recentAvg.toFixed(1)} · пик ${maxHour}/ч)</div>
+            </div>
         `;
     }
 
@@ -8104,6 +8213,7 @@
         try { initMonolithVoiceToggle(); } catch(e) {}
         try { maybeSpeakRoleWelcome(); } catch(e) {}
         loadProximityMode();
+        loadRushHourWidgetExpandedState();
         loadRushScorePreset();
         loadMarkerRenderMode();
         loadDynamicCourseEnabled();
@@ -8979,6 +9089,204 @@
         }
     }
 
+    async function collectSupportTicketDiagnostics() {
+        const diagnostics = {
+            ua: String(navigator.userAgent || ''),
+            platform: String(navigator.platform || ''),
+            language: String(navigator.language || ''),
+            screen: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
+            viewport: `${window.innerWidth || 0}x${window.innerHeight || 0}`,
+            timezone: (() => {
+                try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; }
+            })(),
+            online: navigator.onLine === true,
+            standalone: !!(window.navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches))
+        };
+
+        try {
+            if (navigator.getBattery) {
+                const battery = await navigator.getBattery();
+                diagnostics.battery = {
+                    level: Number.isFinite(Number(battery?.level)) ? Math.round(Number(battery.level) * 100) : null,
+                    charging: !!battery?.charging
+                };
+            }
+        } catch (e) {}
+
+        return diagnostics;
+    }
+
+    async function notifyAdminBySupportBot(payload) {
+        try {
+            await fetch(`${SUPABASE_URL}/functions/v1/support-notify`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    apikey: SUPABASE_KEY,
+                    'x-support-key': SUPPORT_NOTIFY_SHARED_KEY
+                },
+                body: JSON.stringify(payload || {})
+            });
+        } catch (e) {
+            console.warn('support-notify failed:', e?.message || e);
+        }
+    }
+
+    async function submitSupportTicket(params = {}) {
+        const message = String(params?.message || '').trim();
+        if (!message) throw new Error('Пустое сообщение');
+
+        const ticketType = String(params?.ticketType || 'bug').trim();
+        const source = String(params?.source || 'profile').trim();
+        const markerId = Number(params?.markerId || 0);
+        const markerType = String(params?.markerType || '').trim();
+        const markerLat = Number(params?.markerLat);
+        const markerLon = Number(params?.markerLon);
+        const reporterName = String(params?.reporterName || currentDriver?.name || window.Telegram?.WebApp?.initDataUnsafe?.user?.first_name || 'Водитель').trim();
+        const tgUsername = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.username || '').trim();
+        const diagnostics = await collectSupportTicketDiagnostics();
+
+        const row = {
+            user_id: String(uid || ''),
+            user_name: reporterName || 'Аноним',
+            telegram_username: tgUsername || null,
+            ticket_type: ticketType,
+            source,
+            marker_id: Number.isFinite(markerId) && markerId > 0 ? markerId : null,
+            marker_type: markerType || null,
+            marker_lat: Number.isFinite(markerLat) ? markerLat : null,
+            marker_lon: Number.isFinite(markerLon) ? markerLon : null,
+            message,
+            app_version: APP_VERSION,
+            app_build: APP_BUILD,
+            device_info: diagnostics,
+            status: 'new'
+        };
+
+        let ticketId = null;
+        let insertError = null;
+
+        try {
+            const { data, error } = await _sb
+                .from('support_tickets')
+                .insert([row])
+                .select('id')
+                .maybeSingle();
+            insertError = error || null;
+            ticketId = data?.id || null;
+        } catch (e) {
+            insertError = e;
+        }
+
+        if (insertError) {
+            const fallbackMessage = `[SUPPORT:${ticketType.toUpperCase()}] ${message}\nsource=${source}${Number.isFinite(markerId) && markerId > 0 ? ` marker_id=${markerId}` : ''}`;
+            const { error: fallbackError } = await _sb.from('feedback').insert({
+                user_id: String(uid || ''),
+                user_name: reporterName || 'Аноним',
+                message: fallbackMessage,
+                status: 'new'
+            });
+            if (fallbackError) {
+                throw (insertError?.message ? insertError : fallbackError);
+            }
+        }
+
+        await notifyAdminBySupportBot({
+            ticketId,
+            ticketType,
+            source,
+            message,
+            markerId: Number.isFinite(markerId) && markerId > 0 ? markerId : null,
+            markerType: markerType || null,
+            markerLat: Number.isFinite(markerLat) ? markerLat : null,
+            markerLon: Number.isFinite(markerLon) ? markerLon : null,
+            userId: String(uid || ''),
+            userName: reporterName || 'Аноним',
+            username: tgUsername || null,
+            appVersion: APP_VERSION,
+            appBuild: APP_BUILD,
+            deviceInfo: diagnostics
+        });
+
+        return { ok: true, ticketId };
+    }
+
+    async function submitSupportTicketFromProfile() {
+        const textEl = document.getElementById('supportTicketText');
+        const statusEl = document.getElementById('supportTicketStatus');
+        const message = String(textEl?.value || '').trim();
+
+        if (!message) {
+            if (statusEl) {
+                statusEl.textContent = '❌ Опишите проблему перед отправкой';
+                statusEl.style.color = '#dc3545';
+            }
+            return;
+        }
+
+        if (statusEl) {
+            statusEl.textContent = '⏳ Отправляем...';
+            statusEl.style.color = '#007aff';
+        }
+
+        try {
+            await submitSupportTicket({
+                ticketType: 'bug',
+                source: 'profile',
+                message
+            });
+
+            if (textEl) textEl.value = '';
+            if (statusEl) {
+                statusEl.textContent = '✅ Отправлено админу';
+                statusEl.style.color = '#28a745';
+            }
+        } catch (e) {
+            if (statusEl) {
+                statusEl.textContent = `❌ Ошибка: ${e?.message || e}`;
+                statusEl.style.color = '#dc3545';
+            }
+        }
+    }
+
+    async function reportMarkerIssue(markerId, markerType, markerLat, markerLon, markerAuthorName = '') {
+        if (!uid) {
+            alert('Пожалуйста, авторизуйтесь через Telegram');
+            return;
+        }
+
+        const reason = prompt('Опишите проблему с меткой (например: фейк / неактуально / ошибка координат):', 'Фейковая или неактуальная метка');
+        if (reason === null) return;
+        const trimmed = String(reason || '').trim();
+        if (!trimmed) {
+            alert('Укажите причину жалобы');
+            return;
+        }
+
+        const type = String(markerType || '').trim() || 'unknown';
+        const lat = Number(markerLat);
+        const lon = Number(markerLon);
+        const coordsText = (Number.isFinite(lat) && Number.isFinite(lon)) ? `${lat.toFixed(5)}, ${lon.toFixed(5)}` : 'не указано';
+        const authorText = String(markerAuthorName || '').trim();
+        const message = `Жалоба на метку ${type}${authorText ? ` (автор: ${authorText})` : ''}. Координаты: ${coordsText}. Причина: ${trimmed}`;
+
+        try {
+            await submitSupportTicket({
+                ticketType: 'marker_report',
+                source: 'marker_popup',
+                markerId: Number(markerId) || null,
+                markerType: type,
+                markerLat: Number.isFinite(lat) ? lat : null,
+                markerLon: Number.isFinite(lon) ? lon : null,
+                message
+            });
+
+            alert('✅ Жалоба на метку отправлена админу');
+        } catch (e) {
+            alert('❌ Не удалось отправить жалобу: ' + (e?.message || e));
+        }
+    }
+
     // Функция открытия просмотра фото
     function openPhotoViewer(photoUrl) {
         document.getElementById('photoViewerImage').src = photoUrl;
@@ -9332,6 +9640,7 @@
 
         await loadUnbanRequests();
         await refreshBugReports();
+        await refreshSupportTickets();
         await refreshMaintenanceStatus();
 
         const target = document.querySelector('.target');
@@ -9725,6 +10034,112 @@
 
             if (error) throw error;
             await refreshBugReports();
+        } catch (err) {
+            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+        }
+    }
+
+    async function refreshSupportTickets() {
+        try {
+            let rows = [];
+            let queryError = null;
+
+            ({ data: rows, error: queryError } = await _sb
+                .from('support_tickets')
+                .select('id,ticket_type,source,message,user_name,user_id,telegram_username,status,created_at,marker_id,marker_type,marker_lat,marker_lon,app_build')
+                .order('created_at', { ascending: false })
+                .limit(250));
+
+            if (queryError) {
+                const tbody = document.getElementById('supportTicketsTableBody');
+                if (tbody) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#dc3545;">❌ support_tickets не найдена. Выполните support_tickets.sql</td></tr>`;
+                }
+                document.getElementById('newSupportCount').textContent = '0';
+                document.getElementById('inProgressSupportCount').textContent = '0';
+                document.getElementById('resolvedSupportCount').textContent = '0';
+                return;
+            }
+
+            const tickets = rows || [];
+            const newCount = tickets.filter(t => String(t.status || 'new') === 'new').length;
+            const inProgressCount = tickets.filter(t => String(t.status || '') === 'in_progress').length;
+            const resolvedCount = tickets.filter(t => String(t.status || '') === 'resolved').length;
+
+            document.getElementById('newSupportCount').textContent = String(newCount);
+            document.getElementById('inProgressSupportCount').textContent = String(inProgressCount);
+            document.getElementById('resolvedSupportCount').textContent = String(resolvedCount);
+
+            const tbody = document.getElementById('supportTicketsTableBody');
+            if (!tbody) return;
+
+            if (!tickets.length) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#888;">Нет тикетов</td></tr>`;
+                return;
+            }
+
+            const statusBadge = (statusValue) => {
+                const status = String(statusValue || 'new');
+                if (status === 'resolved') return { text: '✅ Решено', color: '#28a745' };
+                if (status === 'in_progress') return { text: '🟡 В работе', color: '#007aff' };
+                return { text: '🔴 Новое', color: '#ff9500' };
+            };
+
+            tbody.innerHTML = tickets.map((t) => {
+                const status = statusBadge(t.status);
+                const date = new Date(t.created_at).toLocaleString('ru-RU', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+                const shortMsg = String(t.message || '').slice(0, 84);
+                const msg = shortMsg + (String(t.message || '').length > 84 ? '...' : '');
+                const userLabel = `${t.user_name || 'Аноним'}${t.telegram_username ? ` (@${t.telegram_username})` : ''}`;
+                const markerText = Number(t.marker_id) > 0
+                    ? ` #${t.marker_id} ${String(t.marker_type || '')} ${Number.isFinite(Number(t.marker_lat)) && Number.isFinite(Number(t.marker_lon)) ? `(${Number(t.marker_lat).toFixed(5)}, ${Number(t.marker_lon).toFixed(5)})` : ''}`
+                    : '';
+
+                return `
+                    <tr style="background:${String(t.status || 'new') === 'new' ? '#fff8ef' : 'white'};">
+                        <td style="padding:10px; border:1px solid #ddd;">${String(t.ticket_type || 'bug')}${markerText ? `<div style="font-size:11px; color:#666; margin-top:4px;">${markerText}</div>` : ''}</td>
+                        <td style="padding:10px; border:1px solid #ddd; max-width:260px;" title="${String(t.message || '').replace(/"/g, '&quot;')}">${msg}${t.app_build ? `<div style="font-size:11px; color:#666; margin-top:4px;">build ${t.app_build}</div>` : ''}</td>
+                        <td style="padding:10px; border:1px solid #ddd;">${userLabel}<div style="font-size:11px; color:#666; margin-top:4px;">ID: ${t.user_id || '—'}</div></td>
+                        <td style="padding:10px; border:1px solid #ddd; text-align:center;"><span style="display:inline-block; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; background:${status.color}; color:#fff;">${status.text}</span></td>
+                        <td style="padding:10px; border:1px solid #ddd; text-align:center; font-size:12px;">${date}</td>
+                        <td style="padding:10px; border:1px solid #ddd; text-align:center; white-space:nowrap;">
+                            ${String(t.status || 'new') !== 'resolved' ? `<button onclick="markSupportTicketResolved('${t.id}')" style="background:#28a745; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600; margin-right:4px;">✓ Решено</button>` : ''}
+                            <button onclick="deleteSupportTicket('${t.id}')" style="background:#dc3545; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600;">🗑️</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        } catch (err) {
+            console.error('Ошибка загрузки support tickets:', err);
+            const tbody = document.getElementById('supportTicketsTableBody');
+            if (tbody) tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#dc3545;">❌ Ошибка загрузки тикетов</td></tr>`;
+        }
+    }
+
+    async function markSupportTicketResolved(ticketId) {
+        try {
+            const { error } = await _sb
+                .from('support_tickets')
+                .update({ status: 'resolved', updated_at: new Date().toISOString() })
+                .eq('id', ticketId);
+            if (error) throw error;
+            await refreshSupportTickets();
+        } catch (err) {
+            alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
+        }
+    }
+
+    async function deleteSupportTicket(ticketId) {
+        if (!confirm('Удалить этот тикет?')) return;
+        try {
+            const { error } = await _sb
+                .from('support_tickets')
+                .delete()
+                .eq('id', ticketId);
+            if (error) throw error;
+            await refreshSupportTickets();
         } catch (err) {
             alert('❌ Ошибка: ' + (err?.message || 'Неизвестная ошибка'));
         }
@@ -12167,6 +12582,7 @@
     window.deleteAllUserMessages = deleteAllUserMessages;
     window.deleteAllUserMarkers = deleteAllUserMarkers;
     window.reportUser = reportUser;
+    window.reportMarkerIssue = reportMarkerIssue;
     window.deleteMessage = deleteMessage;
 
     // Функция открытия ленты событий
@@ -13465,9 +13881,14 @@
             const adminConfirmHtml = showAdminStyle
                 ? `<div class="admin-confirm">✅ Подтверждено администрацией</div>`
                 : '';
+            const normalizedCoords = extractMarkerCoordsForNotif(m);
+            if (!normalizedCoords) return;
+            const markerCoordsForMap = [Number(normalizedCoords.lat), Number(normalizedCoords.lon)];
+            if (!Number.isFinite(markerCoordsForMap[0]) || !Number.isFinite(markerCoordsForMap[1])) return;
+
             const reportButtonHtml = showAdminStyle
                 ? adminConfirmHtml
-                : `<button class="b-del" style="background: #ff9500; color:white;" onclick="window.reportUser(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')" title="Пожаловаться на автора метки">⚠️ Пожаловаться</button>`;
+                : `<button class="b-del" style="background: #ff9500; color:white;" onclick="window.reportMarkerIssue(${m.id}, '${String(m.type || '').replace(/'/g, "\\'")}', ${markerCoordsForMap[0]}, ${markerCoordsForMap[1]}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')" title="Пожаловаться на метку">⚠️ Пожаловаться</button>`;
 
             const sosEnrouteIds = (String(m.type) === 'sos') ? (sosEnrouteByMarker[Number(m.id)] || []) : [];
             const sosEnrouteCount = Array.isArray(sosEnrouteIds) ? sosEnrouteIds.length : 0;
@@ -13517,11 +13938,6 @@
                     : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`);
             // Создаем маркер с иконкой и балуном
             const iconSize = showAdminStyle ? 34 : (isSpecbatMarker ? 34 : 30);
-            const normalizedCoords = extractMarkerCoordsForNotif(m);
-            if (!normalizedCoords) return;
-            const markerCoordsForMap = [Number(normalizedCoords.lat), Number(normalizedCoords.lon)];
-            if (!Number.isFinite(markerCoordsForMap[0]) || !Number.isFinite(markerCoordsForMap[1])) return;
-
             const p = new ymaps.Placemark(markerCoordsForMap, { balloonContent: bHtml, iconContent: iconInner }, 
             { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
             const markerDescriptor = {
