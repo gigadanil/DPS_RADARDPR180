@@ -2755,6 +2755,57 @@
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     // Формат: '@YourBot'
     const BOT_USERNAME = '@DPSRADARDPR180bot';
+
+    function parseJwtPayload(token) {
+        try {
+            const parts = String(token || '').split('.');
+            if (parts.length !== 3) return null;
+            const payloadPart = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
+            return JSON.parse(atob(normalized));
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function getJwtExp(token) {
+        const payload = parseJwtPayload(token);
+        const exp = Number(payload?.exp || 0);
+        return Number.isFinite(exp) ? exp : 0;
+    }
+
+    function isValidUserJwt(token, minTtlSec = 60) {
+        const raw = String(token || '').trim();
+        if (!raw || raw.split('.').length !== 3) return false;
+        const payload = parseJwtPayload(raw);
+        if (!payload || typeof payload !== 'object') return false;
+        const role = String(payload?.role || '').trim().toLowerCase();
+        const sub = String(payload?.sub || '').trim();
+        const exp = Number(payload?.exp || 0);
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (!sub) return false;
+        if (!role || role === 'anon') return false;
+        if (!Number.isFinite(exp) || exp <= (nowSec + Number(minTtlSec || 0))) return false;
+        return true;
+    }
+
+    function getValidStoredUserJwt(minTtlSec = 60) {
+        try {
+            const token = String(localStorage.getItem('sb_jwt') || '').trim();
+            if (!token || token.split('.').length !== 3) return '';
+            if (!isValidUserJwt(token, 0)) return '';
+
+            const expRaw = Number(localStorage.getItem('sb_jwt_exp') || 0);
+            const expSec = expRaw > 0 ? expRaw : getJwtExp(token);
+            const nowSec = Math.floor(Date.now() / 1000);
+            if (!expSec || expSec <= (nowSec + Number(minTtlSec || 0))) return '';
+
+            return token;
+        } catch (e) {
+            return '';
+        }
+    }
+
     function createSupabaseClient(token = null) {
         const options = {
             auth: {
@@ -2772,7 +2823,7 @@
     function clearSupabaseAuth() {
         closeRealtimeChannels();
         currentSupabaseToken = '';
-        _sb = createSupabaseClient();
+        _sb = sbAnonClient;
         try { window._sb = _sb; } catch(e) {}
         try {
             localStorage.removeItem('sb_jwt');
@@ -2786,16 +2837,18 @@
     }
 
     // Клиент Supabase для работы с БД
-    let _sb = createSupabaseClient();
+    const sbAnonClient = createSupabaseClient();
+    let _sb = sbAnonClient;
     let currentSupabaseToken = '';
     // Удобно для диагностики из DevTools: в некоторых WebView глобальный `let` не виден как переменная.
     try { window._sb = _sb; } catch(e) {}
 
     function setSupabaseAuth(token) {
-        if (!token || typeof token !== 'string' || token.split('.').length !== 3) {
+        if (!isValidUserJwt(token, 0)) {
             clearSupabaseAuth();
             return;
         }
+        token = String(token).trim();
         if (currentSupabaseToken === token) return;
         currentSupabaseToken = token;
         closeRealtimeChannels();
@@ -2837,76 +2890,71 @@
         }
     }
 
+    let ensureSupabaseAuthPromise = null;
     async function ensureSupabaseAuth() {
-        function getJwtExp(token) {
+        const cachedToken = getValidStoredUserJwt(60);
+        if (cachedToken) {
+            setSupabaseAuth(cachedToken);
             try {
-                const parts = String(token || '').split('.');
-                if (parts.length !== 3) return 0;
-                const payloadPart = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-                const normalized = payloadPart + '='.repeat((4 - (payloadPart.length % 4)) % 4);
-                const json = JSON.parse(atob(normalized));
-                const exp = Number(json?.exp || 0);
-                return Number.isFinite(exp) ? exp : 0;
-            } catch (e) {
-                return 0;
-            }
-        }
-
-        const initData = window.Telegram?.WebApp?.initData;
-        if (!initData) {
-            try {
-                const cachedToken = localStorage.getItem('sb_jwt') || '';
-                const cachedExpRaw = Number(localStorage.getItem('sb_jwt_exp') || 0);
-                const cachedExp = cachedExpRaw > 0 ? cachedExpRaw : getJwtExp(cachedToken);
-                const nowSec = Math.floor(Date.now() / 1000);
-                if (cachedToken && cachedToken.split('.').length === 3 && (!cachedExp || cachedExp > nowSec + 60)) {
-                    setSupabaseAuth(cachedToken);
-                    try {
-                        const storedUid = localStorage.getItem('site_uid');
-                        if (!uid && storedUid) uid = String(storedUid);
-                    } catch(e) {}
-                    return cachedToken;
-                }
+                const storedUid = localStorage.getItem('site_uid');
+                if (!uid && storedUid) uid = String(storedUid);
             } catch (e) {}
-            return null;
+            return cachedToken;
         }
 
-        try {
-            const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ initData })
-            });
-            if (!res.ok) {
-                let errText = '';
-                try { errText = await res.text(); } catch (e) { errText = ''; }
-                clearSupabaseAuth();
-                throw new Error(`telegram-auth failed (${res.status}): ${errText || 'empty response'}`);
-            }
-            const data = await res.json();
-            if (data?.token && typeof data.token === 'string' && data.token.split('.').length === 3) {
-                setSupabaseAuth(data.token);
-                try {
-                    localStorage.setItem('sb_jwt', data.token);
-                    if (data.exp) localStorage.setItem('sb_jwt_exp', String(data.exp));
-                } catch (e) {
-                    // ignore storage errors
-                }
-                // после успешной авторизации можно синхронизировать координаты подписчика (если GPS уже известен)
-                syncHelpSubscriberHomeCoords(true).catch(()=>{});
-                return data.token;
-            } else {
-                clearSupabaseAuth();
-                throw new Error('telegram-auth returned invalid token');
-            }
-        } catch (e) {
-            const msg = String(e?.message || e || '');
-            console.warn('Supabase auth failed:', msg);
-            if (/invalid hash/i.test(msg)) {
-                console.warn('⚠️ Telegram initData не совпадает с токеном бота. Откройте Mini App ИМЕННО из @DPSRADARDPR180bot (не из BotFather/пересланных ссылок), затем перезапустите карту.');
-            }
-            return null;
+        if (ensureSupabaseAuthPromise) {
+            return ensureSupabaseAuthPromise;
         }
+
+        ensureSupabaseAuthPromise = (async () => {
+            const initData = window.Telegram?.WebApp?.initData;
+            if (!initData) {
+                return null;
+            }
+
+            try {
+                const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-auth`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ initData })
+                });
+                if (!res.ok) {
+                    let errText = '';
+                    try { errText = await res.text(); } catch (e) { errText = ''; }
+                    clearSupabaseAuth();
+                    throw new Error(`telegram-auth failed (${res.status}): ${errText || 'empty response'}`);
+                }
+                const data = await res.json();
+                const token = String(data?.token || '').trim();
+                if (isValidUserJwt(token, 60)) {
+                    setSupabaseAuth(token);
+                    try {
+                        localStorage.setItem('sb_jwt', token);
+                        const expSec = Number(data?.exp || 0) || getJwtExp(token);
+                        if (expSec > 0) localStorage.setItem('sb_jwt_exp', String(expSec));
+                    } catch (e) {
+                        // ignore storage errors
+                    }
+                    // после успешной авторизации можно синхронизировать координаты подписчика (если GPS уже известен)
+                    syncHelpSubscriberHomeCoords(true).catch(()=>{});
+                    return token;
+                } else {
+                    clearSupabaseAuth();
+                    throw new Error('telegram-auth returned invalid token');
+                }
+            } catch (e) {
+                const msg = String(e?.message || e || '');
+                console.warn('Supabase auth failed:', msg);
+                if (/invalid hash/i.test(msg)) {
+                    console.warn('⚠️ Telegram initData не совпадает с токеном бота. Откройте Mini App ИМЕННО из @DPSRADARDPR180bot (не из BotFather/пересланных ссылок), затем перезапустите карту.');
+                }
+                return null;
+            } finally {
+                ensureSupabaseAuthPromise = null;
+            }
+        })();
+
+        return ensureSupabaseAuthPromise;
     }
 
     function getRulesAcceptanceKey(userId) {
@@ -12781,10 +12829,10 @@
                 });
             };
 
-            let token = String(localStorage.getItem('sb_jwt') || '').trim();
+            let token = getValidStoredUserJwt(60);
             if (!token) {
                 const refreshed = await ensureSupabaseAuth();
-                token = String(refreshed || localStorage.getItem('sb_jwt') || '').trim();
+                token = String(refreshed || getValidStoredUserJwt(30) || '').trim();
             }
 
             if (!token) {
@@ -12801,7 +12849,7 @@
                 } catch (e) {}
 
                 const refreshed = await ensureSupabaseAuth();
-                const refreshedToken = String(refreshed || localStorage.getItem('sb_jwt') || '').trim();
+                const refreshedToken = String(refreshed || getValidStoredUserJwt(30) || '').trim();
                 if (refreshedToken) {
                     resp = await callEnroute(refreshedToken);
                 }
@@ -14056,21 +14104,34 @@
                 .filter(n => Number.isFinite(n) && n > 0);
 
             if (sosIds.length > 0) {
-                let token = localStorage.getItem('sb_jwt') || '';
+                let token = getValidStoredUserJwt(60);
                 if (!token) {
                     const refreshed = await ensureSupabaseAuth();
-                    token = refreshed || localStorage.getItem('sb_jwt') || '';
+                    token = String(refreshed || getValidStoredUserJwt(30) || '').trim();
                 }
 
                 if (token) {
-                    const resp = await fetch(`${SUPABASE_URL}/functions/v1/sos-enroute?action=list`, {
+                    const callSosList = async (jwtToken) => fetch(`${SUPABASE_URL}/functions/v1/sos-enroute?action=list`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`
+                            Authorization: `Bearer ${String(jwtToken || '').trim()}`
                         },
                         body: JSON.stringify({ markerIds: sosIds })
                     });
+
+                    let resp = await callSosList(token);
+                    if (resp.status === 401) {
+                        try {
+                            localStorage.removeItem('sb_jwt');
+                            localStorage.removeItem('sb_jwt_exp');
+                        } catch (e) {}
+                        const refreshed = await ensureSupabaseAuth();
+                        const refreshedToken = String(refreshed || getValidStoredUserJwt(30) || '').trim();
+                        if (refreshedToken) {
+                            resp = await callSosList(refreshedToken);
+                        }
+                    }
 
                     if (resp.ok) {
                         const payload = await resp.json();
