@@ -1386,6 +1386,101 @@
             display: flex !important;
         }
 
+        #guestObserverOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 100000;
+            align-items: center;
+            justify-content: center;
+            background: rgba(5, 8, 16, 0.56);
+            backdrop-filter: blur(8px) saturate(120%);
+            -webkit-backdrop-filter: blur(8px) saturate(120%);
+            padding: calc(var(--ui-safe-top) + 16px) 16px 16px;
+            box-sizing: border-box;
+        }
+
+        #guestObserverOverlay .guest-observer-card {
+            width: min(94vw, 520px);
+            border-radius: 18px;
+            border: 1px solid rgba(0, 212, 255, 0.24);
+            background: linear-gradient(150deg, rgba(14, 18, 30, 0.82) 0%, rgba(10, 14, 24, 0.76) 100%);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+            padding: 26px 20px;
+            color: var(--text-primary);
+            text-align: left;
+            animation: slideUp 0.35s ease;
+        }
+
+        #guestObserverOverlay .guest-observer-title {
+            margin: 0 0 14px 0;
+            color: #00d4ff;
+            font-size: clamp(22px, 5vw, 31px);
+            font-weight: 800;
+            line-height: 1.15;
+            text-shadow: 0 0 18px rgba(0, 212, 255, 0.20);
+            letter-spacing: 0.3px;
+        }
+
+        #guestObserverOverlay .guest-observer-info {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin: 0 0 20px 0;
+        }
+
+        #guestObserverOverlay .guest-observer-info-item {
+            padding: 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255,255,255,0.92);
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.35;
+        }
+
+        #guestObserverOverlay .guest-observer-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #guestObserverOverlay .guest-btn {
+            width: 100%;
+            border-radius: 12px;
+            padding: 13px 14px;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        #guestObserverOverlay .guest-btn-main {
+            border: 1px solid rgba(255,255,255,0.52);
+            background: transparent;
+            color: rgba(255,255,255,0.94);
+        }
+
+        #guestObserverOverlay .guest-btn-main:hover {
+            border-color: rgba(255,255,255,0.78);
+            background: rgba(255,255,255,0.06);
+        }
+
+        #guestObserverOverlay .guest-btn-accent {
+            border: 1px solid rgba(0, 122, 255, 0.30);
+            background: linear-gradient(135deg, #007aff 0%, #0051d5 100%);
+            color: #fff;
+            box-shadow: 0 6px 16px rgba(0, 122, 255, 0.30);
+        }
+
+        #guestObserverOverlay .guest-btn-accent:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 9px 20px rgba(0, 122, 255, 0.35);
+        }
+
         /* ============= SAFE AREA TOP OFFSET (iPhone 14 Pro / Redmi) ============= */
         /* Требование: сдвинуть основной UI и модалки ниже системных кнопок ("Закрыть", "...") */
         .top-controls { top: var(--ui-safe-top) !important; }
@@ -1588,6 +1683,20 @@
 
 
     <div class="target" aria-hidden="true"></div>
+
+    <div id="guestObserverOverlay" aria-modal="true" role="dialog" aria-label="Режим наблюдателя">
+        <div class="guest-observer-card">
+            <h2 class="guest-observer-title">MONOLITH: РЕЖИМ НАБЛЮДАТЕЛЯ</h2>
+            <div class="guest-observer-info">
+                <div class="guest-observer-info-item" id="guestObserverPostsCount">📍 — активных постов</div>
+                <div class="guest-observer-info-item">🛡 Проверено штурманами</div>
+            </div>
+            <div class="guest-observer-actions">
+                <button class="guest-btn guest-btn-main" onclick="continueAsGuestObserver()">ПРОДОЛЖИТЬ КАК ГОСТЬ</button>
+                <button class="guest-btn guest-btn-accent" onclick="openTelegramBot()">ВСТУПИТЬ В БРАТСТВО (TG)</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Overlay: Требуется Telegram для регистрации/действий -->
     <div id="tgAuthOverlay" class="auth-overlay" style="display:none; position:fixed; inset:0; z-index:99999; background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
@@ -2642,6 +2751,7 @@
         'Оптимизация обработки realtime-меток'
     ];
     const APP_VERSION_LABEL = `v${APP_VERSION} (build ${APP_BUILD})`;
+    const GUEST_OBSERVER_ACCEPTED_KEY = 'monolith_guest_observer_accepted';
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     // Формат: '@YourBot'
     const BOT_USERNAME = '@DPSRADARDPR180bot';
@@ -3104,6 +3214,7 @@
      */
     async function checkAppEnvironment() {
         const overlay = document.getElementById('tgAuthOverlay');
+        const guestOverlay = document.getElementById('guestObserverOverlay');
         const splash = document.getElementById('splashScreen');
 
         const initData = window.Telegram?.WebApp?.initData;
@@ -3114,6 +3225,7 @@
             // Mini App: авторизация должна обновляться через initData
             const token = await ensureSupabaseAuth();
             if (overlay) overlay.style.display = 'none';
+            if (guestOverlay) guestOverlay.style.display = 'none';
             return { mode: 'telegram', isTelegram: true, token };
         }
 
@@ -3121,14 +3233,104 @@
         const token = await ensureSupabaseAuth();
         if (token) {
             if (overlay) overlay.style.display = 'none';
+            if (guestOverlay) guestOverlay.style.display = 'none';
             return { mode: 'web', isTelegram: false, token };
         }
 
-        // Нет токена → показываем модалку входа и монтируем Telegram Login Widget
-        try { ensureTelegramLoginWidgetRendered(); } catch (e) {}
-        if (overlay) overlay.style.display = 'flex';
+        if (isGuestObserverAccepted()) {
+            if (overlay) overlay.style.display = 'none';
+            if (guestOverlay) guestOverlay.style.display = 'none';
+            return { mode: 'web-guest', isTelegram: false, token: null, allowGuest: true };
+        }
+
+        await showGuestObserverOverlay();
+        if (overlay) overlay.style.display = 'none';
         if (splash) splash.classList.add('hidden');
-        return { mode: 'web-need-auth', isTelegram: false, token: null };
+        return { mode: 'web-guest-pending', isTelegram: false, token: null, allowGuest: false };
+
+    }
+
+    function isGuestObserverAccepted() {
+        try {
+            return localStorage.getItem(GUEST_OBSERVER_ACCEPTED_KEY) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function setGuestObserverAccepted() {
+        try { localStorage.setItem(GUEST_OBSERVER_ACCEPTED_KEY, '1'); } catch (e) {}
+    }
+
+    async function getActivePostsCountForGuestOverlay() {
+        const queryTimeout = 7000;
+        const withTimeout = (promiseFactory) => Promise.race([
+            promiseFactory(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Guest posts count timeout')), queryTimeout))
+        ]);
+
+        const candidates = [];
+        const isoNow = new Date().toISOString();
+        const msNow = Date.now();
+
+        try {
+            const { count, error } = await withTimeout(() => _sb.from('markers').select('id', { head: true, count: 'exact' }).gt('exp', isoNow));
+            if (!error && Number.isFinite(Number(count))) candidates.push(Number(count));
+        } catch (e) {}
+
+        try {
+            const { count, error } = await withTimeout(() => _sb.from('markers').select('id', { head: true, count: 'exact' }).gt('exp', msNow));
+            if (!error && Number.isFinite(Number(count))) candidates.push(Number(count));
+        } catch (e) {}
+
+        if (candidates.length > 0) {
+            return Math.max(...candidates);
+        }
+
+        try {
+            const { data, error } = await withTimeout(() => _sb.from('markers').select('exp'));
+            if (error || !Array.isArray(data)) return null;
+            const count = data.filter((marker) => {
+                const exp = marker?.exp;
+                if (exp === null || typeof exp === 'undefined') return true;
+                if (typeof exp === 'number') return exp > msNow;
+                const parsed = Date.parse(exp);
+                return Number.isFinite(parsed) ? parsed > msNow : true;
+            }).length;
+            return count;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function showGuestObserverOverlay() {
+        const overlay = document.getElementById('guestObserverOverlay');
+        const postsEl = document.getElementById('guestObserverPostsCount');
+        if (!overlay || !postsEl) return;
+
+        overlay.style.display = 'flex';
+        postsEl.textContent = '📍 Загрузка активных постов...';
+
+        const count = await getActivePostsCountForGuestOverlay();
+        if (count === null) {
+            postsEl.textContent = '📍 — активных постов';
+            return;
+        }
+        postsEl.textContent = `📍 ${count} активных постов`;
+    }
+
+    function hideGuestObserverOverlay() {
+        const overlay = document.getElementById('guestObserverOverlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    function continueAsGuestObserver() {
+        setGuestObserverAccepted();
+        hideGuestObserverOverlay();
+        try { document.getElementById('tgAuthOverlay').style.display = 'none'; } catch (e) {}
+        try { hideSplashScreenImmediately(); } catch (e) {}
+        initAppInProgress = false;
+        initApp();
     }
 
     // Открыть бот в Telegram (пытаемся сначала tg://, затем https://)
@@ -4465,6 +4667,18 @@
         return subscription;
     }
 
+    function withTimeout(promise, timeoutMs, timeoutMessage) {
+        const t = Number(timeoutMs || 0);
+        if (!Number.isFinite(t) || t <= 0) return promise;
+        let timer = null;
+        const timeoutPromise = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error(timeoutMessage || 'Операция превысила время ожидания')), t);
+        });
+        return Promise.race([promise, timeoutPromise]).finally(() => {
+            if (timer) clearTimeout(timer);
+        });
+    }
+
     async function enableWebPush() {
         if (!('serviceWorker' in navigator)) throw new Error('Service Worker не поддерживается в этом окружении');
         if (!('PushManager' in window)) throw new Error('PushManager не поддерживается (Web Push недоступен)');
@@ -4475,21 +4689,37 @@
 
         let permission = Notification.permission;
         if (permission === 'default') {
-            permission = await Notification.requestPermission();
+            permission = await withTimeout(
+                Notification.requestPermission(),
+                12000,
+                'iPhone не показал окно разрешения. Откройте PWA с экрана Домой и проверьте разрешения уведомлений в iOS.'
+            );
         }
         if (permission !== 'granted') {
             throw new Error('Нет разрешения на уведомления (Notification.permission != granted)');
         }
 
-        const reg = await navigator.serviceWorker.ready;
-        const existing = await reg.pushManager.getSubscription();
+        const reg = await withTimeout(
+            navigator.serviceWorker.ready,
+            12000,
+            'Service Worker не активировался вовремя. Перезапустите PWA и попробуйте снова.'
+        );
+        const existing = await withTimeout(
+            reg.pushManager.getSubscription(),
+            10000,
+            'Не удалось получить текущую push-подписку. Попробуйте снова.'
+        );
         if (existing) {
             storePushSubscription(existing.toJSON());
             saveWebPushSubscriptionOnServer(existing.toJSON()).catch(()=>{});
             return existing;
         }
 
-        const sub = await subscribeUserToPush(reg, WEB_PUSH_VAPID_PUBLIC_KEY);
+        const sub = await withTimeout(
+            subscribeUserToPush(reg, WEB_PUSH_VAPID_PUBLIC_KEY),
+            15000,
+            'Подписка на push зависла. Проверьте интернет и разрешения iOS, затем повторите.'
+        );
 
         console.log('Web Push subscription created:', sub.toJSON());
         return sub;
@@ -8087,15 +8317,20 @@
         const env = await checkAppEnvironment();
         const isTelegram = !!env?.isTelegram;
         const authedToken = env?.token;
+        const allowGuest = !!env?.allowGuest;
         const overlay = document.getElementById('tgAuthOverlay');
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
         const displayUser = isTelegram ? tgUser : siteTelegramUser;
 
-        // Если токена нет — пользователь должен войти через Telegram (модалка уже показана)
-        if (!authedToken) {
-            if (overlay) overlay.style.display = 'flex';
+        // Если токена нет и гость не разрешен — останавливаем init (нужен выбор на оверлее)
+        if (!authedToken && !allowGuest) {
             initAppInProgress = false;
             return;
+        }
+
+        // Гостевой режим: прячем auth overlay, но не требуем токен
+        if (!authedToken && allowGuest) {
+            if (overlay) overlay.style.display = 'none';
         }
 
         // Если токен есть — определяем админа по Telegram ID (и в Mini App, и в Web/PWA)
