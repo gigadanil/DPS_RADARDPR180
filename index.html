@@ -3476,8 +3476,14 @@
     }
 
     function recomputeV3Access() {
-        canUseV3Engine = !!(isAdmin || currentProfileRole === 'admin' || currentProfileIsTester === true);
+        const adminPrivileged = !!(isAdmin || currentProfileRole === 'admin');
+        try { window.isAdmin = adminPrivileged; } catch (e) {}
+        canUseV3Engine = !!(adminPrivileged || currentProfileIsTester === true);
         return canUseV3Engine;
+    }
+
+    function hasAdminPrivileges() {
+        return !!(isAdmin || currentProfileRole === 'admin');
     }
 
     async function refreshCurrentProfileRbac(force = false) {
@@ -8333,10 +8339,12 @@
             if (overlay) overlay.style.display = 'none';
         }
 
-        // Если токен есть — определяем админа по Telegram ID (и в Mini App, и в Web/PWA)
+        // Если токен есть — определяем админ-права (по Telegram ID и по роли профиля)
         isAdmin = !!uid && String(uid) === String(ADMIN_ID);
         await refreshCurrentProfileRbac(true);
-        if (isAdmin) {
+        isAdmin = !!(isAdmin || currentProfileRole === 'admin');
+        recomputeV3Access();
+        if (hasAdminPrivileges()) {
             try { hideReleaseWaitScreen(); } catch (e) {}
         }
 
@@ -11190,11 +11198,15 @@
     }
 
     async function expireMarkerById(markerId) {
-        return _sb.from('markers').update({ exp: Date.now() }).eq('id', markerId);
+        const result = await _sb.from('markers').update({ exp: Date.now() }).eq('id', markerId);
+        if (result?.error) throw result.error;
+        return result;
     }
 
     async function expireMarkersByAuthor(authorId) {
-        return _sb.from('markers').update({ exp: Date.now() }).eq('author_id', authorId);
+        const result = await _sb.from('markers').update({ exp: Date.now() }).eq('author_id', authorId);
+        if (result?.error) throw result.error;
+        return result;
     }
 
 
@@ -11232,7 +11244,7 @@
 
     // Функция удаления маркера (админ)
     async function deleteMarkerAdmin(markerId) {
-        if (!isAdmin) {
+        if (!hasAdminPrivileges()) {
             alert('У вас нет доступа к этой операции');
             return;
         }
@@ -12758,10 +12770,21 @@
         }
 
         try {
-            let token = localStorage.getItem('sb_jwt') || '';
+            const callEnroute = async (jwtToken) => {
+                return fetch(`${SUPABASE_URL}/functions/v1/sos-enroute?action=add`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${String(jwtToken || '').trim()}`
+                    },
+                    body: JSON.stringify({ markerId: Number(markerId) })
+                });
+            };
+
+            let token = String(localStorage.getItem('sb_jwt') || '').trim();
             if (!token) {
                 const refreshed = await ensureSupabaseAuth();
-                token = refreshed || localStorage.getItem('sb_jwt') || '';
+                token = String(refreshed || localStorage.getItem('sb_jwt') || '').trim();
             }
 
             if (!token) {
@@ -12769,14 +12792,20 @@
                 return;
             }
 
-            const resp = await fetch(`${SUPABASE_URL}/functions/v1/sos-enroute?action=add`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({ markerId: Number(markerId) })
-            });
+            let resp = await callEnroute(token);
+
+            if (resp.status === 401) {
+                try {
+                    localStorage.removeItem('sb_jwt');
+                    localStorage.removeItem('sb_jwt_exp');
+                } catch (e) {}
+
+                const refreshed = await ensureSupabaseAuth();
+                const refreshedToken = String(refreshed || localStorage.getItem('sb_jwt') || '').trim();
+                if (refreshedToken) {
+                    resp = await callEnroute(refreshedToken);
+                }
+            }
 
             if (!resp.ok) {
                 let txt = '';
@@ -12796,12 +12825,16 @@
 
     // Функция удаления маркера (только для автора)
     window.delMarker = async (id) => {
-        if (confirm("Удалить вашу метку?")) {
+        const canDeleteAsAdmin = hasAdminPrivileges();
+        const prompt = canDeleteAsAdmin ? "Удалить эту метку?" : "Удалить вашу метку?";
+        if (!confirm(prompt)) return;
+
+        try {
             await expireMarkerById(id);
-            // Закрываем всплывающий балун
-            myMap.balloon.close();
-            // Обновляем список маркеров на карте
+            if (myMap?.balloon) myMap.balloon.close();
             loadMarkers();
+        } catch (e) {
+            alert('Ошибка удаления: ' + (e?.message || e));
         }
     };
 
@@ -14153,7 +14186,7 @@
                 ${sosEnrouteBtnHtml ? `<div style="margin-top: 8px; display: flex; gap: 5px;">${sosEnrouteBtnHtml}</div>` : ''}
                 ${confirmationBar}
                 ${sosEnrouteInfoHtml}
-                ${isOwner ? `<button class="b-del" onclick="window.delMarker(${m.id})">Удалить</button>` : ''}
+                ${(isOwner || hasAdminPrivileges()) ? `<button class="b-del" onclick="window.delMarker(${m.id})">Удалить</button>` : ''}
                 ${reportButtonHtml}
             </div>`;
             // Определяем доверие автора и добавляем звездочку к иконке, если он проверен
@@ -14307,7 +14340,7 @@
 
         // Функция открытия модального окна модерации (вызывается при клике на имя автора в маркере)
         window.showUserModeratorMenuFromMarker = function(userId, userName) {
-            if (!window.isAdmin) {
+            if (!hasAdminPrivileges()) {
                 console.warn('Доступ запрещён: только для администраторов');
                 return;
             }
@@ -14376,6 +14409,10 @@
 
         // Функция бана пользователя с указанной длительностью (в часах)
         async function banUserWithDuration(hours) {
+            if (!hasAdminPrivileges()) {
+                alert('Доступ запрещён: только для администраторов');
+                return;
+            }
             if (!currentModeratingUserId) {
                 alert('Ошибка: не выбран пользователь для модерации');
                 return;
@@ -14444,6 +14481,10 @@
 
         // Функция бана пользователя
         async function banUser(banType) {
+            if (!hasAdminPrivileges()) {
+                alert('Доступ запрещён: только для администраторов');
+                return;
+            }
             if (!currentModeratingUserId) {
                 alert('Ошибка: не выбран пользователь для модерации');
                 return;
