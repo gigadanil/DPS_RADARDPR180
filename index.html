@@ -822,6 +822,7 @@
         }
 
         .right-bar .action-btn {
+            position: relative;
             width: 50px;
             height: 50px;
             border-radius: 50%;
@@ -1688,6 +1689,7 @@
         <button class="action-btn" id="ccCourseBtn" onclick="toggleDynamicCourseFromUI()" title="Динамический курс" aria-label="Динамический курс" style="display:none;">🧭</button>
         <button class="action-btn" id="ccVoiceBtn" onclick="toggleMonolithVoiceFromUI()" title="Голосовой штурман" aria-label="Голосовой штурман">🔊</button>
         <button class="action-btn" id="ccChatBtn" onclick="openChatModal()" title="Чат" aria-label="Чат">💬</button>
+        <button class="action-btn" id="ccNotifBtn" onclick="openNotificationsDrawer()" title="Уведомления" aria-label="Уведомления">🔔<span id="notifUnreadBadge" class="notif-badge"></span></button>
         <button class="action-btn" id="ccActivityBtn" onclick="openActivityModal('dpsSpecbatMonth')" title="Активность ДПС/Спецбат" aria-label="Активность ДПС/Спецбат">👮🛡️</button>
     </div>
 
@@ -8074,20 +8076,10 @@
         if (initAppInProgress) return;
         initAppInProgress = true;
 
-        // ПЕРВАЯ ПРОВЕРКА: Нужен ли код приглашения для ЗБТ?
-        const hasBetaAccess = localStorage.getItem('beta_access_granted') === 'true';
-        if (!hasBetaAccess) {
-            // Показываем экран ввода кода
-            const betaOverlay = document.getElementById('betaInviteOverlay');
-            if (betaOverlay) betaOverlay.style.display = 'flex';
-            // Скрываем splash screen
-            const splash = document.getElementById('splashScreen');
-            if (splash) splash.classList.add('hidden');
-            initAppInProgress = false;
-            return;
-        }
+        // ЗБТ-ограничение отключено: доступ открыт всем пользователям
+        try { localStorage.setItem('beta_access_granted', 'true'); } catch (e) {}
 
-        // Если бета-доступ есть - скрываем overlay
+        // Скрываем overlay ЗБТ при любом входе
         const betaOverlay = document.getElementById('betaInviteOverlay');
         if (betaOverlay) betaOverlay.style.display = 'none';
 
