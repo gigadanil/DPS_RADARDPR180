@@ -3483,6 +3483,7 @@
     const MAP_3D_TILT_DEG = 65;
     const MARKER_INSERT_NO_TS_EXP_KEY = 'markerInsertNoTsExp';
     const HELP_NOTIFY_AUTH_COOLDOWN_UNTIL_KEY = 'helpNotifyAuthCooldownUntil';
+    const SOS_ENROUTE_AUTH_COOLDOWN_UNTIL_KEY = 'sosEnrouteAuthCooldownUntil';
     // Порог подтверждений "уехали" для автоудаления метки
     const MARKER_LEAVE_THRESHOLD = 3; // если 3 человека нажали "Уехали" - метка удаляется
     // Флаг для проверки, является ли пользователь админом
@@ -3497,6 +3498,7 @@
     let markersRealtimeTimer = null;
     let messagesRealtimeTimer = null;
     let adminInvisibleIntervalId = null;
+    let profilesTableUnavailable = false;
     // Флаг: открыт ли собственный профиль (для блокировки настроек в чужом профиле)
     let isViewingOwnProfile = true;
     // Флаг инициализации приложения (чтобы не вызывать initApp повторно)
@@ -3541,6 +3543,12 @@
             return recomputeV3Access();
         }
 
+        if (profilesTableUnavailable) {
+            currentProfileRole = null;
+            currentProfileIsTester = false;
+            return recomputeV3Access();
+        }
+
         if (!force && (currentProfileRole !== null || currentProfileIsTester === true)) {
             return recomputeV3Access();
         }
@@ -3564,6 +3572,10 @@
             if (!query?.error) {
                 profile = query?.data || null;
             } else {
+                const errText = String(query.error?.message || query.error || '').toLowerCase();
+                if (errText.includes('could not find the table') || errText.includes("relation 'profiles' does not exist") || errText.includes('schema cache')) {
+                    profilesTableUnavailable = true;
+                }
                 console.warn('profiles RBAC read failed:', query.error?.message || query.error);
             }
         } catch (e) {
@@ -12797,6 +12809,24 @@
         return `${m} ${w}`;
     }
 
+    function getSosEnrouteAuthCooldownUntil() {
+        try {
+            return Number(localStorage.getItem(SOS_ENROUTE_AUTH_COOLDOWN_UNTIL_KEY) || 0) || 0;
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    function setSosEnrouteAuthCooldown(msFromNow = 120000) {
+        const until = Date.now() + Math.max(1000, Number(msFromNow) || 120000);
+        try { localStorage.setItem(SOS_ENROUTE_AUTH_COOLDOWN_UNTIL_KEY, String(until)); } catch (e) {}
+        return until;
+    }
+
+    function clearSosEnrouteAuthCooldown() {
+        try { localStorage.removeItem(SOS_ENROUTE_AUTH_COOLDOWN_UNTIL_KEY); } catch (e) {}
+    }
+
     function getMarkerAgeMinutes(marker) {
         try {
             const tsMs = (typeof parseMarkerTimestampToMs === 'function') ? parseMarkerTimestampToMs(marker?.ts) : NaN;
@@ -12843,6 +12873,7 @@
             let resp = await callEnroute(token);
 
             if (resp.status === 401) {
+                setSosEnrouteAuthCooldown(120000);
                 try {
                     localStorage.removeItem('sb_jwt');
                     localStorage.removeItem('sb_jwt_exp');
@@ -12861,6 +12892,8 @@
                 alert('Ошибка: ' + (txt || String(resp.status)));
                 return;
             }
+
+            clearSosEnrouteAuthCooldown();
 
             alert('🚑 Отмечено! Вы в пути.');
             try { if (myMap && myMap.balloon) myMap.balloon.close(); } catch(e) {}
@@ -14104,6 +14137,9 @@
                 .filter(n => Number.isFinite(n) && n > 0);
 
             if (sosIds.length > 0) {
+                if (Date.now() < getSosEnrouteAuthCooldownUntil()) {
+                    // Недавний 401: временно не спамим повторными запросами до следующего окна.
+                } else {
                 let token = getValidStoredUserJwt(60);
                 if (!token) {
                     const refreshed = await ensureSupabaseAuth();
@@ -14122,6 +14158,7 @@
 
                     let resp = await callSosList(token);
                     if (resp.status === 401) {
+                        setSosEnrouteAuthCooldown(120000);
                         try {
                             localStorage.removeItem('sb_jwt');
                             localStorage.removeItem('sb_jwt_exp');
@@ -14134,6 +14171,7 @@
                     }
 
                     if (resp.ok) {
+                        clearSosEnrouteAuthCooldown();
                         const payload = await resp.json();
                         const byMarker = payload?.byMarker || {};
 
@@ -14152,6 +14190,7 @@
                             });
                         });
                     }
+                }
                 }
             }
         } catch (e) {}
