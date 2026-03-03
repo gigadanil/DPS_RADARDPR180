@@ -2774,11 +2774,33 @@
         return Number.isFinite(exp) ? exp : 0;
     }
 
+    function getSupabaseAuthIssuerPrefix() {
+        try {
+            const origin = new URL(String(SUPABASE_URL || '')).origin;
+            if (!origin) return '';
+            return `${origin}/auth/v1`;
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function isTokenForCurrentSupabaseProject(payload) {
+        if (!payload || typeof payload !== 'object') return false;
+        const issuer = String(payload?.iss || '').trim();
+        const aud = String(payload?.aud || '').trim().toLowerCase();
+        const expectedIssuerPrefix = getSupabaseAuthIssuerPrefix();
+        if (!expectedIssuerPrefix) return false;
+        if (!issuer || !issuer.startsWith(expectedIssuerPrefix)) return false;
+        if (aud && aud !== 'authenticated') return false;
+        return true;
+    }
+
     function isValidUserJwt(token, minTtlSec = 60) {
         const raw = String(token || '').trim();
         if (!raw || raw.split('.').length !== 3) return false;
         const payload = parseJwtPayload(raw);
         if (!payload || typeof payload !== 'object') return false;
+        if (!isTokenForCurrentSupabaseProject(payload)) return false;
         const role = String(payload?.role || '').trim().toLowerCase();
         const sub = String(payload?.sub || '').trim();
         const exp = Number(payload?.exp || 0);
@@ -2806,12 +2828,17 @@
         }
     }
 
+    let supabaseClientSequence = 0;
+
     function createSupabaseClient(token = null) {
+        supabaseClientSequence += 1;
+        const storageSuffix = token ? 'auth' : 'anon';
         const options = {
             auth: {
                 persistSession: false,
                 autoRefreshToken: false,
-                detectSessionInUrl: false
+                detectSessionInUrl: false,
+                storageKey: `sd180-${storageSuffix}-${supabaseClientSequence}`
             }
         };
         if (token) {
@@ -2891,9 +2918,17 @@
     }
 
     let ensureSupabaseAuthPromise = null;
-    async function ensureSupabaseAuth() {
+    async function ensureSupabaseAuth(forceRefresh = false) {
+        if (forceRefresh) {
+            try {
+                localStorage.removeItem('sb_jwt');
+                localStorage.removeItem('sb_jwt_exp');
+            } catch (e) {}
+            currentSupabaseToken = '';
+        }
+
         const cachedToken = getValidStoredUserJwt(60);
-        if (cachedToken) {
+        if (!forceRefresh && cachedToken) {
             setSupabaseAuth(cachedToken);
             try {
                 const storedUid = localStorage.getItem('site_uid');
@@ -2902,7 +2937,7 @@
             return cachedToken;
         }
 
-        if (ensureSupabaseAuthPromise) {
+        if (!forceRefresh && ensureSupabaseAuthPromise) {
             return ensureSupabaseAuthPromise;
         }
 
@@ -3717,6 +3752,7 @@
     let loadMarkersTimeout = null;
     let loadMarkersInFlight = false;
     let loadMarkersPending = false;
+    let renderedMarkersSignature = new Map(); // marker_id -> render signature
 
     function isAdminUserId(userId) {
         return String(userId) === String(ADMIN_ID);
@@ -7429,6 +7465,7 @@
         markersCollection = new ymaps.GeoObjectCollection();
         myMap.geoObjects.add(markersCollection);
         mapAdapter = createMapAdapter(activeMapEngine, myMap, markersCollection);
+        renderedMarkersSignature = new Map();
         updateMapEngineBadge();
         updateMap3dToggleUi();
 
@@ -7440,11 +7477,17 @@
     function createMapAdapter(engine, map, markerCollection) {
         let runtimeMode = String(engine || 'ymaps2');
         const ym3Markers = [];
+        const markerRegistry = new Map();
         const ym3ActionEndHandlers = [];
         const ym3ActionStartHandlers = [];
         const ym3ClickHandlers = [];
         let ym3ListenerEntity = null;
         let ym3MapInAction = false;
+
+        function normalizeMarkerId(value) {
+            if (value === null || typeof value === 'undefined') return '';
+            return String(value).trim();
+        }
 
         function forceLegacyFromYm3(reason = '') {
             if (runtimeMode !== 'ymaps3-compat') return;
@@ -7633,6 +7676,8 @@
                 const parent = map.__ym3MarkerLayer || map.__ym3Root;
                 parent.addChild(marker);
                 ym3Markers.push({ marker, parent });
+                const markerId = normalizeMarkerId(descriptor?.markerData?.id ?? descriptor?.id);
+                if (markerId) markerRegistry.set(markerId, { engine: 'ym3', marker, parent });
                 return true;
             } catch (e) {
                 forceLegacyFromYm3(e?.message || 'ymaps3 marker error');
@@ -7651,15 +7696,72 @@
                             const entry = ym3Markers.pop();
                             try { entry?.parent?.removeChild(entry?.marker); } catch (e) {}
                         }
+                        markerRegistry.clear();
                         return;
                     }
                     if (this.markerCollection && typeof this.markerCollection.removeAll === 'function') this.markerCollection.removeAll();
+                    markerRegistry.clear();
                 } catch (e) {}
+            },
+            removeMarkerById(markerId) {
+                try {
+                    const id = normalizeMarkerId(markerId);
+                    if (!id) return false;
+                    const entry = markerRegistry.get(id);
+                    if (!entry) return false;
+
+                    if (entry.engine === 'ym3') {
+                        try { entry?.parent?.removeChild(entry?.marker); } catch (e) {}
+                        const idx = ym3Markers.findIndex(item => item?.marker === entry?.marker);
+                        if (idx >= 0) ym3Markers.splice(idx, 1);
+                    } else if (this.markerCollection && typeof this.markerCollection.remove === 'function') {
+                        try { this.markerCollection.remove(entry.marker); } catch (e) {}
+                    }
+
+                    markerRegistry.delete(id);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            },
+            updateMarkerById(markerId, descriptor = null) {
+                try {
+                    const id = normalizeMarkerId(markerId);
+                    if (!id) return false;
+                    if (runtimeMode === 'ymaps3-compat') return false;
+
+                    const entry = markerRegistry.get(id);
+                    if (!entry || entry.engine !== 'ym2' || !entry.marker) return false;
+
+                    const y2Coords = Array.isArray(descriptor?.coordsY2)
+                        ? descriptor.coordsY2
+                        : (Array.isArray(descriptor?.coords) && descriptor.coords.length >= 2
+                            ? [Number(descriptor.coords[1]), Number(descriptor.coords[0])]
+                            : null);
+
+                    if (y2Coords && y2Coords.length >= 2 && entry.marker?.geometry?.setCoordinates) {
+                        entry.marker.geometry.setCoordinates([Number(y2Coords[0]), Number(y2Coords[1])]);
+                    }
+
+                    if (entry.marker?.properties?.set) {
+                        entry.marker.properties.set('balloonContent', String(descriptor?.balloonHtml || ''));
+                        entry.marker.properties.set('iconContent', String(descriptor?.iconContent || descriptor?.icon || '📍'));
+                        if (descriptor?.hint) entry.marker.properties.set('hintContent', String(descriptor.hint));
+                    }
+
+                    return true;
+                } catch (e) {
+                    return false;
+                }
             },
             addMarker(marker, descriptor = null) {
                 try {
+                    const markerId = normalizeMarkerId(descriptor?.markerData?.id ?? descriptor?.id);
+                    if (markerId) this.removeMarkerById(markerId);
+
                     if (runtimeMode === 'ymaps3-compat' && addYmaps3MarkerFromDescriptor(descriptor)) return;
                     if (this.markerCollection && typeof this.markerCollection.add === 'function') this.markerCollection.add(marker);
+                    if (markerId) markerRegistry.set(markerId, { engine: 'ym2', marker });
                 } catch (e) {}
             },
             getCenter() {
@@ -10187,7 +10289,8 @@
                 localStorage.removeItem('sb_jwt_exp');
             } catch (e) {}
             try {
-                const refreshed = await ensureSupabaseAuth();
+                clearSupabaseAuth();
+                const refreshed = await ensureSupabaseAuth(true);
                 if (refreshed && String(refreshed).split('.').length === 3) {
                     token = String(refreshed);
                     resp = await callEdge(token);
@@ -14086,10 +14189,6 @@
             counterEl.innerHTML = counterHTML;
         }
 
-        // Удаляем только маркеры, которые мы рендерим (не трогаем userLocationMarker и служебные объекты)
-        if (mapAdapter && typeof mapAdapter.clearMarkers === 'function') mapAdapter.clearMarkers();
-        else if (markersCollection) markersCollection.removeAll();
-
         // Подготовим данные об авторах (имя, likes_sum, is_trusted)
         const authorIds = Array.from(new Set(renderMarkers.map(m => String(m.author_id))));
         const authorsInfoMap = {}; // user_id -> { name, likes_sum, is_trusted }
@@ -14195,9 +14294,31 @@
             }
         } catch (e) {}
 
+        const nextRenderedIds = new Set(
+            renderMarkers
+                .map(item => String(item?.id || '').trim())
+                .filter(Boolean)
+        );
+
+        if (renderedMarkersSignature && renderedMarkersSignature.size > 0) {
+            for (const existingId of Array.from(renderedMarkersSignature.keys())) {
+                if (!nextRenderedIds.has(existingId)) {
+                    if (mapAdapter && typeof mapAdapter.removeMarkerById === 'function') {
+                        mapAdapter.removeMarkerById(existingId);
+                    }
+                    renderedMarkersSignature.delete(existingId);
+                    distanceNotifications.delete(existingId);
+                    distanceNotifications.delete(Number(existingId));
+                }
+            }
+        }
+
         // Для каждого маркера создаем объект на карте
         renderMarkers.forEach(m => {
             try {
+            const markerId = String(m?.id || '').trim();
+            if (!markerId) return;
+
             // Получаем ID автора в начале цикла
             const authorId = String(m.author_id);
             
@@ -14265,6 +14386,32 @@
                 ? `<button class="b-poll-btn" onclick="window.sosEnroute(${m.id})" style="flex: 1; background: var(--blue); color: white; font-weight: 900;">🚑 Я в пути</button>`
                 : '';
 
+            const renderSignature = JSON.stringify({
+                id: markerId,
+                type: String(m?.type || ''),
+                comment: String(m?.comment || ''),
+                photo: String(m?.photo_url || ''),
+                up: Number(m?.votes_up || 0),
+                down: Number(m?.votes_down || 0),
+                leave: Number(m?.leave_confirmations || 0),
+                exp: String(m?.exp ?? ''),
+                ts: String(m?.ts ?? ''),
+                lat: Number(normalizedCoords.lat),
+                lon: Number(normalizedCoords.lon),
+                author: authorId,
+                authorName: String(authorInfo?.name || ''),
+                authorLikes: Number(authorInfo?.likes_sum || 0),
+                authorTrusted: !!authorInfo?.is_trusted,
+                adminStyle: !!showAdminStyle,
+                adminInvisible: !!adminInvisible,
+                sosCount: Number(sosEnrouteCount || 0),
+                sosNames: sosEnrouteNames.join('|')
+            });
+            const prevSignature = renderedMarkersSignature.get(markerId);
+            if (prevSignature === renderSignature) {
+                return;
+            }
+
             const bHtml = `<div class="b-cont">
                 <div style="font-size:13px; margin-bottom:6px; color:#222; cursor: ${window.isAdmin ? 'pointer' : 'default'}; padding: 4px; border-radius: 4px; transition: all 0.2s;" onmouseover="${window.isAdmin ? `this.style.background='#f0f0f5'; this.style.transform='scale(1.02)'` : ''}" onmouseout="${window.isAdmin ? `this.style.background=''; this.style.transform='scale(1)'` : ''}" onclick="${window.isAdmin ? `window.showUserModeratorMenuFromMarker(${m.author_id}, '${(authorInfo.name || 'Пользователь').replace(/'/g, "\\'")}')` : ''}">${authorNameHtml} ${authorBadgesHtml}</div>
                 ${adminOnlineHtml}
@@ -14296,13 +14443,12 @@
                 : (isSpecbatMarker
                     ? `<div class="specbat-marker" title="Спецбат">${MAP_ICONS[m.type]}<span class="specbat-badge">SB</span></div>`
                     : `<div style="background:white; border-radius:50%; width:30px; height:30px; display:flex; align-items:center; justify-content:center; border:2px solid ${isTrustedAuthor ? '#b8860b' : 'var(--blue)'}; font-size:18px; position: relative;">${MAP_ICONS[m.type]}${isTrustedAuthor ? '<span style=\"position:absolute; top:-6px; right:-6px; font-size:12px;\">⭐</span>' : ''}</div>`);
-            // Создаем маркер с иконкой и балуном
-            const iconSize = showAdminStyle ? 34 : (isSpecbatMarker ? 34 : 30);
-            const p = new ymaps.Placemark(markerCoordsForMap, { balloonContent: bHtml, iconContent: iconInner }, 
-            { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
             const markerDescriptor = {
+                id: markerId,
                 coords: [Number(normalizedCoords.lon), Number(normalizedCoords.lat)],
+                coordsY2: markerCoordsForMap,
                 icon: MAP_ICONS[m.type] || '📍',
+                iconContent: iconInner,
                 hint: `${getMarkerLabel(m.type)}${m.comment ? ` • ${String(m.comment).slice(0, 48)}` : ''}`,
                 balloonHtml: bHtml,
                 author_role: showAdminStyle ? 'admin' : 'user',
@@ -14314,9 +14460,22 @@
                     balloonHtml: bHtml
                 }
             };
-            // Добавляем маркер в коллекцию
-            if (mapAdapter && typeof mapAdapter.addMarker === 'function') mapAdapter.addMarker(p, markerDescriptor);
-            else if (markersCollection) markersCollection.add(p);
+            let markerUpdatedInPlace = false;
+            if (mapAdapter && typeof mapAdapter.updateMarkerById === 'function') {
+                markerUpdatedInPlace = mapAdapter.updateMarkerById(markerId, markerDescriptor) === true;
+            }
+
+            if (!markerUpdatedInPlace) {
+                // Создаем маркер с иконкой и балуном
+                const iconSize = showAdminStyle ? 34 : (isSpecbatMarker ? 34 : 30);
+                const p = new ymaps.Placemark(markerCoordsForMap, { balloonContent: bHtml, iconContent: iconInner },
+                { iconLayout: 'default#imageWithContent', iconImageHref: '', iconImageSize: [iconSize, iconSize], iconImageOffset: [-(iconSize/2), -(iconSize/2)] });
+
+                // Добавляем маркер в коллекцию
+                if (mapAdapter && typeof mapAdapter.addMarker === 'function') mapAdapter.addMarker(p, markerDescriptor);
+                else if (markersCollection) markersCollection.add(p);
+            }
+            renderedMarkersSignature.set(markerId, renderSignature);
             
             // Проверяем расстояние до маркера и выдаем уведомление если нужно
             checkMarkerDistance(m, userCoords);
