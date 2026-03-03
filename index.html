@@ -5843,9 +5843,34 @@
     let monolithTtsResumeTimerId = null;
     let monolithAudioPrimed = false;
     let monolithUserGestureUnlocked = false;
+    let monolithVoiceUnlockHintShown = false;
 
     // very small silent WAV (short) as data URI
     const MONOLITH_SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
+
+    function monolithIsIosPwa() {
+        try {
+            const ua = String(navigator.userAgent || '');
+            const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const standalone = !!(window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches);
+            return isIOS && standalone;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function monolithNotifyVoiceUnlockNeeded() {
+        if (monolithVoiceUnlockHintShown) return;
+        monolithVoiceUnlockHintShown = true;
+        const msg = 'iPhone PWA: нажмите 🔊 один раз, чтобы разблокировать ИИ-озвучку.';
+        try {
+            if (typeof showInAppNotification === 'function') {
+                showInAppNotification({ title: '🔓 Разблокировка озвучки', body: msg, priority: 'normal' });
+                return;
+            }
+        } catch (e) {}
+        try { console.info(msg); } catch (e) {}
+    }
 
     function isMonolithVoiceEnabled() {
         return !!monolithVoiceEnabled;
@@ -5959,6 +5984,11 @@
         if (!isMonolithVoiceEnabled()) return;
         if (!window.speechSynthesis) return;
 
+        if (!monolithUserGestureUnlocked) {
+            if (monolithIsIosPwa()) monolithNotifyVoiceUnlockNeeded();
+            return;
+        }
+
         monolithSoftResumeSpeech();
         monolithEnsureVoicesReady();
         monolithTtsQueue.push(t);
@@ -6036,8 +6066,11 @@
 
     function monolithPrimeAudioOnce(eventOrForce) {
         const forced = eventOrForce === true;
-        const trustedGesture = !!(eventOrForce && eventOrForce.isTrusted === true);
+        const fallbackEvent = (typeof window !== 'undefined') ? window.event : null;
+        const sourceEvent = (eventOrForce && eventOrForce !== true) ? eventOrForce : fallbackEvent;
+        const trustedGesture = !!(sourceEvent && sourceEvent.isTrusted === true);
         if (!forced && !trustedGesture) return;
+        if (!trustedGesture && forced && !monolithUserGestureUnlocked) return;
         if (monolithAudioPrimed) return;
         monolithUserGestureUnlocked = true;
 
@@ -8279,7 +8312,7 @@
             try { monolithStopKeepAliveAudio(); } catch (e) {}
             try { monolithReleaseWakeLock(); } catch (e) {}
         } else {
-            try { monolithPrimeAudioOnce(true); } catch (e) {}
+            try { monolithPrimeAudioOnce(window.event || true); } catch (e) {}
             try { monolithSoftResumeSpeech(); } catch (e) {}
             try { monolithMaybeUpdateWakeLock(); } catch (e) {}
         }
@@ -10232,6 +10265,8 @@
     // ============= ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ЗБТ КОДАМИ =============
 
     async function invokeAdminFunction(functionName, payload = {}) {
+        const hasTelegramInitData = () => !!String(window.Telegram?.WebApp?.initData || '').trim();
+
         const isTokenAliveInSupabaseAuth = async (jwtToken) => {
             const raw = String(jwtToken || '').trim();
             if (!raw || raw.split('.').length !== 3) return false;
@@ -10306,7 +10341,14 @@
         }
 
         if (!token) {
-            throw new Error('Токен авторизации истёк. Полностью перезапустите Mini App из Telegram и повторите действие.');
+            try {
+                if (!hasTelegramInitData()) {
+                    const overlay = document.getElementById('tgAuthOverlay');
+                    if (overlay) overlay.style.display = 'flex';
+                    ensureTelegramLoginWidgetRendered();
+                }
+            } catch (e) {}
+            throw new Error('Токен авторизации истёк. На iPhone PWA выполните вход через Telegram Login (оверлей), затем повторите действие.');
         }
 
         const callEdge = async (bearer) => {
@@ -10333,12 +10375,24 @@
         let resp = await callEdge(token);
         if (resp.status === 401) {
             try {
-                localStorage.removeItem('sb_jwt');
-                localStorage.removeItem('sb_jwt_exp');
+                if (hasTelegramInitData()) {
+                    localStorage.removeItem('sb_jwt');
+                    localStorage.removeItem('sb_jwt_exp');
+                }
             } catch (e) {}
             try {
-                clearSupabaseAuth();
-                const refreshed = await ensureSupabaseAuth(true);
+                let refreshed = null;
+                if (hasTelegramInitData()) {
+                    clearSupabaseAuth();
+                    refreshed = await ensureSupabaseAuth(true);
+                } else {
+                    refreshed = await ensureSupabaseAuth(false);
+                    if (!refreshed) {
+                        const overlay = document.getElementById('tgAuthOverlay');
+                        if (overlay) overlay.style.display = 'flex';
+                        ensureTelegramLoginWidgetRendered();
+                    }
+                }
                 if (refreshed && String(refreshed).split('.').length === 3) {
                     token = String(refreshed);
                     resp = await callEdge(token);
@@ -14143,8 +14197,11 @@
                 const errText = String(markersError?.message || markersError?.code || '').toLowerCase();
                 if (errText.includes('unauthorized') || errText.includes('jwt') || errText.includes('token') || String(markersError?.code || '') === '401') {
                     try {
-                        clearSupabaseAuth();
-                        const refreshed = await ensureSupabaseAuth(true);
+                        const hasInitData = !!String(window.Telegram?.WebApp?.initData || '').trim();
+                        if (hasInitData) {
+                            clearSupabaseAuth();
+                        }
+                        const refreshed = await ensureSupabaseAuth(hasInitData);
                         const refreshedToken = String(refreshed || '').trim();
                         if (refreshedToken && refreshedToken.split('.').length === 3) {
                             ({ data: markers, error: markersError } = await queryWithTimeout(queryMarkers));
@@ -14152,11 +14209,17 @@
                             markersError = new Error('Auth refresh required');
                             const overlay = document.getElementById('tgAuthOverlay');
                             if (overlay) overlay.style.display = 'flex';
+                            if (!hasInitData) ensureTelegramLoginWidgetRendered();
                         }
                     } catch (e) {
                         markersError = e || new Error('Auth refresh failed');
                         const overlay = document.getElementById('tgAuthOverlay');
                         if (overlay) overlay.style.display = 'flex';
+                        try {
+                            if (!String(window.Telegram?.WebApp?.initData || '').trim()) {
+                                ensureTelegramLoginWidgetRendered();
+                            }
+                        } catch (_) {}
                     }
                 }
             }
