@@ -6243,6 +6243,42 @@
         try { aiSpeak(t); } catch(e) {}
     }
 
+    function findNearestProximityCandidate(userCoords, maxDistanceMeters, excludeMarkerId = null) {
+        if (!Array.isArray(userCoords) || userCoords.length < 2) return null;
+        const lat = Number(userCoords[0]);
+        const lon = Number(userCoords[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+        const limit = Number(maxDistanceMeters);
+        if (!Number.isFinite(limit) || limit <= 0) return null;
+
+        const exclude = String(excludeMarkerId || '').trim();
+        let best = null;
+        const source = Array.isArray(rushHourLastActiveMarkers) ? rushHourLastActiveMarkers : [];
+        source.forEach(marker => {
+            const markerId = String(marker?.id || '').trim();
+            if (!markerId) return;
+            if (exclude && markerId === exclude) return;
+
+            const coords = extractMarkerCoordsForNotif(marker);
+            if (!coords) return;
+            const d = calculateDistance(lat, lon, Number(coords.lat), Number(coords.lon));
+            if (!Number.isFinite(d)) return;
+            if (d > limit) return;
+
+            if (!best || d < best.distance) {
+                best = {
+                    markerId,
+                    markerType: String(marker?.type || ''),
+                    markerCoords: [Number(coords.lat), Number(coords.lon)],
+                    distance: d
+                };
+            }
+        });
+
+        return best;
+    }
+
     let lastSmartHintCheckAt = 0;
     async function maybeCheckSmartHint(lat, lon) {
         try {
@@ -6302,7 +6338,26 @@
         if (!markerCoords || !Array.isArray(markerCoords) || markerCoords.length < 2) return;
 
         const currentId = proximityBannerState.markerId;
-        if (!currentId || currentId === markerId || distance < (proximityBannerState.lastDistance || Infinity)) {
+        const incomingId = String(markerId);
+        let shouldReplace = false;
+        if (!currentId || String(currentId) === incomingId) {
+            shouldReplace = true;
+        } else {
+            let currentDistanceNow = Number(proximityBannerState.lastDistance);
+            if (Array.isArray(userLocation) && userLocation.length >= 2 && Array.isArray(proximityBannerState.markerCoords) && proximityBannerState.markerCoords.length >= 2) {
+                const c = proximityBannerState.markerCoords;
+                currentDistanceNow = calculateDistance(Number(userLocation[0]), Number(userLocation[1]), Number(c[0]), Number(c[1]));
+            }
+
+            const incomingDistance = Number(distance);
+            const switchMarginMeters = 80;
+            if (!Number.isFinite(currentDistanceNow)) currentDistanceNow = Infinity;
+            if (Number.isFinite(incomingDistance) && incomingDistance <= (currentDistanceNow - switchMarginMeters)) {
+                shouldReplace = true;
+            }
+        }
+
+        if (shouldReplace) {
             proximityBannerState.markerId = markerId;
             proximityBannerState.markerType = markerType;
             proximityBannerState.markerCoords = markerCoords;
@@ -6324,16 +6379,30 @@
     }
 
     function refreshProximityBanner() {
-        if (!proximityBannerState.markerId || !proximityBannerState.markerCoords || !userLocation) return;
+        if (!userLocation) return;
+        const warningMax = getDynamicWarningMaxMeters();
+
+        if (!proximityBannerState.markerId || !proximityBannerState.markerCoords) {
+            const nearest = findNearestProximityCandidate(userLocation, warningMax);
+            if (nearest) {
+                setActiveProximityMarker(nearest.markerId, nearest.markerType, nearest.markerCoords, nearest.distance);
+            }
+            return;
+        }
+
         const coords = proximityBannerState.markerCoords;
         const lat = Number(coords[0]);
         const lon = Number(coords[1]);
         if (!isFinite(lat) || !isFinite(lon)) return;
 
         const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
-        const warningMax = getDynamicWarningMaxMeters();
 
         if (distance > warningMax) {
+            const nearest = findNearestProximityCandidate(userLocation, warningMax, proximityBannerState.markerId);
+            if (nearest) {
+                setActiveProximityMarker(nearest.markerId, nearest.markerType, nearest.markerCoords, nearest.distance);
+                return;
+            }
             clearActiveProximityMarker(proximityBannerState.markerId);
             return;
         }
