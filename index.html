@@ -10232,6 +10232,23 @@
     // ============= ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ЗБТ КОДАМИ =============
 
     async function invokeAdminFunction(functionName, payload = {}) {
+        const isTokenAliveInSupabaseAuth = async (jwtToken) => {
+            const raw = String(jwtToken || '').trim();
+            if (!raw || raw.split('.').length !== 3) return false;
+            try {
+                const resp = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+                    method: 'GET',
+                    headers: {
+                        apikey: SUPABASE_KEY,
+                        Authorization: `Bearer ${raw}`
+                    }
+                });
+                return resp.ok;
+            } catch (e) {
+                return false;
+            }
+        };
+
         function getJwtExp(token) {
             try {
                 const parts = String(token || '').split('.');
@@ -10267,8 +10284,29 @@
             }
         }
 
+        if (token) {
+            const alive = await isTokenAliveInSupabaseAuth(token);
+            if (!alive) {
+                token = '';
+            }
+        }
+
         if (!token) {
-            throw new Error('Нет авторизации для админ‑функций. Откройте приложение через Telegram Mini App и попробуйте снова.');
+            try {
+                const refreshed = await ensureSupabaseAuth(true);
+                if (refreshed && String(refreshed).split('.').length === 3) {
+                    const refreshedToken = String(refreshed);
+                    if (await isTokenAliveInSupabaseAuth(refreshedToken)) {
+                        token = refreshedToken;
+                    }
+                }
+            } catch (e) {
+                token = '';
+            }
+        }
+
+        if (!token) {
+            throw new Error('Токен авторизации истёк. Полностью перезапустите Mini App из Telegram и повторите действие.');
         }
 
         const callEdge = async (bearer) => {
