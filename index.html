@@ -10310,6 +10310,14 @@
         }
 
         const callEdge = async (bearer) => {
+            const requestPayload = (() => {
+                const base = { ...(payload || {}) };
+                if (functionName === 'marker-delete') {
+                    base.access_token = String(bearer || '').trim();
+                }
+                return base;
+            })();
+
             return fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
                 method: 'POST',
                 headers: {
@@ -10317,7 +10325,7 @@
                     apikey: SUPABASE_KEY,
                     'Authorization': `Bearer ${bearer}`
                 },
-                body: JSON.stringify(payload || {})
+                body: JSON.stringify(requestPayload)
             });
         };
 
@@ -14133,8 +14141,22 @@
             if (markersError) {
                 const errText = String(markersError?.message || markersError?.code || '').toLowerCase();
                 if (errText.includes('unauthorized') || errText.includes('jwt') || errText.includes('token') || String(markersError?.code || '') === '401') {
-                    try { clearSupabaseAuth(); } catch (e) {}
-                    ({ data: markers, error: markersError } = await queryWithTimeout(queryMarkers));
+                    try {
+                        clearSupabaseAuth();
+                        const refreshed = await ensureSupabaseAuth(true);
+                        const refreshedToken = String(refreshed || '').trim();
+                        if (refreshedToken && refreshedToken.split('.').length === 3) {
+                            ({ data: markers, error: markersError } = await queryWithTimeout(queryMarkers));
+                        } else {
+                            markersError = new Error('Auth refresh required');
+                            const overlay = document.getElementById('tgAuthOverlay');
+                            if (overlay) overlay.style.display = 'flex';
+                        }
+                    } catch (e) {
+                        markersError = e || new Error('Auth refresh failed');
+                        const overlay = document.getElementById('tgAuthOverlay');
+                        if (overlay) overlay.style.display = 'flex';
+                    }
                 }
             }
 
