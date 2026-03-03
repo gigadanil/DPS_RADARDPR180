@@ -5985,8 +5985,11 @@
         if (!window.speechSynthesis) return;
 
         if (!monolithUserGestureUnlocked) {
-            if (monolithIsIosPwa()) monolithNotifyVoiceUnlockNeeded();
-            return;
+            if (monolithIsIosPwa()) {
+                monolithNotifyVoiceUnlockNeeded();
+                return;
+            }
+            try { monolithPrimeAudioOnce(true); } catch (e) {}
         }
 
         monolithSoftResumeSpeech();
@@ -6070,9 +6073,8 @@
         const sourceEvent = (eventOrForce && eventOrForce !== true) ? eventOrForce : fallbackEvent;
         const trustedGesture = !!(sourceEvent && sourceEvent.isTrusted === true);
         if (!forced && !trustedGesture) return;
-        if (!trustedGesture && forced && !monolithUserGestureUnlocked) return;
+        if (trustedGesture || forced) monolithUserGestureUnlocked = true;
         if (monolithAudioPrimed) return;
-        monolithUserGestureUnlocked = true;
 
         // Android/WebView: часто нужно "разбудить" speechSynthesis после user gesture.
         try {
@@ -6542,6 +6544,7 @@
             const distance = calculateDistance(userCoords[0], userCoords[1], mLat, mLon);
             const markerType = String(marker?.type || '');
             const userDistSetting = getUserDistSettingMeters();
+            const canShowBanner = followOkForBanner || (distance <= Math.max(userDistSetting, 350));
 
             if (distance <= Math.max(userDistSetting + 600, MONOLITH_SOS_PRIORITY_RADIUS_METERS + 300)) {
                 monolithResolveStreetForMarker(marker.id, mLat, mLon);
@@ -6598,7 +6601,7 @@
             return;
         }
 
-        if (followOkForBanner) {
+        if (canShowBanner) {
             if (distance <= warningMax) {
                 setActiveProximityMarker(markerId, marker.type, [mLat, mLon], distance);
             } else if (proximityBannerState.markerId === markerId) {
