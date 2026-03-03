@@ -11452,7 +11452,7 @@
 
         if (confirm('Удалить эту метку?')) {
             try {
-                await expireMarkerById(markerId);
+                await invokeAdminFunction('marker-delete', { marker_id: Number(markerId) });
                 alert('Метка удалена');
                 openAdminModal(); // Обновляем список
                 loadMarkers(); // Обновляем карту
@@ -13052,7 +13052,11 @@
         if (!confirm(prompt)) return;
 
         try {
-            await expireMarkerById(id);
+            if (canDeleteAsAdmin) {
+                await invokeAdminFunction('marker-delete', { marker_id: Number(id) });
+            } else {
+                await expireMarkerById(id);
+            }
             if (myMap?.balloon) myMap.balloon.close();
             loadMarkers();
         } catch (e) {
