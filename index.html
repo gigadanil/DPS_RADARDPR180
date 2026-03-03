@@ -2530,6 +2530,11 @@
                 <div id="supportTicketStatus" style="font-size:11px; color: var(--gray); margin-top:8px; text-align:center; min-height:14px;"></div>
             </div>
 
+            <div style="background:#f0f0f5; border-radius:12px; padding:12px; margin-bottom:15px; text-align:center;">
+                <div style="font-size:13px; font-weight:700; color:#000; margin-bottom:8px;">💖 Поддержать проект</div>
+                <iframe src="https://yoomoney.ru/quickpay/fundraise/button?billNumber=1G9DP4PHN6D.260303&" width="330" height="50" frameborder="0" allowtransparency="true" scrolling="no"></iframe>
+            </div>
+
             <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
                 <div style="font-size: 13px; font-weight: 700; color: #000; margin-bottom: 10px;">🗺️ Движок карты</div>
                 <button onclick="toggleMapEngineFromUI()" id="mapEngineSettingsBtn" class="main-btn" style="width:100%; background:#007aff; padding:10px; font-size:12px; border-radius:8px;">
@@ -2743,14 +2748,16 @@
     // Константы для подключения к Supabase базе данных
     const SUPABASE_URL = "https://phazbjchjhsruwalddis.supabase.co";
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBoYXpiamNoamhzcnV3YWxkZGlzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxNDcyNjQsImV4cCI6MjA4NTcyMzI2NH0.juQSLL03uRb6ImiCul_UOOE4OwY3mXy-AuItwt2u9ds";
-    const APP_VERSION = '3.0.1';
-    const APP_BUILD = '0203260040';
+    const APP_VERSION = '3.0.2';
+    const APP_BUILD = '0303260101';
     const APP_CHANGELOG = [
-        'Час Пик ДПС: баллы опасности + мини-график',
-        'Web Push на iPhone: отдельное включение по тапу',
-        'Оптимизация обработки realtime-меток'
+        'Исправлено: стабильный виджет дистанции на перекрестках и при смене направления',
+        'Обновлено: persistent session Supabase + автовход в карту через getSession()',
+        'Добавлено: авто-refresh сессии (keep-alive) и debug-логи AUTH_KEEPALIVE',
+        'Добавлено: блок поддержки проекта (ЮMoney) в профиле'
     ];
     const APP_VERSION_LABEL = `v${APP_VERSION} (build ${APP_BUILD})`;
+    const SUPABASE_PERSIST_STORAGE_KEY = 'sd180-auth-persistent';
     const GUEST_OBSERVER_ACCEPTED_KEY = 'monolith_guest_observer_accepted';
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     // Формат: '@YourBot'
@@ -2833,18 +2840,41 @@
     function createSupabaseClient(token = null) {
         supabaseClientSequence += 1;
         const storageSuffix = token ? 'auth' : 'anon';
+        const storage = (typeof window !== 'undefined' && window.localStorage) ? window.localStorage : undefined;
+        const isPersistentClient = !token;
         const options = {
             auth: {
-                persistSession: false,
-                autoRefreshToken: false,
+                persistSession: isPersistentClient,
+                autoRefreshToken: isPersistentClient,
                 detectSessionInUrl: false,
-                storageKey: `sd180-${storageSuffix}-${supabaseClientSequence}`
+                storage,
+                storageKey: isPersistentClient ? SUPABASE_PERSIST_STORAGE_KEY : `sd180-${storageSuffix}-${supabaseClientSequence}`
             }
         };
         if (token) {
             options.global = { headers: { Authorization: `Bearer ${token}` } };
         }
         return window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, options);
+    }
+
+    async function tryRestoreSessionFromSupabase() {
+        try {
+            if (!sbAnonClient?.auth?.getSession) return null;
+            const { data, error } = await sbAnonClient.auth.getSession();
+            if (error) return null;
+            const token = String(data?.session?.access_token || '').trim();
+            if (!isValidUserJwt(token, 60)) return null;
+
+            setSupabaseAuth(token);
+            try {
+                localStorage.setItem('sb_jwt', token);
+                const expSec = getJwtExp(token);
+                if (expSec > 0) localStorage.setItem('sb_jwt_exp', String(expSec));
+            } catch (e) {}
+            return token;
+        } catch (e) {
+            return null;
+        }
     }
 
     function clearSupabaseAuth() {
@@ -2990,6 +3020,87 @@
         })();
 
         return ensureSupabaseAuthPromise;
+    }
+
+    let supabaseSessionKeepAliveTimerId = null;
+    let supabaseSessionRefreshInFlight = false;
+    const SUPABASE_SESSION_REFRESH_AHEAD_SEC = 5 * 60;
+    const SUPABASE_SESSION_KEEPALIVE_INTERVAL_MS = 60 * 1000;
+
+    function getStoredJwtExpSec() {
+        try {
+            const rawExp = Number(localStorage.getItem('sb_jwt_exp') || 0);
+            if (Number.isFinite(rawExp) && rawExp > 0) return rawExp;
+            const token = String(localStorage.getItem('sb_jwt') || '').trim();
+            return Number(getJwtExp(token) || 0);
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    async function keepSupabaseSessionAliveTick() {
+        if (supabaseSessionRefreshInFlight) return;
+
+        const nowSec = Math.floor(Date.now() / 1000);
+        const expSec = getStoredJwtExpSec();
+        if (!expSec || expSec > (nowSec + SUPABASE_SESSION_REFRESH_AHEAD_SEC)) return;
+
+        supabaseSessionRefreshInFlight = true;
+        try { console.info('[AUTH_KEEPALIVE] refresh-start', { expSec, nowSec }); } catch (e) {}
+        try {
+            let refreshedToken = '';
+            let refreshedExpSec = 0;
+
+            try {
+                if (sbAnonClient?.auth?.getSession) {
+                    const { data } = await sbAnonClient.auth.getSession();
+                    const session = data?.session || null;
+                    const sessionExp = Number(session?.expires_at || 0);
+
+                    if (session && sessionExp > 0 && sessionExp <= (nowSec + SUPABASE_SESSION_REFRESH_AHEAD_SEC) && sbAnonClient?.auth?.refreshSession) {
+                        const { data: refreshedData, error: refreshError } = await sbAnonClient.auth.refreshSession();
+                        if (!refreshError) {
+                            refreshedToken = String(refreshedData?.session?.access_token || '').trim();
+                            refreshedExpSec = Number(refreshedData?.session?.expires_at || 0);
+                        }
+                    } else if (session?.access_token) {
+                        refreshedToken = String(session.access_token || '').trim();
+                        refreshedExpSec = sessionExp;
+                    }
+                }
+            } catch (e) {}
+
+            if (!isValidUserJwt(refreshedToken, 30)) {
+                try { console.info('[AUTH_KEEPALIVE] refresh-fallback-ensureSupabaseAuth'); } catch (e) {}
+                const fallback = await ensureSupabaseAuth(true).catch(() => null);
+                refreshedToken = String(fallback || '').trim();
+                refreshedExpSec = Number(getJwtExp(refreshedToken) || 0);
+            }
+
+            if (isValidUserJwt(refreshedToken, 30)) {
+                setSupabaseAuth(refreshedToken);
+                try {
+                    localStorage.setItem('sb_jwt', refreshedToken);
+                    if (refreshedExpSec > 0) localStorage.setItem('sb_jwt_exp', String(refreshedExpSec));
+                } catch (e) {}
+                try { console.info('[AUTH_KEEPALIVE] refresh-success', { refreshedExpSec }); } catch (e) {}
+            } else {
+                try { console.warn('[AUTH_KEEPALIVE] refresh-failed-no-valid-token'); } catch (e) {}
+            }
+        } finally {
+            supabaseSessionRefreshInFlight = false;
+        }
+    }
+
+    function startSupabaseSessionKeepAlive() {
+        if (supabaseSessionKeepAliveTimerId) return;
+        supabaseSessionKeepAliveTimerId = setInterval(() => {
+            keepSupabaseSessionAliveTick().catch(()=>{});
+        }, SUPABASE_SESSION_KEEPALIVE_INTERVAL_MS);
+
+        setTimeout(() => {
+            keepSupabaseSessionAliveTick().catch(()=>{});
+        }, 1200);
     }
 
     function getRulesAcceptanceKey(userId) {
@@ -3299,6 +3410,13 @@
         const overlay = document.getElementById('tgAuthOverlay');
         const guestOverlay = document.getElementById('guestObserverOverlay');
         const splash = document.getElementById('splashScreen');
+
+        const persistedSessionToken = await tryRestoreSessionFromSupabase();
+        if (persistedSessionToken) {
+            if (overlay) overlay.style.display = 'none';
+            if (guestOverlay) guestOverlay.style.display = 'none';
+            return { mode: 'web-session', isTelegram: false, token: persistedSessionToken };
+        }
 
         const initData = window.Telegram?.WebApp?.initData;
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
@@ -8568,6 +8686,8 @@
         // Предотвращаем двойной вызов
         if (initAppInProgress) return;
         initAppInProgress = true;
+
+        startSupabaseSessionKeepAlive();
 
         // ЗБТ-ограничение отключено: доступ открыт всем пользователям
         try { localStorage.setItem('beta_access_granted', 'true'); } catch (e) {}
