@@ -6331,16 +6331,7 @@
         if (!isFinite(lat) || !isFinite(lon)) return;
 
         const distance = calculateDistance(userLocation[0], userLocation[1], lat, lon);
-        const prev = proximityBannerState.lastDistance;
         const warningMax = getDynamicWarningMaxMeters();
-
-        if (isFinite(prev) && distance > prev + 25) {
-            distanceNotifications.delete(proximityBannerState.markerId);
-            markerDistanceState.set(proximityBannerState.markerId, { lastDistance: distance, lastTrend: 'away', lastUpdate: Date.now() });
-            clearActiveProximityMarker(proximityBannerState.markerId);
-            stopWarningOutput();
-            return;
-        }
 
         if (distance > warningMax) {
             clearActiveProximityMarker(proximityBannerState.markerId);
@@ -6590,7 +6581,7 @@
             }
         } catch (e) {}
 
-        if (trend === 'away') {
+        if (trend === 'away' && distance > (warningMax + 120)) {
             if (currentNotification) {
                 distanceNotifications.delete(markerId);
                 stopWarningOutput();
@@ -6598,7 +6589,6 @@
             if (proximityBannerState.markerId === markerId) {
                 clearActiveProximityMarker(markerId);
             }
-            return;
         }
 
         if (canShowBanner) {
