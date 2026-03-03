@@ -10314,6 +10314,7 @@
                 const base = { ...(payload || {}) };
                 if (functionName === 'marker-delete') {
                     base.access_token = String(bearer || '').trim();
+                    base.initData = String(window.Telegram?.WebApp?.initData || '').trim();
                 }
                 return base;
             })();
