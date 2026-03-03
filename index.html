@@ -2533,6 +2533,8 @@
             <div style="background:#f0f0f5; border-radius:12px; padding:12px; margin-bottom:15px; text-align:center;">
                 <div style="font-size:13px; font-weight:700; color:#000; margin-bottom:8px;">💖 Поддержать проект</div>
                 <iframe src="https://yoomoney.ru/quickpay/fundraise/button?billNumber=1G9DP4PHN6D.260303&" width="330" height="50" frameborder="0" allowtransparency="true" scrolling="no"></iframe>
+                <button onclick="openSupportDonation()" class="main-btn" style="width:100%; margin-top:8px; background:#34c759; padding:10px; font-size:12px; border-radius:8px;">💳 Перевести</button>
+                <div style="font-size: 11px; color: var(--gray); margin-top: 8px; text-align: center;">Если iframe не открывает оплату в Telegram/PWA — используйте кнопку «Перевести».</div>
             </div>
 
             <div style="background: #f0f0f5; border-radius: 12px; padding: 12px; margin-bottom: 15px;">
@@ -2759,6 +2761,7 @@
     const APP_VERSION_LABEL = `v${APP_VERSION} (build ${APP_BUILD})`;
     const SUPABASE_PERSIST_STORAGE_KEY = 'sd180-auth-persistent';
     const GUEST_OBSERVER_ACCEPTED_KEY = 'monolith_guest_observer_accepted';
+    const DONATION_URL = 'https://yoomoney.ru/quickpay/fundraise/button?billNumber=1G9DP4PHN6D.260303&';
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     // Формат: '@YourBot'
     const BOT_USERNAME = '@DPSRADARDPR180bot';
@@ -3549,6 +3552,26 @@
             const botUser = String(BOT_USERNAME || '').replace(/^@/, '').trim();
             window.open(`https://t.me/${botUser}`, '_blank');
         }
+    }
+
+    function openSupportDonation() {
+        const url = String(DONATION_URL || '').trim();
+        if (!url) return;
+
+        try {
+            const tg = window.Telegram?.WebApp;
+            if (tg && typeof tg.openLink === 'function') {
+                tg.openLink(url, { try_instant_view: false });
+                return;
+            }
+        } catch (e) {}
+
+        try {
+            const popup = window.open(url, '_blank', 'noopener,noreferrer');
+            if (popup) return;
+        } catch (e) {}
+
+        try { window.location.href = url; } catch (e) {}
     }
     
     // Иконки для разных типов дорожных событий
