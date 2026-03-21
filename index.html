@@ -1719,6 +1719,28 @@
                     🔄 Перезагрузить страницу
                 </button>
             </div>
+            <div style="margin:18px 0 14px 0; height:1px; background:linear-gradient(90deg, transparent 0%, rgba(0,212,255,0.35) 18%, rgba(0,212,255,0.35) 82%, transparent 100%);"></div>
+            <p style="color:rgba(255,255,255,0.86); font-size:14px; line-height:1.5; margin:0 0 10px 0;">
+                Можно зарегистрироваться по email (для браузера/PWA).
+            </p>
+            <div style="display:flex; flex-direction:column; gap:10px;">
+                <input id="emailAuthEmail" type="email" placeholder="Email" autocomplete="email" style="padding:12px 14px; border-radius:10px; border:1px solid rgba(0,212,255,0.25); background:rgba(16,16,16,0.9); color:#fff; font-size:14px;">
+                <input id="emailAuthPassword" type="password" placeholder="Пароль (мин. 6 символов)" autocomplete="current-password" style="padding:12px 14px; border-radius:10px; border:1px solid rgba(0,212,255,0.25); background:rgba(16,16,16,0.9); color:#fff; font-size:14px;">
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" onclick="signUpWithEmail()" style="flex:1; min-width:160px; padding:11px 14px; border-radius:10px; border:none; background:linear-gradient(135deg, #00b894 0%, #008f74 100%); color:#fff; font-weight:700; font-size:14px; cursor:pointer;">
+                        ✉️ Регистрация по email
+                    </button>
+                    <button type="button" onclick="signInWithEmail()" style="flex:1; min-width:160px; padding:11px 14px; border-radius:10px; border:1px solid rgba(0,212,255,0.35); background:rgba(26,26,26,0.92); color:#fff; font-weight:700; font-size:14px; cursor:pointer;">
+                        🔑 Войти по email
+                    </button>
+                </div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button type="button" onclick="syncLegacyTelegramAccount()" style="width:100%; padding:11px 14px; border-radius:10px; border:1px solid rgba(0,212,255,0.35); background:rgba(0,122,255,0.18); color:#fff; font-weight:700; font-size:13px; cursor:pointer;">
+                        🔗 Синхронизировать с последним Telegram аккаунтом
+                    </button>
+                </div>
+                <div id="authAltStatus" style="display:none; border-radius:10px; padding:10px 12px; font-size:13px; line-height:1.45; text-align:left;"></div>
+            </div>
             <div style="margin-top:18px; padding:12px; background:rgba(26,26,26,0.92); border-radius:10px; border:1px solid rgba(0,212,255,0.2); text-align:left;">
                 <p style="margin:0 0 8px 0; font-size:12px; color:#00d4ff; line-height:1.5; font-weight:800;">📲 Установка PWA:</p>
                 <p style="margin:0; font-size:12px; color:rgba(255,255,255,0.80); line-height:1.5;">
@@ -2761,6 +2783,8 @@
     const APP_VERSION_LABEL = `v${APP_VERSION} (build ${APP_BUILD})`;
     const SUPABASE_PERSIST_STORAGE_KEY = 'sd180-auth-persistent';
     const GUEST_OBSERVER_ACCEPTED_KEY = 'monolith_guest_observer_accepted';
+    const LINKED_LEGACY_TELEGRAM_UID_KEY = 'sd180-linked-legacy-telegram-uid';
+    const LAST_TELEGRAM_UID_KEY = 'sd180-last-telegram-uid';
     const DONATION_URL = 'https://yoomoney.ru/quickpay/fundraise/button?billNumber=1G9DP4PHN6D.260303&';
     // Telegram bot username (used to open/start the bot when user is not in Telegram)
     // Формат: '@YourBot'
@@ -2964,8 +2988,18 @@
         if (!forceRefresh && cachedToken) {
             setSupabaseAuth(cachedToken);
             try {
+                const provider = String(localStorage.getItem('site_auth_provider') || '').trim().toLowerCase();
+                const authSub = String(getCurrentAuthSubjectUserId() || '').trim();
                 const storedUid = localStorage.getItem('site_uid');
-                if (!uid && storedUid) uid = String(storedUid);
+                if (!uid) {
+                    if (provider === 'email' && authSub) {
+                        uid = authSub;
+                    } else if (storedUid) {
+                        uid = String(storedUid);
+                    } else if (authSub) {
+                        uid = authSub;
+                    }
+                }
             } catch (e) {}
             return cachedToken;
         }
@@ -3320,6 +3354,249 @@
         return window.Telegram?.WebApp?.initDataUnsafe?.user || siteTelegramUser;
     }
 
+    function deriveNameFromEmail(email) {
+        const value = String(email || '').trim().toLowerCase();
+        if (!value || !value.includes('@')) return '';
+        const local = value.split('@')[0] || '';
+        const sanitized = local.replace(/[._-]+/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!sanitized) return '';
+        return sanitized.charAt(0).toUpperCase() + sanitized.slice(1);
+    }
+
+    function getPreferredDisplayUser() {
+        return getTelegramDisplayUser() || siteEmailUser;
+    }
+
+    function setAuthAltStatus(message, type = 'info') {
+        try {
+            const statusEl = document.getElementById('authAltStatus');
+            if (!statusEl) return;
+            const msg = String(message || '').trim();
+            if (!msg) {
+                statusEl.style.display = 'none';
+                statusEl.textContent = '';
+                return;
+            }
+
+            const palette = {
+                info: { bg: 'rgba(0,122,255,0.14)', border: 'rgba(0,122,255,0.35)', color: '#d9e9ff' },
+                ok: { bg: 'rgba(16,185,129,0.16)', border: 'rgba(16,185,129,0.45)', color: '#d7ffe9' },
+                error: { bg: 'rgba(239,68,68,0.16)', border: 'rgba(239,68,68,0.45)', color: '#ffd8d8' }
+            };
+            const cfg = palette[type] || palette.info;
+
+            statusEl.style.display = 'block';
+            statusEl.style.background = cfg.bg;
+            statusEl.style.border = `1px solid ${cfg.border}`;
+            statusEl.style.color = cfg.color;
+            statusEl.textContent = msg;
+        } catch (e) {}
+    }
+
+    function getEmailAuthInputs() {
+        const emailEl = document.getElementById('emailAuthEmail');
+        const passEl = document.getElementById('emailAuthPassword');
+        const email = String(emailEl?.value || '').trim().toLowerCase();
+        const password = String(passEl?.value || '');
+        return { emailEl, passEl, email, password };
+    }
+
+    function getLastKnownTelegramUserId() {
+        try {
+            const initTgId = String(window.Telegram?.WebApp?.initDataUnsafe?.user?.id || '').trim();
+            if (/^\d{5,}$/.test(initTgId)) return initTgId;
+
+            const fromStorage = String(localStorage.getItem(LAST_TELEGRAM_UID_KEY) || '').trim();
+            if (/^\d{5,}$/.test(fromStorage)) return fromStorage;
+
+            const linked = String(localStorage.getItem(LINKED_LEGACY_TELEGRAM_UID_KEY) || '').trim();
+            if (/^\d{5,}$/.test(linked)) return linked;
+        } catch (e) {}
+        return '';
+    }
+
+    function getCurrentAuthSubjectUserId() {
+        try {
+            const token = String(currentSupabaseToken || localStorage.getItem('sb_jwt') || '').trim();
+            if (!token) return '';
+            const payload = parseJwtPayload(token);
+            return String(payload?.sub || '').trim();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    async function completeAuthFromSupabaseSession(session, user, provider = 'email') {
+        const token = String(session?.access_token || '').trim();
+        const resolvedUser = user || session?.user || null;
+        const authUserId = String(resolvedUser?.id || '').trim();
+
+        if (!isValidUserJwt(token, 60)) throw new Error('Получен невалидный access token');
+        if (!authUserId) throw new Error('Не удалось определить user id');
+
+        setSupabaseAuth(token);
+        uid = authUserId;
+
+        const email = String(resolvedUser?.email || '').trim().toLowerCase();
+        const displayName = deriveNameFromEmail(email) || 'Водитель';
+        siteEmailUser = {
+            id: authUserId,
+            email,
+            first_name: displayName,
+            last_name: '',
+            username: ''
+        };
+
+        if (provider !== 'telegram') {
+            siteTelegramUser = null;
+            try { window.__siteTelegramUser = siteTelegramUser; } catch(e) {}
+        }
+
+        try {
+            localStorage.setItem('sb_jwt', token);
+            localStorage.setItem('site_uid', String(uid));
+            localStorage.setItem('sb_jwt_exp', String(Number(session?.expires_at || 0) || getJwtExp(token) || 0));
+            localStorage.setItem('site_auth_provider', String(provider || 'email'));
+            if (email) localStorage.setItem('site_auth_email', email);
+            if (displayName) localStorage.setItem('site_auth_display_name', displayName);
+        } catch (e) {}
+
+        try {
+            const overlay = document.getElementById('tgAuthOverlay');
+            if (overlay) overlay.style.display = 'none';
+        } catch (e) {}
+
+        initAppInProgress = false;
+        initApp();
+    }
+
+    async function signUpWithEmail() {
+        const { emailEl, passEl, email, password } = getEmailAuthInputs();
+        setAuthAltStatus('', 'info');
+
+        if (!email || !email.includes('@')) {
+            setAuthAltStatus('Введите корректный email.', 'error');
+            try { emailEl?.focus(); } catch (e) {}
+            return;
+        }
+        if (!password || password.length < 6) {
+            setAuthAltStatus('Пароль должен быть не короче 6 символов.', 'error');
+            try { passEl?.focus(); } catch (e) {}
+            return;
+        }
+
+        try {
+            setAuthAltStatus('Создаем аккаунт...', 'info');
+            const { data, error } = await sbAnonClient.auth.signUp({ email, password });
+            if (error) throw error;
+
+            if (data?.session?.access_token) {
+                await completeAuthFromSupabaseSession(data.session, data.user, 'email');
+                setAuthAltStatus('Успешная регистрация и вход выполнены.', 'ok');
+                return;
+            }
+
+            setAuthAltStatus('Аккаунт создан. Подтвердите email из письма и затем выполните вход по email.', 'ok');
+        } catch (e) {
+            setAuthAltStatus(`Ошибка регистрации: ${String(e?.message || e || 'unknown')}`, 'error');
+        }
+    }
+
+    async function signInWithEmail() {
+        const { emailEl, passEl, email, password } = getEmailAuthInputs();
+        setAuthAltStatus('', 'info');
+
+        if (!email || !email.includes('@')) {
+            setAuthAltStatus('Введите корректный email.', 'error');
+            try { emailEl?.focus(); } catch (e) {}
+            return;
+        }
+        if (!password || password.length < 6) {
+            setAuthAltStatus('Введите пароль (минимум 6 символов).', 'error');
+            try { passEl?.focus(); } catch (e) {}
+            return;
+        }
+
+        try {
+            setAuthAltStatus('Выполняем вход...', 'info');
+            const { data, error } = await sbAnonClient.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            if (!data?.session?.access_token) throw new Error('Сессия не получена');
+
+            await completeAuthFromSupabaseSession(data.session, data.user, 'email');
+            setAuthAltStatus('Вход выполнен.', 'ok');
+        } catch (e) {
+            setAuthAltStatus(`Ошибка входа: ${String(e?.message || e || 'unknown')}`, 'error');
+        }
+    }
+
+    async function syncLegacyTelegramAccount() {
+        const legacyTgId = getLastKnownTelegramUserId();
+
+        if (!uid) {
+            setAuthAltStatus('Сначала войдите по email, затем выполняйте синхронизацию.', 'error');
+            return;
+        }
+        if (!/^\d{5,}$/.test(legacyTgId)) {
+            setAuthAltStatus('Не найден Telegram аккаунт для синхронизации. Сначала зайдите через Telegram на этом устройстве хотя бы один раз.', 'error');
+            return;
+        }
+
+        try {
+            setAuthAltStatus('Ищем старый Telegram-профиль...', 'info');
+            const { data: oldDriver, error: oldDriverError } = await _sb
+                .from('drivers')
+                .select('name,car_model,car_plate')
+                .eq('user_id', legacyTgId)
+                .maybeSingle();
+
+            if (oldDriverError) throw oldDriverError;
+            if (!oldDriver) {
+                setAuthAltStatus('Старый профиль не найден. Проверьте Telegram ID.', 'error');
+                return;
+            }
+
+            const fallbackName = deriveNameFromEmail(siteEmailUser?.email) || 'Водитель';
+            const ownerId = String(getCurrentAuthSubjectUserId() || uid || '').trim();
+            const payload = {
+                user_id: ownerId,
+                name: String(oldDriver?.name || fallbackName || '').trim() || 'Водитель',
+                car_model: String(oldDriver?.car_model || '').trim(),
+                car_plate: String(oldDriver?.car_plate || '').trim()
+            };
+
+            const { error: saveError } = await _sb
+                .from('drivers')
+                .upsert(payload, { onConflict: 'user_id' });
+            if (saveError) throw saveError;
+
+            currentDriver = {
+                ...(currentDriver || {}),
+                user_id: payload.user_id,
+                name: payload.name,
+                car_model: payload.car_model,
+                car_plate: payload.car_plate
+            };
+
+            try {
+                localStorage.setItem(LINKED_LEGACY_TELEGRAM_UID_KEY, legacyTgId);
+            } catch (e) {}
+
+            try {
+                const carEl = document.getElementById('driver-car');
+                const plateEl = document.getElementById('driver-plate');
+                if (carEl && !carEl.value) carEl.value = payload.car_model || '';
+                if (plateEl && !plateEl.value) plateEl.value = payload.car_plate || '';
+                const regNameEl = document.getElementById('reg-user-name');
+                if (regNameEl) regNameEl.textContent = payload.name;
+            } catch (e) {}
+
+            setAuthAltStatus('Профиль старого Telegram-аккаунта успешно синхронизирован.', 'ok');
+        } catch (e) {
+            setAuthAltStatus(`Ошибка синхронизации: ${String(e?.message || e || 'unknown')}`, 'error');
+        }
+    }
+
     function ensureTelegramLoginWidgetRendered() {
         try {
             // Login Widget нужен только для сайта (обычный браузер). Внутри Telegram Mini App он
@@ -3371,11 +3648,16 @@
             setSupabaseAuth(token);
             uid = String(data?.user_id || user.id);
             siteTelegramUser = data?.user || user;
+            siteEmailUser = null;
             try { window.__siteTelegramUser = siteTelegramUser; } catch(e) {}
 
             try {
                 localStorage.setItem('sb_jwt', token);
                 localStorage.setItem('site_uid', String(uid));
+                localStorage.setItem(LAST_TELEGRAM_UID_KEY, String(data?.user_id || user.id || ''));
+                localStorage.setItem('site_auth_provider', 'telegram');
+                localStorage.removeItem('site_auth_email');
+                localStorage.removeItem('site_auth_display_name');
                 if (data?.exp) {
                     localStorage.setItem('sb_jwt_exp', String(Number(data.exp) || 0));
                 } else {
@@ -3591,7 +3873,23 @@
     // ID текущего пользователя из Telegram (null если не авторизован)
     const rawTgId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
     let uid = rawTgId ? String(rawTgId) : null;
+    try {
+        if (uid) localStorage.setItem(LAST_TELEGRAM_UID_KEY, String(uid));
+    } catch (e) {}
     let siteTelegramUser = null; // Telegram Login Widget user (для входа через сайт)
+    let siteEmailUser = null; // Email auth identity (для входа через сайт/PWA)
+    try {
+        const storedEmail = String(localStorage.getItem('site_auth_email') || '').trim().toLowerCase();
+        if (storedEmail) {
+            const storedName = String(localStorage.getItem('site_auth_display_name') || '').trim();
+            siteEmailUser = {
+                email: storedEmail,
+                first_name: storedName || deriveNameFromEmail(storedEmail) || 'Водитель',
+                last_name: '',
+                username: ''
+            };
+        }
+    } catch (e) {}
     try { window.__siteTelegramUser = siteTelegramUser; } catch(e) {}
     let currentProfileRole = null;
     let currentProfileIsTester = false;
@@ -8726,7 +9024,7 @@
         const allowGuest = !!env?.allowGuest;
         const overlay = document.getElementById('tgAuthOverlay');
         const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-        const displayUser = isTelegram ? tgUser : siteTelegramUser;
+        const displayUser = isTelegram ? tgUser : getPreferredDisplayUser();
 
         // Если токена нет и гость не разрешен — останавливаем init (нужен выбор на оверлее)
         if (!authedToken && !allowGuest) {
@@ -9047,13 +9345,21 @@
 
     // Функция открытия модального окна регистрации
     function openRegistrationModal() {
-        const tgUser = getTelegramDisplayUser();
-        if (!tgUser) {
+        const displayUser = getPreferredDisplayUser();
+        if (!uid) {
             const overlay = document.getElementById('tgAuthOverlay');
             if (overlay) overlay.style.display = 'flex';
             try { ensureTelegramLoginWidgetRendered(); } catch(e) {}
             return;
         }
+        try {
+            const displayName = `${String(displayUser?.first_name || '').trim()} ${String(displayUser?.last_name || '').trim()}`.trim()
+                || String(displayUser?.username || '').trim()
+                || deriveNameFromEmail(siteEmailUser?.email)
+                || 'Водитель';
+            const nameEl = document.getElementById('reg-user-name');
+            if (nameEl) nameEl.textContent = displayName;
+        } catch (e) {}
         const target = document.querySelector('.target');
         if (target) target.style.visibility = 'hidden';
         document.getElementById('registrationModal').classList.add('active');
@@ -9066,83 +9372,107 @@
         document.getElementById('registrationModal').classList.remove('active');
     }
 
-    // Функция регистрации нового водителя (данные пользователя берутся из Telegram)
+    // Функция регистрации нового водителя (данные берутся из Telegram или email identity)
     async function registerDriver(event) {
         event.preventDefault();
 
-        // Получаем данные Telegram (Mini App или Login Widget)
-        const tgUser = getTelegramDisplayUser();
-        if (!tgUser || !uid) {
+        const displayUser = getPreferredDisplayUser();
+        if (!uid) {
             const overlay = document.getElementById('tgAuthOverlay');
             if (overlay) overlay.style.display = 'flex';
             try { ensureTelegramLoginWidgetRendered(); } catch(e) {}
             return;
         }
-        const name = (tgUser?.first_name || '') + ' ' + (tgUser?.last_name || '');
+        const first = String(displayUser?.first_name || '').trim();
+        const last = String(displayUser?.last_name || '').trim();
+        const username = String(displayUser?.username || '').trim();
+        const fallbackName = deriveNameFromEmail(siteEmailUser?.email) || 'Водитель';
+        const name = `${first} ${last}`.trim() || username || fallbackName;
         const car = document.getElementById('driver-car').value;
         const plate = document.getElementById('driver-plate').value;
 
         try {
-            // Проверяем, существует ли уже пользователь с этим user_id
-            const { data: existingDriver } = await queryWithTimeout(
-                _sb.from('drivers').select('user_id').eq('user_id', uid).maybeSingle(),
-                10000
-            );
-            
-            if (existingDriver) {
-                // Если водитель существует, обновляем его данные
-                const { error } = await queryWithTimeout(
-                    _sb.from('drivers').update({
-                        name: name,
-                        car_model: car,
-                        car_plate: plate
-                    }).eq('user_id', uid),
+            const primaryOwnerId = String(uid || '').trim();
+            const authSubOwnerId = String(getCurrentAuthSubjectUserId() || '').trim();
+            const ownerIds = Array.from(new Set([primaryOwnerId, authSubOwnerId].filter(Boolean)));
+            if (!ownerIds.length) throw new Error('Не удалось определить owner id для профиля');
+
+            let savedOwnerId = '';
+            let wasUpdated = false;
+            let lastDbError = null;
+
+            for (const ownerId of ownerIds) {
+                const { data: existingDriver, error: existingError } = await queryWithTimeout(
+                    _sb.from('drivers').select('user_id').eq('user_id', ownerId).maybeSingle(),
                     10000
                 );
-
-                if (!error) {
-                    currentDriver = {
-                        user_id: uid,
-                        name: name,
-                        car_model: car,
-                        car_plate: plate,
-                        votes_up: 0,
-                        votes_down: 0,
-                        markers_count: 0
-                    };
-                    closeRegistrationModal();
-                    alert('✅ Профиль обновлен, ' + name + '!');
-                } else {
-                    alert('❌ Ошибка обновления: ' + (error?.message || 'попытайте еще раз'));
+                if (existingError) {
+                    lastDbError = existingError;
+                    const existingMsg = String(existingError?.message || '').toLowerCase();
+                    if (existingMsg.includes('row-level security') || existingMsg.includes('permission')) continue;
+                    throw existingError;
                 }
-            } else {
-                // Если водителя нет, вставляем его
-                const { error } = await queryWithTimeout(
+
+                if (existingDriver) {
+                    const { error: updateError } = await queryWithTimeout(
+                        _sb.from('drivers').update({
+                            name: name,
+                            car_model: car,
+                            car_plate: plate
+                        }).eq('user_id', ownerId),
+                        10000
+                    );
+                    if (updateError) {
+                        lastDbError = updateError;
+                        const updateMsg = String(updateError?.message || '').toLowerCase();
+                        if (updateMsg.includes('row-level security') || updateMsg.includes('permission')) continue;
+                        throw updateError;
+                    }
+
+                    savedOwnerId = ownerId;
+                    wasUpdated = true;
+                    break;
+                }
+
+                const { error: insertError } = await queryWithTimeout(
                     _sb.from('drivers').insert([{
-                        user_id: uid,
+                        user_id: ownerId,
                         name: name,
                         car_model: car,
                         car_plate: plate
                     }]),
                     10000
                 );
-
-                if (!error) {
-                    currentDriver = {
-                        user_id: uid,
-                        name: name,
-                        car_model: car,
-                        car_plate: plate,
-                        votes_up: 0,
-                        votes_down: 0,
-                        markers_count: 0
-                    };
-                    closeRegistrationModal();
-                    alert('✅ Спасибо за регистрацию, ' + name + '!');
-                } else {
-                    alert('❌ Ошибка регистрации: ' + (error?.message || 'попытайте еще раз'));
+                if (insertError) {
+                    lastDbError = insertError;
+                    const insertMsg = String(insertError?.message || '').toLowerCase();
+                    if (insertMsg.includes('row-level security') || insertMsg.includes('permission')) continue;
+                    throw insertError;
                 }
+
+                savedOwnerId = ownerId;
+                wasUpdated = false;
+                break;
             }
+
+            if (!savedOwnerId) {
+                throw lastDbError || new Error('Не удалось сохранить профиль: ограничение доступа (RLS)');
+            }
+
+            uid = savedOwnerId;
+            try { localStorage.setItem('site_uid', String(uid)); } catch (e) {}
+
+            currentDriver = {
+                user_id: uid,
+                name: name,
+                car_model: car,
+                car_plate: plate,
+                votes_up: 0,
+                votes_down: 0,
+                markers_count: 0
+            };
+            closeRegistrationModal();
+            alert(wasUpdated ? ('✅ Профиль обновлен, ' + name + '!') : ('✅ Спасибо за регистрацию, ' + name + '!'));
         } catch (e) {
             // Обработка AbortError и timeout
             if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
@@ -13698,8 +14028,25 @@
 
     // Функция загрузки достижений в профиль
     async function loadAchievements() {
+        const provider = String(localStorage.getItem('site_auth_provider') || '').trim().toLowerCase();
+        const authSubUserId = String(getCurrentAuthSubjectUserId() || '').trim();
+        const profileUserId = String((provider === 'email' && authSubUserId) ? authSubUserId : (uid || authSubUserId || '')).trim();
+
+        if (!profileUserId) {
+            return {
+                achievements: [],
+                title: '🚗 Новичок',
+                markersCount: 0,
+                totalLikes: 0,
+                totalVotes: 0,
+                allAchievements: [],
+                completedCount: 0,
+                totalCount: 0
+            };
+        }
+
         // Получаем количество меток и очков поддержки пользователя
-        const { data: markers } = await _sb.from('markers').select('votes_up, votes_down, ts, type, exp').eq('author_id', uid);
+        const { data: markers } = await _sb.from('markers').select('votes_up, votes_down, ts, type, exp').eq('author_id', profileUserId);
         
         let markersCount = 0;
         let totalLikes = 0;
@@ -13713,7 +14060,7 @@
             });
         }
 
-        const sosBonus = await getUserSosBonus(uid);
+        const sosBonus = await getUserSosBonus(profileUserId);
         totalLikes += sosBonus;
 
         // Иконки достижений (Cyberpunk): плоские SVG в едином «металлическом» стиле
@@ -13790,10 +14137,12 @@
         // Дополнительно: загружаем серверные ачивки из таблицы user_achievements
         const serverCounts = {};
         try {
-            const { data: serverAchs } = await _sb.from('user_achievements').select('key,created_at').eq('user_id', uid);
+            const { data: serverAchs } = await _sb.from('user_achievements').select('user_id,key,created_at').eq('user_id', profileUserId);
             // Считаем повторы по ключу
             if (serverAchs && serverAchs.length > 0) {
-                serverAchs.forEach(r => { serverCounts[r.key] = (serverCounts[r.key] || 0) + 1; });
+                serverAchs
+                    .filter(r => String(r?.user_id || '').trim() === profileUserId)
+                    .forEach(r => { serverCounts[r.key] = (serverCounts[r.key] || 0) + 1; });
 
                 // Серверные ачивки с новыми эмодзи (SafeDrive 180)
                 if (serverCounts['beta_tester']) achievements.push({ iconKey: 'beta', title: 'Первопроходец (Beta-Tester)', desc: 'Статус «олда» — был с нами на ЗБТ' });
