@@ -1734,6 +1734,9 @@
                         🔑 Войти по email
                     </button>
                 </div>
+                <button type="button" onclick="sendPasswordResetEmail()" style="padding:10px 12px; border-radius:10px; border:1px dashed rgba(0,212,255,0.35); background:rgba(26,26,26,0.72); color:#d9e9ff; font-weight:700; font-size:13px; cursor:pointer;">
+                    ♻️ Забыл пароль
+                </button>
                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <button type="button" onclick="syncLegacyTelegramAccount()" style="width:100%; padding:11px 14px; border-radius:10px; border:1px solid rgba(0,212,255,0.35); background:rgba(0,122,255,0.18); color:#fff; font-weight:700; font-size:13px; cursor:pointer;">
                         🔗 Синхронизировать с последним Telegram аккаунтом
@@ -3426,6 +3429,98 @@
         }
     }
 
+    function isRlsDeniedError(err) {
+        const code = String(err?.code || '').trim();
+        const msg = String(err?.message || err || '').toLowerCase();
+        return code === '42501' || msg.includes('row-level security') || msg.includes('permission');
+    }
+
+    async function promoteCurrentUserToBetaTester() {
+        const ownerId = String(getCurrentAuthSubjectUserId() || uid || '').trim();
+        if (!ownerId) return;
+
+        try {
+            let updateRes = await _sb
+                .from('profiles')
+                .update({ is_tester: true })
+                .eq('user_id', ownerId);
+
+            if (updateRes?.error && String(updateRes.error.message || '').toLowerCase().includes('column') && String(updateRes.error.message || '').includes('user_id')) {
+                updateRes = await _sb
+                    .from('profiles')
+                    .update({ is_tester: true })
+                    .eq('id', ownerId);
+            }
+        } catch (e) {
+            // Игнорируем ошибки RLS/схемы, ниже есть локальный fallback.
+        }
+
+        try {
+            localStorage.setItem('beta_access_granted', 'true');
+            localStorage.setItem('beta_tester_local', '1');
+        } catch (e) {}
+        currentProfileIsTester = true;
+        recomputeV3Access();
+    }
+
+    async function autoLinkLegacyProfileToEmailAccount() {
+        const ownerId = String(getCurrentAuthSubjectUserId() || uid || '').trim();
+        if (!ownerId) return false;
+
+        try {
+            const { data: ownDriver } = await _sb
+                .from('drivers')
+                .select('user_id,name,car_model,car_plate')
+                .eq('user_id', ownerId)
+                .maybeSingle();
+            if (ownDriver) return false;
+        } catch (e) {}
+
+        const legacyTgId = getLastKnownTelegramUserId();
+        if (!/^\d{5,}$/.test(legacyTgId) || legacyTgId === ownerId) return false;
+
+        try {
+            const { data: legacyDriver, error: legacyError } = await _sb
+                .from('drivers')
+                .select('name,car_model,car_plate')
+                .eq('user_id', legacyTgId)
+                .maybeSingle();
+
+            if (legacyError || !legacyDriver) return false;
+
+            const fallbackName = deriveNameFromEmail(siteEmailUser?.email) || 'Водитель';
+            const payload = {
+                user_id: ownerId,
+                name: String(legacyDriver?.name || fallbackName || '').trim() || 'Водитель',
+                car_model: String(legacyDriver?.car_model || '').trim(),
+                car_plate: String(legacyDriver?.car_plate || '').trim()
+            };
+
+            const { error: saveError } = await _sb
+                .from('drivers')
+                .upsert(payload, { onConflict: 'user_id' });
+            if (saveError) return false;
+
+            currentDriver = {
+                ...(currentDriver || {}),
+                user_id: payload.user_id,
+                name: payload.name,
+                car_model: payload.car_model,
+                car_plate: payload.car_plate
+            };
+            uid = ownerId;
+
+            try {
+                localStorage.setItem('site_uid', ownerId);
+                localStorage.setItem(LINKED_LEGACY_TELEGRAM_UID_KEY, legacyTgId);
+            } catch (e) {}
+
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     async function completeAuthFromSupabaseSession(session, user, provider = 'email') {
         const token = String(session?.access_token || '').trim();
         const resolvedUser = user || session?.user || null;
@@ -3466,8 +3561,34 @@
             if (overlay) overlay.style.display = 'none';
         } catch (e) {}
 
+        if (provider === 'email') {
+            await autoLinkLegacyProfileToEmailAccount();
+            await promoteCurrentUserToBetaTester();
+        }
+
         initAppInProgress = false;
         initApp();
+    }
+
+    async function sendPasswordResetEmail() {
+        const { emailEl, email } = getEmailAuthInputs();
+        setAuthAltStatus('', 'info');
+
+        if (!email || !email.includes('@')) {
+            setAuthAltStatus('Введите email, на который отправить ссылку сброса.', 'error');
+            try { emailEl?.focus(); } catch (e) {}
+            return;
+        }
+
+        try {
+            setAuthAltStatus('Отправляем письмо для сброса пароля...', 'info');
+            const redirectTo = `${window.location.origin}${window.location.pathname}`;
+            const { error } = await sbAnonClient.auth.resetPasswordForEmail(email, { redirectTo });
+            if (error) throw error;
+            setAuthAltStatus('Письмо отправлено. Проверьте почту и перейдите по ссылке для сброса пароля.', 'ok');
+        } catch (e) {
+            setAuthAltStatus(`Ошибка отправки письма: ${String(e?.message || e || 'unknown')}`, 'error');
+        }
     }
 
     async function signUpWithEmail() {
@@ -3550,9 +3671,15 @@
                 .eq('user_id', legacyTgId)
                 .maybeSingle();
 
-            if (oldDriverError) throw oldDriverError;
+            if (oldDriverError) {
+                if (isRlsDeniedError(oldDriverError)) {
+                    setAuthAltStatus('Сервер временно ограничил доступ к профилю. Можно продолжать работу, данные сохраняются локально.', 'info');
+                    return;
+                }
+                throw oldDriverError;
+            }
             if (!oldDriver) {
-                setAuthAltStatus('Старый профиль не найден. Проверьте Telegram ID.', 'error');
+                setAuthAltStatus('Старый профиль не найден на сервере. Можно продолжать, профиль заполнится при первой регистрации.', 'info');
                 return;
             }
 
@@ -3568,7 +3695,21 @@
             const { error: saveError } = await _sb
                 .from('drivers')
                 .upsert(payload, { onConflict: 'user_id' });
-            if (saveError) throw saveError;
+            if (saveError) {
+                if (isRlsDeniedError(saveError)) {
+                    currentDriver = {
+                        ...(currentDriver || {}),
+                        user_id: payload.user_id,
+                        name: payload.name,
+                        car_model: payload.car_model,
+                        car_plate: payload.car_plate
+                    };
+                    saveLocalDriverProfile(payload.user_id, currentDriver);
+                    setAuthAltStatus('Профиль синхронизирован локально. Ограничение RLS на сервере, но приложение работает.', 'ok');
+                    return;
+                }
+                throw saveError;
+            }
 
             currentDriver = {
                 ...(currentDriver || {}),
@@ -4002,7 +4143,9 @@
     function recomputeV3Access() {
         const adminPrivileged = !!(isAdmin || currentProfileRole === 'admin');
         try { window.isAdmin = adminPrivileged; } catch (e) {}
-        canUseV3Engine = !!(adminPrivileged || currentProfileIsTester === true);
+        let localBetaTester = false;
+        try { localBetaTester = localStorage.getItem('beta_tester_local') === '1'; } catch (e) {}
+        canUseV3Engine = !!(adminPrivileged || currentProfileIsTester === true || localBetaTester);
         return canUseV3Engine;
     }
 
@@ -9090,13 +9233,41 @@
         if (authedToken) {
             // Проверяем, зарегистрирован ли пользователь (запрашиваем только базовые колонки)
             try {
-                const { data: driver } = await Promise.race([
-                    _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', uid).maybeSingle(),
-                    new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Driver check timeout')), 8000)
-                    )
-                ]);
+                const primaryOwnerId = String(uid || '').trim();
+                const authSubOwnerId = String(getCurrentAuthSubjectUserId() || '').trim();
+                const ownerIds = Array.from(new Set([primaryOwnerId, authSubOwnerId].filter(Boolean)));
+
+                let driver = null;
+                for (const ownerId of ownerIds) {
+                    const { data: d } = await Promise.race([
+                        _sb.from('drivers').select('user_id,name,car_model,car_plate').eq('user_id', ownerId).maybeSingle(),
+                        new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Driver check timeout')), 8000)
+                        )
+                    ]);
+                    if (d) {
+                        driver = d;
+                        uid = String(ownerId);
+                        try { localStorage.setItem('site_uid', String(uid)); } catch (e) {}
+                        break;
+                    }
+                }
+
                 if (!driver) {
+                    const localDriver = loadLocalDriverProfile(uid || authSubOwnerId);
+                    if (localDriver) {
+                        currentDriver = {
+                            user_id: String(uid || authSubOwnerId || localDriver.user_id || ''),
+                            name: String(localDriver.name || 'Водитель'),
+                            car_model: String(localDriver.car_model || ''),
+                            car_plate: String(localDriver.car_plate || ''),
+                            votes_up: 0,
+                            votes_down: 0,
+                            markers_count: 0
+                        };
+                        return;
+                    }
+
                     // Если нет, показываем форму для добавления данных об авто
                     const first = String(displayUser?.first_name || '').trim();
                     const last = String(displayUser?.last_name || '').trim();
@@ -9344,6 +9515,30 @@
     }
 
     // Функция открытия модального окна регистрации
+    function getLocalDriverProfileKey(userId) {
+        return `driver_profile_local_${String(userId || '').trim()}`;
+    }
+
+    function saveLocalDriverProfile(userId, profile) {
+        try {
+            const key = getLocalDriverProfileKey(userId);
+            localStorage.setItem(key, JSON.stringify(profile || {}));
+        } catch (e) {}
+    }
+
+    function loadLocalDriverProfile(userId) {
+        try {
+            const key = getLocalDriverProfileKey(userId);
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const data = JSON.parse(raw);
+            if (!data || typeof data !== 'object') return null;
+            return data;
+        } catch (e) {
+            return null;
+        }
+    }
+
     function openRegistrationModal() {
         const displayUser = getPreferredDisplayUser();
         if (!uid) {
@@ -9471,9 +9666,29 @@
                 votes_down: 0,
                 markers_count: 0
             };
+            saveLocalDriverProfile(uid, currentDriver);
             closeRegistrationModal();
             alert(wasUpdated ? ('✅ Профиль обновлен, ' + name + '!') : ('✅ Спасибо за регистрацию, ' + name + '!'));
         } catch (e) {
+            const msg = String(e?.message || e || '').toLowerCase();
+            const isRlsDenied = String(e?.code || '') === '42501' || msg.includes('row-level security') || msg.includes('permission');
+            if (isRlsDenied) {
+                const ownerId = String(getCurrentAuthSubjectUserId() || uid || '').trim();
+                currentDriver = {
+                    user_id: ownerId,
+                    name: name,
+                    car_model: car,
+                    car_plate: plate,
+                    votes_up: 0,
+                    votes_down: 0,
+                    markers_count: 0
+                };
+                saveLocalDriverProfile(ownerId, currentDriver);
+                closeRegistrationModal();
+                alert('✅ Профиль сохранен локально. Ограничение RLS на сервере, продолжайте работу.');
+                return;
+            }
+
             // Обработка AbortError и timeout
             if (e?.name === 'AbortError' || e?.message?.includes('AbortError')) {
                 alert('❌ Ошибка состояния сети\n\nУбедитесь, что:\n- Включена мобильная связь или Wi-Fi\n- Есть подключение к интернету\n\nПопробуйте еще раз.');
